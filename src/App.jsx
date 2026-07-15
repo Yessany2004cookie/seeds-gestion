@@ -323,8 +323,8 @@ function MaestrosPage({data,loadData,showToast}){
 // ── MATRÍCULA ──
 function AlumnosPage({data,loadData,showToast}){
   const[modal,setModal]=useState(null);const[search,setSearch]=useState("");const[filterSec,setFilterSec]=useState("");
-  const[form,setForm]=useState({nombre:"",telefono:"",email:"",padre_nombre:"",padre_telefono:"",padre_email:"",seccion_id:"",padre_id:"",monto_personalizado:""});
-  const open=(al=null)=>{if(al){const p=data.padres.find(p=>p.id===al.padre_id)||{};setForm({nombre:al.nombre,telefono:al.telefono||"",email:al.email||"",padre_nombre:p.nombre||"",padre_telefono:p.telefono||"",padre_email:p.email||"",seccion_id:al.seccion_id||"",padre_id:al.padre_id||"",monto_personalizado:al.monto_personalizado||""});}else{setForm({nombre:"",telefono:"",email:"",padre_nombre:"",padre_telefono:"",padre_email:"",seccion_id:"",padre_id:"",monto_personalizado:""});}setModal(al?.id||"new");};
+  const[form,setForm]=useState({nombre:"",telefono:"",email:"",padre_nombre:"",padre_telefono:"",padre_email:"",seccion_id:"",padre_id:"",monto_personalizado:"",beca:false});
+  const open=(al=null)=>{if(al){const p=data.padres.find(p=>p.id===al.padre_id)||{};setForm({nombre:al.nombre,telefono:al.telefono||"",email:al.email||"",padre_nombre:p.nombre||"",padre_telefono:p.telefono||"",padre_email:p.email||"",seccion_id:al.seccion_id||"",padre_id:al.padre_id||"",monto_personalizado:al.monto_personalizado||"",beca:al.beca===true});}else{setForm({nombre:"",telefono:"",email:"",padre_nombre:"",padre_telefono:"",padre_email:"",seccion_id:"",padre_id:"",monto_personalizado:"",beca:false});}setModal(al?.id||"new");};
   const sv=async()=>{
     if(!form.nombre||!form.padre_nombre){showToast("Nombre del alumno y padre requeridos","error");return;}
     try{
@@ -332,7 +332,7 @@ function AlumnosPage({data,loadData,showToast}){
       const padreRow={nombre:form.padre_nombre,telefono:form.padre_telefono,email:form.padre_email};
       if(padreId){await db.update("padres",padreId,padreRow);}
       else{padreId=uid();await db.insert("padres",{id:padreId,...padreRow});}
-      const alRow={nombre:form.nombre,telefono:form.telefono,email:form.email,padre_id:padreId,seccion_id:form.seccion_id||null,monto_personalizado:parseFloat(form.monto_personalizado)||0};
+      const alRow={nombre:form.nombre,telefono:form.telefono,email:form.email,padre_id:padreId,seccion_id:form.seccion_id||null,monto_personalizado:form.beca?0:(parseFloat(form.monto_personalizado)||0),beca:form.beca===true};
       if(modal==="new"){await db.insert("alumnos",{id:uid(),...alRow,estado:"activo",fecha_ingreso:new Date().toISOString().split("T")[0]});showToast("Alumno matriculado");}
       else{await db.update("alumnos",modal,alRow);showToast("Actualizado");}
       await loadData();setModal(null);
@@ -345,8 +345,22 @@ function AlumnosPage({data,loadData,showToast}){
       <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}><div style={{position:"relative"}}><Search size={15} style={{position:"absolute",left:10,top:10,color:"#94A3B8"}}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..." style={{...input,paddingLeft:32,width:200}}/></div><select value={filterSec} onChange={e=>setFilterSec(e.target.value)} style={{...input,width:180,cursor:"pointer"}}><option value="">Todas las secciones</option>{data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}</select></div>
       <button onClick={()=>open()} style={btn("#2563EB")}><UserPlus size={15}/>Matricular</button>
     </div>
-    <div style={card}>{filtered.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay alumnos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:600}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Alumno","Padre","Tel. Padre","Sección","Monto","Estado",""].map(h=><th key={h} style={{textAlign:h===""?"center":"left",padding:"8px 10px",color:"#64748B",fontWeight:600,fontSize:12}}>{h}</th>)}</tr></thead><tbody>{filtered.map(a=>{const p=data.padres.find(p=>p.id===a.padre_id);const sec=data.secciones.find(s=>s.id===a.seccion_id);const sc={activo:"#059669",inactivo:"#DC2626",graduado:"#7C3AED"};const m=(Number(a.monto_personalizado)>0)?Number(a.monto_personalizado):Number(sec?.mensualidad)||0;return(<tr key={a.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"8px 10px"}}><div style={{fontWeight:600}}>{a.nombre}</div>{a.telefono&&<div style={{fontSize:11,color:"#94A3B8"}}>{a.telefono}</div>}</td><td style={{padding:"8px 10px"}}>{p?.nombre||"—"}</td><td style={{padding:"8px 10px"}}>{p?.telefono||"—"}</td><td style={{padding:"8px 10px"}}>{sec?<span style={badge("#F97316")}>{sec.nombre}</span>:"—"}</td><td style={{padding:"8px 10px"}}>{m?<span style={{fontWeight:600,color:Number(a.monto_personalizado)>0?"#7C3AED":"#1E293B"}}>L {m.toLocaleString()}{Number(a.monto_personalizado)>0?" ✎":""}</span>:"—"}</td><td style={{padding:"8px 10px"}}><span style={badge(sc[a.estado]||"#64748B")}>{a.estado}</span></td><td style={{padding:"8px 10px",textAlign:"center"}}><button onClick={()=>open(a)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>toggleEstado(a)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}>{a.estado==="activo"?<X size={15} color="#DC2626"/>:<Check size={15} color="#059669"/>}</button></td></tr>);})}</tbody></table></div>)}</div>
-    {modal&&<Modal title={modal==="new"?"Matricular alumno":"Editar alumno"} onClose={()=>setModal(null)} onSave={sv} wide><div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}><div><h4 style={{fontSize:13,fontWeight:700,color:"#F97316",margin:"0 0 12px",display:"flex",alignItems:"center",gap:6}}><Users size={15}/>Alumno</h4><Field label="Nombre *" value={form.nombre} onChange={v=>setForm({...form,nombre:v})}/><Field label="Teléfono" value={form.telefono} onChange={v=>setForm({...form,telefono:v})}/><Field label="Email" value={form.email} onChange={v=>setForm({...form,email:v})} type="email"/><div style={{marginBottom:12}}><label style={label}>Sección</label><select value={form.seccion_id} onChange={e=>setForm({...form,seccion_id:e.target.value})} style={{...input,cursor:"pointer"}}><option value="">Sin sección</option>{data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre} — L {s.mensualidad}</option>)}</select></div><div style={{marginBottom:12}}><label style={label}>Monto mensual</label>{form.seccion_id&&<div style={{fontSize:11,color:"#64748B",marginBottom:4}}>Precio del grupo: L {Number(data.secciones.find(s=>s.id===form.seccion_id)?.mensualidad||0).toLocaleString()}</div>}<input type="number" value={form.monto_personalizado} onChange={e=>setForm({...form,monto_personalizado:e.target.value})} placeholder="Dejar vacío = precio del grupo" style={input}/><div style={{fontSize:11,color:"#94A3B8",marginTop:3}}>Llenar solo si tiene descuento o precio especial.</div></div></div><div><h4 style={{fontSize:13,fontWeight:700,color:"#2563EB",margin:"0 0 12px",display:"flex",alignItems:"center",gap:6}}><Users size={15}/>Padre/Encargado</h4><Field label="Nombre *" value={form.padre_nombre} onChange={v=>setForm({...form,padre_nombre:v})}/><Field label="Teléfono" value={form.padre_telefono} onChange={v=>setForm({...form,padre_telefono:v})}/><Field label="Email" value={form.padre_email} onChange={v=>setForm({...form,padre_email:v})} type="email"/></div></div></Modal>}
+    <div style={card}>{filtered.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay alumnos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:600}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Alumno","Padre","Tel. Padre","Sección","Monto","Estado",""].map(h=><th key={h} style={{textAlign:h===""?"center":"left",padding:"8px 10px",color:"#64748B",fontWeight:600,fontSize:12}}>{h}</th>)}</tr></thead><tbody>{filtered.map(a=>{const p=data.padres.find(p=>p.id===a.padre_id);const sec=data.secciones.find(s=>s.id===a.seccion_id);const sc={activo:"#059669",inactivo:"#DC2626",graduado:"#7C3AED"};const m=(Number(a.monto_personalizado)>0)?Number(a.monto_personalizado):Number(sec?.mensualidad)||0;return(<tr key={a.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"8px 10px"}}><div style={{fontWeight:600}}>{a.nombre}</div>{a.telefono&&<div style={{fontSize:11,color:"#94A3B8"}}>{a.telefono}</div>}</td><td style={{padding:"8px 10px"}}>{p?.nombre||"—"}</td><td style={{padding:"8px 10px"}}>{p?.telefono||"—"}</td><td style={{padding:"8px 10px"}}>{sec?<span style={badge("#F97316")}>{sec.nombre}</span>:"—"}</td><td style={{padding:"8px 10px"}}>{a.beca?<span style={badge("#7C3AED")}>🎓 Becado</span>:(m?<span style={{fontWeight:600,color:Number(a.monto_personalizado)>0?"#7C3AED":"#1E293B"}}>L {m.toLocaleString()}{Number(a.monto_personalizado)>0?" ✎":""}</span>:"—")}</td><td style={{padding:"8px 10px"}}><span style={badge(sc[a.estado]||"#64748B")}>{a.estado}</span></td><td style={{padding:"8px 10px",textAlign:"center"}}><button onClick={()=>open(a)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>toggleEstado(a)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}>{a.estado==="activo"?<X size={15} color="#DC2626"/>:<Check size={15} color="#059669"/>}</button></td></tr>);})}</tbody></table></div>)}</div>
+    {modal&&<Modal title={modal==="new"?"Matricular alumno":"Editar alumno"} onClose={()=>setModal(null)} onSave={sv} wide><div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}><div><h4 style={{fontSize:13,fontWeight:700,color:"#F97316",margin:"0 0 12px",display:"flex",alignItems:"center",gap:6}}><Users size={15}/>Alumno</h4><Field label="Nombre *" value={form.nombre} onChange={v=>setForm({...form,nombre:v})}/><Field label="Teléfono" value={form.telefono} onChange={v=>setForm({...form,telefono:v})}/><Field label="Email" value={form.email} onChange={v=>setForm({...form,email:v})} type="email"/><div style={{marginBottom:12}}><label style={label}>Sección</label><select value={form.seccion_id} onChange={e=>setForm({...form,seccion_id:e.target.value})} style={{...input,cursor:"pointer"}}><option value="">Sin sección</option>{data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre} — L {s.mensualidad}</option>)}</select></div>
+
+            {/* Opción de BECA */}
+            <div onClick={()=>setForm({...form,beca:!form.beca,monto_personalizado:!form.beca?"":form.monto_personalizado})} style={{marginBottom:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",border:form.beca?"2px solid #7C3AED":"1px solid #D1D5DB",background:form.beca?"#F5F3FF":"#fff",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:20,height:20,borderRadius:5,border:form.beca?"none":"2px solid #D1D5DB",background:form.beca?"#7C3AED":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                {form.beca&&<Check size={14} color="#fff"/>}
+              </div>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:form.beca?"#7C3AED":"#475569"}}>🎓 Alumno becado</div>
+                <div style={{fontSize:11,color:"#94A3B8"}}>No se le generan cobros ni recordatorios</div>
+              </div>
+            </div>
+
+            {!form.beca&&<div style={{marginBottom:12}}><label style={label}>Monto mensual</label>{form.seccion_id&&<div style={{fontSize:11,color:"#64748B",marginBottom:4}}>Precio del grupo: L {Number(data.secciones.find(s=>s.id===form.seccion_id)?.mensualidad||0).toLocaleString()}</div>}<input type="number" value={form.monto_personalizado} onChange={e=>setForm({...form,monto_personalizado:e.target.value})} placeholder="Dejar vacío = precio del grupo" style={input}/><div style={{fontSize:11,color:"#94A3B8",marginTop:3}}>Llenar solo si tiene descuento o precio especial.</div></div>}
+            {form.beca&&<div style={{marginBottom:12,padding:"10px 12px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,fontSize:12,color:"#5B21B6"}}>Este alumno queda excluido de la generación de cobros por sección y de los recordatorios de pago.</div>}</div><div><h4 style={{fontSize:13,fontWeight:700,color:"#2563EB",margin:"0 0 12px",display:"flex",alignItems:"center",gap:6}}><Users size={15}/>Padre/Encargado</h4><Field label="Nombre *" value={form.padre_nombre} onChange={v=>setForm({...form,padre_nombre:v})}/><Field label="Teléfono" value={form.padre_telefono} onChange={v=>setForm({...form,padre_telefono:v})}/><Field label="Email" value={form.padre_email} onChange={v=>setForm({...form,padre_email:v})} type="email"/></div></div></Modal>}
   </div>);
 }
 
@@ -376,8 +390,9 @@ function FacturasPage({data,loadData,showToast}){
     const alumnosSec = data.alumnos.filter(a=>a.seccion_id===bulkSec && a.estado==="activo");
     if(alumnosSec.length===0){showToast("No hay alumnos activos en esta sección","error");return;}
     const yaConCobro = data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.mes_correspondiente===mes&&f.estado!=="anulada").map(f=>f.alumno_id);
-    const sinCobro = alumnosSec.filter(a=>!yaConCobro.includes(a.id));
-    if(sinCobro.length===0){showToast(`Todos ya tienen cobro de ${mes}`,"error");return;}
+    // Se excluyen los becados y los que ya tienen cobro de ese mes
+    const sinCobro = alumnosSec.filter(a=>!yaConCobro.includes(a.id) && a.beca!==true);
+    if(sinCobro.length===0){showToast(`No hay cobros nuevos por crear para ${mes}`,"error");return;}
     try{
       let count = data.facturas.length;
       const rows = sinCobro.map(al=>{
@@ -469,16 +484,19 @@ function FacturasPage({data,loadData,showToast}){
           {bulkSec&&(()=>{
             const sec=data.secciones.find(s=>s.id===bulkSec);
             const als=data.alumnos.filter(a=>a.seccion_id===bulkSec&&a.estado==="activo");
+            const becados=als.filter(a=>a.beca===true);
             const mes=form.mes_correspondiente||MESES[new Date().getMonth()];
             const yaTienen=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.mes_correspondiente===mes&&f.estado!=="anulada").map(f=>f.alumno_id);
-            const nuevos=als.filter(a=>!yaTienen.includes(a.id));
+            const nuevos=als.filter(a=>!yaTienen.includes(a.id)&&a.beca!==true);
             return(<div style={{background:"#F0FDF4",borderRadius:8,padding:14,fontSize:12,border:"1px solid #BBF7D0"}}>
               <div style={{fontWeight:700,color:"#166534",marginBottom:8}}>Resumen:</div>
               <div>📚 {sec?.nombre} — L {Number(sec?.mensualidad).toLocaleString()}</div>
               <div>👥 Alumnos activos: {als.length}</div>
-              <div>✅ Ya con cobro de {mes}: {als.length-nuevos.length}</div>
+              {becados.length>0&&<div style={{color:"#7C3AED",fontWeight:600}}>🎓 Becados (se excluyen): {becados.length}</div>}
+              <div>✅ Ya con cobro de {mes}: {als.filter(a=>yaTienen.includes(a.id)).length}</div>
               <div style={{marginTop:8,padding:"8px 10px",background:"#fff",borderRadius:6,fontWeight:700,color:"#059669",fontSize:14}}>📝 Se crearán: {nuevos.length} cobros</div>
               {nuevos.length>0&&<div style={{marginTop:8,fontSize:11,color:"#475569"}}>{nuevos.map(a=>{const m=(Number(a.monto_personalizado)>0)?Number(a.monto_personalizado):Number(sec?.mensualidad);return`${a.nombre} (L ${m.toLocaleString()})`;}).join(", ")}</div>}
+              {becados.length>0&&<div style={{marginTop:6,fontSize:11,color:"#7C3AED"}}>Becados: {becados.map(a=>a.nombre).join(", ")}</div>}
             </div>);
           })()}
           {!bulkSec&&<div style={{background:"#F8FAFC",borderRadius:8,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}}>Selecciona una sección</div>}
@@ -624,8 +642,10 @@ function HistorialPage({data,showToast}){
         </div>
         <div style={{textAlign:"right"}}>
           <div style={{fontSize:12,color:"#64748B"}}>Mensualidad</div>
-          <div style={{fontSize:20,fontWeight:800,color:"#F97316"}}>L {monto.toLocaleString()}</div>
-          {Number(alumno.monto_personalizado)>0&&<div style={{fontSize:11,color:"#7C3AED"}}>Precio especial ✎</div>}
+          {alumno.beca
+            ? <div style={{fontSize:18,fontWeight:800,color:"#7C3AED"}}>🎓 Becado</div>
+            : <><div style={{fontSize:20,fontWeight:800,color:"#F97316"}}>L {monto.toLocaleString()}</div>
+                {Number(alumno.monto_personalizado)>0&&<div style={{fontSize:11,color:"#7C3AED"}}>Precio especial ✎</div>}</>}
         </div>
       </div>
     </div>}
@@ -677,7 +697,7 @@ function RecordatoriosPage({data,showToast}){
   const[selSec,setSelSec]=useState("");const[enviando,setEnviando]=useState(false);const[enviados,setEnviados]=useState([]);
   const[mensaje,setMensaje]=useState("Estimado padre de familia, le recordamos que la mensualidad de {mes} está pendiente (L {monto}). Favor enviar comprobante de pago. Seeds English School 🌱");
   const mes=MESES[new Date().getMonth()];
-  const contactos=(selSec?data.alumnos.filter(a=>a.seccion_id===selSec&&a.estado==="activo"):data.alumnos.filter(a=>a.estado==="activo")).filter(al=>!data.facturas.some(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&f.estado==="pagada"&&(f.tipo_factura||"cobro")==="cobro")).map(al=>{const p=data.padres.find(p=>p.id===al.padre_id);const sec=data.secciones.find(s=>s.id===al.seccion_id);const cobro=data.facturas.find(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro");const mora=cobro?calcMora(cobro):0;const base=(Number(al.monto_personalizado)>0)?Number(al.monto_personalizado):Number(sec?.mensualidad)||0;return{alumno_id:al.id,alumno:al.nombre,padre:p?.nombre,telefono:p?.telefono,email:p?.email,seccion:sec?.nombre,monto:base+mora,mora};});
+  const contactos=(selSec?data.alumnos.filter(a=>a.seccion_id===selSec&&a.estado==="activo"):data.alumnos.filter(a=>a.estado==="activo")).filter(al=>al.beca!==true).filter(al=>!data.facturas.some(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&f.estado==="pagada"&&(f.tipo_factura||"cobro")==="cobro")).map(al=>{const p=data.padres.find(p=>p.id===al.padre_id);const sec=data.secciones.find(s=>s.id===al.seccion_id);const cobro=data.facturas.find(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro");const mora=cobro?calcMora(cobro):0;const base=(Number(al.monto_personalizado)>0)?Number(al.monto_personalizado):Number(sec?.mensualidad)||0;return{alumno_id:al.id,alumno:al.nombre,padre:p?.nombre,telefono:p?.telefono,email:p?.email,seccion:sec?.nombre,monto:base+mora,mora};});
   const envUno=(c)=>{if(!c.telefono){showToast(`${c.alumno}: Sin teléfono`,"error");return;}const msg=mensaje.replace("{mes}",mes).replace("{monto}",c.monto.toLocaleString());abrirWhatsApp(c.telefono,msg);setEnviados(p=>[...p,c.alumno_id]);showToast(`Chat abierto: ${c.padre||c.alumno}`);};
   const envTodos=()=>{const ct=contactos.filter(c=>c.telefono&&!enviados.includes(c.alumno_id));if(!ct.length){showToast("Sin pendientes","error");return;}setEnviando(true);let i=0;const iv=setInterval(()=>{if(i>=ct.length){clearInterval(iv);setEnviando(false);showToast(`✓ ${ct.length} enviados`);return;}envUno(ct[i]);i++;},2500);};
   const envEmail=()=>{const ct=contactos.filter(c=>c.email&&!enviados.includes(c.alumno_id));if(!ct.length){showToast("Sin correos","error");return;}const msg=mensaje.replace("{mes}",mes).replace("{monto}","su monto");window.open(`mailto:${ct.map(c=>c.email).join(",")}?subject=${encodeURIComponent("Recordatorio - Seeds")}&body=${encodeURIComponent(msg)}`,"_blank");setEnviados(p=>[...p,...ct.map(c=>c.alumno_id)]);showToast(`Correo con ${ct.length} destinatarios`);};
