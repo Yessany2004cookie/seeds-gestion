@@ -12,6 +12,40 @@ const TIPOS_PAGO = [{value:"efectivo",label:"Efectivo"},{value:"transferencia",l
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const MORA_MENSUAL = 50; // ← Cambia aquí el monto de mora mensual
 
+// ── Normaliza teléfono para WhatsApp (Honduras) ──
+// Detecta solo si el número ya trae el código de país 504 o no.
+// Acepta: "9765-4321", "+504 9765 4321", "50497654321", "00504...", etc.
+const telWA = (tel) => {
+  if(!tel) return "";
+  let d = String(tel).replace(/[^0-9]/g, "");  // dejar solo dígitos
+  if(d.startsWith("00")) d = d.slice(2);        // 0050497654321 → 50497654321
+  if(d.length === 8) d = "504" + d;             // 97654321 → 50497654321
+  return d;                                      // si ya trae 504, se deja igual
+};
+// Muestra el número bonito para que se vea en pantalla
+const telBonito = (tel) => { const d = telWA(tel); return d ? `+${d}` : "—"; };
+
+// ── Abrir WhatsApp ──
+// Usa el protocolo "whatsapp://" que abre DIRECTO la app de WhatsApp
+// instalada (escritorio o celular), sin pasar por la página web intermedia.
+const abrirWhatsApp = (tel, texto="") => {
+  const num = telWA(tel);
+  if(!num) return false;
+  const q = texto ? `&text=${encodeURIComponent(texto)}` : "";
+  const a = document.createElement('a');
+  a.href = `whatsapp://send?phone=${num}${q}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  return true;
+};
+// Alternativa si la app no abre: WhatsApp Web
+const linkWhatsAppWeb = (tel, texto="") => {
+  const num = telWA(tel);
+  const q = texto ? `&text=${encodeURIComponent(texto)}` : "";
+  return `https://web.whatsapp.com/send?phone=${num}${q}`;
+};
+
 const calcMora = (f) => {
   if (!f || f.estado === "pagada" || f.estado === "anulada" || f.tipo_factura === "comprobante") return 0;
   const hoy = new Date();
@@ -323,19 +357,13 @@ function FacturasPage({data,loadData,showToast}){
   const[bulkSec,setBulkSec]=useState("");
   const[imgPreview,setImgPreview]=useState(null);
 
-  const mostrarImagen = async (f, tipo="cobro") => {
+  const mostrarImagen = (f, tipo="cobro") => {
     const al=data.alumnos.find(a=>a.id===f.alumno_id);
     const padre=al?data.padres.find(p=>p.id===al.padre_id):null;
     const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;
     const mora=calcMora(f);
     const dataUrl=generarImgFactura(f,al,padre,sec,mora,tipo);
-    try{
-      const resp=await fetch(dataUrl);const blob=await resp.blob();
-      const file=new File([blob],`${f.numero_factura}.png`,{type:'image/png'});
-      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:`${f.numero_factura} - Seeds`});showToast("✓ Compartida");return;}
-    }catch(e){}
-    const phone=padre?.telefono?padre.telefono.replace(/[^0-9]/g,""):"";
-    setImgPreview({dataUrl,phone,nombre:al?.nombre||"",numero:f.numero_factura});
+    setImgPreview({dataUrl,phone:padre?.telefono||"",destinatario:padre?.nombre||al?.nombre||"",numero:f.numero_factura});
   };
 
   const openComp=(cobro=null)=>{if(cobro){const mora=calcMora(cobro);setForm({alumno_id:cobro.alumno_id,cobro_id:cobro.id,fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:cobro.mes_correspondiente,monto_total:String((Number(cobro.saldo)>0?Number(cobro.saldo):Number(cobro.monto_total)+mora)),tipo_pago:"efectivo",notas:""});}else{setForm({alumno_id:"",fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()],monto_total:"",tipo_pago:"efectivo",notas:"",cobro_id:""});}setModal("comprobante");};
@@ -470,21 +498,68 @@ function FacturasPage({data,loadData,showToast}){
 
 // ── PREVIEW DE IMAGEN (reutilizable) ──
 function ImgPreviewModal({img,onClose}){
+  const[copiado,setCopiado]=useState(false);
+  const num = telWA(img.phone);
+
+  // Copia la imagen al portapapeles y abre el chat del padre en la app de WhatsApp
+  const abrirChat = async () => {
+    try{
+      const resp = await fetch(img.dataUrl);
+      const blob = await resp.blob();
+      await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+      setCopiado(true);
+    }catch(e){ /* si el navegador no deja copiar, igual abre el chat */ }
+    abrirWhatsApp(img.phone);
+  };
+
+  // Menú de compartir del celular (adjunta la imagen directo)
+  const compartir = async () => {
+    try{
+      const resp = await fetch(img.dataUrl);
+      const blob = await resp.blob();
+      const file = new File([blob], `${img.numero}.png`, {type:'image/png'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:img.numero});
+      }else{
+        alert("Este navegador no permite compartir directo. Usa 'Descargar' y adjunta la imagen en WhatsApp.");
+      }
+    }catch(e){}
+  };
+
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}}>
     <div style={{background:"#fff",borderRadius:12,padding:16,maxWidth:520,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:0}}>📸 {img.numero}</h3>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer"}}><X size={20} color="#64748B"/></button>
       </div>
-      <img src={img.dataUrl} alt="Factura" style={{width:"100%",borderRadius:8,border:"1px solid #E2E8F0",marginBottom:12}}/>
-      <div style={{background:"#FEF3C7",borderRadius:8,padding:10,fontSize:12,color:"#92400E",marginBottom:12}}>
-        <strong>Para enviar:</strong> Mantén presionada la imagen → "Guardar imagen" → toca "Abrir WhatsApp" → adjunta y envía. <em>(En celular, el menú de compartir se abre automático.)</em>
+
+      {/* Destinatario visible para verificar */}
+      <div style={{background:num?"#F0FDF4":"#FEF2F2",border:`1px solid ${num?"#BBF7D0":"#FECACA"}`,borderRadius:8,padding:"8px 12px",fontSize:12,marginBottom:10}}>
+        {num ? <>Se enviará a: <strong>{img.destinatario||"—"}</strong> · <strong>{telBonito(img.phone)}</strong></>
+             : <span style={{color:"#DC2626"}}>⚠️ {img.destinatario||"Este contacto"} no tiene teléfono registrado.</span>}
       </div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        {img.phone&&<button onClick={()=>window.open(`https://wa.me/504${img.phone}`,"_blank")} style={btn("#25D366")}><Phone size={14}/>Abrir WhatsApp</button>}
+
+      <img src={img.dataUrl} alt="Factura" style={{width:"100%",borderRadius:8,border:"1px solid #E2E8F0",marginBottom:10}}/>
+
+      {copiado && <div style={{background:"#ECFDF5",border:"1px solid #059669",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#059669",marginBottom:10,fontWeight:600}}>
+        ✓ Imagen copiada. En el chat que se abrió, pega con <strong>Ctrl+V</strong> y dale Enter.
+      </div>}
+
+      <div style={{background:"#FEF3C7",borderRadius:8,padding:10,fontSize:12,color:"#92400E",marginBottom:12}}>
+        <strong>💻 En computadora (con WhatsApp instalado):</strong> toca "Abrir chat" → se abre la conversación del padre y la imagen queda copiada → pega con <strong>Ctrl+V</strong> → Enter.<br/>
+        <strong>📱 En celular:</strong> usa "Compartir imagen" → elige WhatsApp → elige el contacto.
+      </div>
+
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+        {num && <button onClick={abrirChat} style={btn("#25D366")}><Phone size={14}/>Abrir chat de {img.destinatario?.split(" ")[0]||"WhatsApp"}</button>}
+        <button onClick={compartir} style={btn("#7C3AED")}><Send size={14}/>Compartir imagen</button>
         <button onClick={()=>{const a=document.createElement('a');a.download=`${img.numero}.png`;a.href=img.dataUrl;a.click();}} style={btn("#2563EB")}><Download size={14}/>Descargar</button>
         <button onClick={onClose} style={btnO}><X size={14}/>Cerrar</button>
       </div>
+
+      {num && <div style={{fontSize:11,color:"#94A3B8",textAlign:"center"}}>
+        ¿No abrió la app? <a href={linkWhatsAppWeb(img.phone)} target="_blank" rel="noreferrer" style={{color:"#2563EB",fontWeight:600}}>Abrir en WhatsApp Web</a>
+      </div>}
     </div>
   </div>);
 }
@@ -513,19 +588,13 @@ function HistorialPage({data,showToast}){
   const padre=alumno?data.padres.find(p=>p.id===alumno.padre_id):null;
   const sec=alumno?data.secciones.find(s=>s.id===alumno.seccion_id):null;
 
-  const verImagen = async (f, tipo) => {
+  const verImagen = (f, tipo) => {
     const al=data.alumnos.find(a=>a.id===f.alumno_id);
     const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;
     const s=al?data.secciones.find(ss=>ss.id===al.seccion_id):null;
     const mora=calcMora(f);
     const dataUrl=generarImgFactura(f,al,p,s,mora,tipo);
-    try{
-      const resp=await fetch(dataUrl);const blob=await resp.blob();
-      const file=new File([blob],`${f.numero_factura}.png`,{type:'image/png'});
-      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return;}
-    }catch(e){}
-    const phone=p?.telefono?p.telefono.replace(/[^0-9]/g,""):"";
-    setImgPreview({dataUrl,phone,nombre:al?.nombre||"",numero:f.numero_factura});
+    setImgPreview({dataUrl,phone:p?.telefono||"",destinatario:p?.nombre||al?.nombre||"",numero:f.numero_factura});
   };
 
   const tablaMensual = selAl ? MESES.map(mes => {
@@ -609,7 +678,7 @@ function RecordatoriosPage({data,showToast}){
   const[mensaje,setMensaje]=useState("Estimado padre de familia, le recordamos que la mensualidad de {mes} está pendiente (L {monto}). Favor enviar comprobante de pago. Seeds English School 🌱");
   const mes=MESES[new Date().getMonth()];
   const contactos=(selSec?data.alumnos.filter(a=>a.seccion_id===selSec&&a.estado==="activo"):data.alumnos.filter(a=>a.estado==="activo")).filter(al=>!data.facturas.some(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&f.estado==="pagada"&&(f.tipo_factura||"cobro")==="cobro")).map(al=>{const p=data.padres.find(p=>p.id===al.padre_id);const sec=data.secciones.find(s=>s.id===al.seccion_id);const cobro=data.facturas.find(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro");const mora=cobro?calcMora(cobro):0;const base=(Number(al.monto_personalizado)>0)?Number(al.monto_personalizado):Number(sec?.mensualidad)||0;return{alumno_id:al.id,alumno:al.nombre,padre:p?.nombre,telefono:p?.telefono,email:p?.email,seccion:sec?.nombre,monto:base+mora,mora};});
-  const envUno=(c)=>{if(!c.telefono){showToast(`${c.alumno}: Sin teléfono`,"error");return;}const msg=mensaje.replace("{mes}",mes).replace("{monto}",c.monto.toLocaleString());window.open(`https://wa.me/504${c.telefono.replace(/[^0-9]/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");setEnviados(p=>[...p,c.alumno_id]);showToast(`Enviado a ${c.padre||c.alumno}`);};
+  const envUno=(c)=>{if(!c.telefono){showToast(`${c.alumno}: Sin teléfono`,"error");return;}const msg=mensaje.replace("{mes}",mes).replace("{monto}",c.monto.toLocaleString());abrirWhatsApp(c.telefono,msg);setEnviados(p=>[...p,c.alumno_id]);showToast(`Chat abierto: ${c.padre||c.alumno}`);};
   const envTodos=()=>{const ct=contactos.filter(c=>c.telefono&&!enviados.includes(c.alumno_id));if(!ct.length){showToast("Sin pendientes","error");return;}setEnviando(true);let i=0;const iv=setInterval(()=>{if(i>=ct.length){clearInterval(iv);setEnviando(false);showToast(`✓ ${ct.length} enviados`);return;}envUno(ct[i]);i++;},2500);};
   const envEmail=()=>{const ct=contactos.filter(c=>c.email&&!enviados.includes(c.alumno_id));if(!ct.length){showToast("Sin correos","error");return;}const msg=mensaje.replace("{mes}",mes).replace("{monto}","su monto");window.open(`mailto:${ct.map(c=>c.email).join(",")}?subject=${encodeURIComponent("Recordatorio - Seeds")}&body=${encodeURIComponent(msg)}`,"_blank");setEnviados(p=>[...p,...ct.map(c=>c.alumno_id)]);showToast(`Correo con ${ct.length} destinatarios`);};
   return(<div>
@@ -620,7 +689,7 @@ function RecordatoriosPage({data,showToast}){
     </div>
     <div style={card}><h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Pendientes ({contactos.length})</h3>
       {contactos.length===0?<p style={{fontSize:13,color:"#059669",padding:20,textAlign:"center"}}>✓ Todos al día</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Alumno","Padre","Tel.","Sección","Monto","Mora","Enviar"].map(h=><th key={h} style={{textAlign:h==="Enviar"?"center":h==="Monto"||h==="Mora"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead>
-        <tbody>{contactos.map((c,i)=>{const done=enviados.includes(c.alumno_id);return(<tr key={i} style={{borderBottom:"1px solid #F1F5F9",background:done?"#F0FDF4":"transparent"}}><td style={{padding:"6px 8px",fontWeight:600}}>{c.alumno}</td><td style={{padding:"6px 8px"}}>{c.padre||"—"}</td><td style={{padding:"6px 8px"}}>{c.telefono||"—"}</td><td style={{padding:"6px 8px"}}>{c.seccion?<span style={badge("#F97316")}>{c.seccion}</span>:"—"}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:600}}>L {c.monto.toLocaleString()}</td><td style={{padding:"6px 8px",textAlign:"right",color:c.mora>0?"#DC2626":"#94A3B8"}}>{c.mora>0?`L ${c.mora}`:"—"}</td>
+        <tbody>{contactos.map((c,i)=>{const done=enviados.includes(c.alumno_id);return(<tr key={i} style={{borderBottom:"1px solid #F1F5F9",background:done?"#F0FDF4":"transparent"}}><td style={{padding:"6px 8px",fontWeight:600}}>{c.alumno}</td><td style={{padding:"6px 8px"}}>{c.padre||"—"}</td><td style={{padding:"6px 8px"}}>{c.telefono?telBonito(c.telefono):<span style={{color:"#DC2626"}}>Sin tel.</span>}</td><td style={{padding:"6px 8px"}}>{c.seccion?<span style={badge("#F97316")}>{c.seccion}</span>:"—"}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:600}}>L {c.monto.toLocaleString()}</td><td style={{padding:"6px 8px",textAlign:"right",color:c.mora>0?"#DC2626":"#94A3B8"}}>{c.mora>0?`L ${c.mora}`:"—"}</td>
           <td style={{padding:"6px 8px",textAlign:"center"}}>{done?<span style={badge("#059669")}>✓</span>:c.telefono?<button onClick={()=>envUno(c)} style={{background:"#25D366",border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:4}}><Phone size={12} color="#fff"/></button>:<span style={{fontSize:11,color:"#DC2626"}}>Sin tel.</span>}</td></tr>);})}</tbody></table></div>)}
     </div>
   </div>);
@@ -651,7 +720,7 @@ function FinanzasPage({data,loadData,showToast}){
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
-  const mostrarPagoImg = async (gasto,maestro) => {
+  const mostrarPagoImg = (gasto,maestro) => {
     const cv=document.createElement('canvas');cv.width=600;cv.height=500;
     const c=cv.getContext('2d');
     c.fillStyle='#fff';c.fillRect(0,0,600,500);
@@ -681,13 +750,7 @@ function FinanzasPage({data,loadData,showToast}){
     c.save();c.translate(300,455);c.rotate(-0.1);c.strokeStyle='#059669';c.lineWidth=3;c.font='bold 36px Segoe UI,sans-serif';c.textAlign='center';c.strokeText('✓ PAGADO',0,0);c.restore();
     c.strokeStyle='#E2E8F0';c.lineWidth=2;c.strokeRect(1,1,598,498);
     const dataUrl=cv.toDataURL('image/png');
-    try{
-      const resp=await fetch(dataUrl);const blob=await resp.blob();
-      const file=new File([blob],`Pago_${maestro?.nombre}.png`,{type:'image/png'});
-      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return;}
-    }catch(e){}
-    const phone=maestro?.telefono?maestro.telefono.replace(/[^0-9]/g,""):"";
-    setImgPreview({dataUrl,phone,nombre:maestro?.nombre||"",numero:`Pago ${gasto.mes_correspondiente}`});
+    setImgPreview({dataUrl,phone:maestro?.telefono||"",destinatario:maestro?.nombre||"",numero:`Pago ${gasto.mes_correspondiente}`});
   };
 
   const eliminarGasto=async(id)=>{if(!confirm("¿Eliminar gasto?"))return;try{await db.remove("gastos",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
