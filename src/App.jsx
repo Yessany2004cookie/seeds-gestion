@@ -10,7 +10,6 @@ import {
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const TIPOS_PAGO = [{value:"efectivo",label:"Efectivo"},{value:"transferencia",label:"Transferencia"},{value:"tarjeta",label:"Tarjeta"},{value:"deposito",label:"Depósito"}];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-const MORA_MENSUAL = 50; // ← Cambia aquí el monto de mora mensual
 
 // ── Normaliza teléfono para WhatsApp (Honduras) ──
 // Detecta solo si el número ya trae el código de país 504 o no.
@@ -46,15 +45,29 @@ const linkWhatsAppWeb = (tel, texto="") => {
   return `https://web.whatsapp.com/send?phone=${num}${q}`;
 };
 
-const calcMora = (f) => {
+// ── Cálculo de mora (recargo por atraso) ──
+// Ahora el recargo es un PORCENTAJE de la mensualidad, configurable por sección,
+// y se ACUMULA: por cada mes de atraso se suma otro tanto del porcentaje.
+// Ej: sección con 12%, factura de L 1000 con 2 meses de atraso → 12%+12% = 24% = L 240.
+// Necesita la lista de secciones para saber el % de la sección del alumno.
+const calcMora = (f, secciones=[], alumnos=[]) => {
   if (!f || f.estado === "pagada" || f.estado === "anulada" || f.tipo_factura === "comprobante") return 0;
+  // Ubicar la sección del alumno de esta factura
+  const al = alumnos.find(a => a.id === f.alumno_id);
+  const sec = al ? secciones.find(s => s.id === al.seccion_id) : null;
+  // Si la sección no tiene mora activa o el % es 0, no hay recargo
+  if (!sec || sec.mora_activa !== true || !Number(sec.mora_porcentaje)) return 0;
   const hoy = new Date();
   const mesIdx = MESES.indexOf(f.mes_correspondiente);
   if (mesIdx === -1) return 0;
   const year = parseInt(String(f.fecha_emision||"").split("-")[0]) || hoy.getFullYear();
   const deadline = new Date(year, mesIdx, 28, 23, 59, 59);
   if (hoy <= deadline) return 0;
-  return Math.max(1, Math.ceil((hoy - deadline) / (1000*60*60*24*30))) * MORA_MENSUAL;
+  // Cuántos meses de atraso (mínimo 1 pasado el día 28)
+  const mesesAtraso = Math.max(1, Math.ceil((hoy - deadline) / (1000*60*60*24*30)));
+  const pct = Number(sec.mora_porcentaje) / 100;
+  const recargo = Number(f.monto_total) * pct * mesesAtraso;
+  return Math.round(recargo);
 };
 
 // ── Capa de base de datos (Supabase) ──
@@ -137,7 +150,7 @@ export default function App() {
   const [page, setPage] = useState("dashboard");
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [data, setData] = useState({ maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[] });
+  const [data, setData] = useState({ maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[] });
   const [toast, setToast] = useState(null);
 
   const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
@@ -152,11 +165,12 @@ export default function App() {
   // Cargar todos los datos
   const loadData = useCallback(async () => {
     try {
-      const [maestros,secciones,padres,alumnos,facturas,gastos] = await Promise.all([
+      const [maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material] = await Promise.all([
         db.all("maestros"), db.all("secciones"), db.all("padres"),
-        db.all("alumnos"), db.all("facturas"), db.all("gastos")
+        db.all("alumnos"), db.all("facturas"), db.all("gastos"),
+        db.all("materiales"), db.all("ventas_material")
       ]);
-      setData({maestros,secciones,padres,alumnos,facturas,gastos});
+      setData({maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material});
     } catch(e) { showToast("Error cargando datos: "+e.message,"error"); }
   }, []);
 
@@ -170,9 +184,10 @@ export default function App() {
   const NAV = [
     {id:"dashboard",label:"Inicio",icon:Home},{id:"secciones",label:"Secciones",icon:BookOpen},
     {id:"maestros",label:"Maestros",icon:GraduationCap},{id:"alumnos",label:"Matrícula",icon:Users},
-    {id:"facturas",label:"Facturas",icon:FileText},{id:"historial",label:"Historial",icon:CreditCard},
-    {id:"recordatorios",label:"Recordatorios",icon:Bell},{id:"finanzas",label:"Finanzas",icon:DollarSign},
-    {id:"sistema",label:"Sistema",icon:LogIn},
+    {id:"facturas",label:"Facturas",icon:FileText},{id:"materiales",label:"Materiales",icon:CreditCard},
+    {id:"historial",label:"Historial",icon:Calendar},{id:"recordatorios",label:"Recordatorios",icon:Bell},
+    {id:"finanzas",label:"Finanzas",icon:DollarSign},{id:"reportes",label:"Reportes",icon:FileText},
+    {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema",icon:LogIn},
   ];
 
   const props = { data, loadData, showToast };
@@ -182,9 +197,12 @@ export default function App() {
     maestros:<MaestrosPage {...props}/>,
     alumnos:<AlumnosPage {...props}/>,
     facturas:<FacturasPage {...props}/>,
+    materiales:<MaterialesPage {...props}/>,
     historial:<HistorialPage {...props}/>,
     recordatorios:<RecordatoriosPage {...props}/>,
     finanzas:<FinanzasPage {...props}/>,
+    reportes:<ReportesPage {...props}/>,
+    config:<ConfiguracionPage {...props}/>,
     sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}/>,
   };
 
@@ -259,9 +277,13 @@ function Dashboard({data,setPage}){
   const ts=data.secciones.filter(s=>s.activa!==false).length;
   const pend=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
   const mes=MESES[new Date().getMonth()];
-  const ing=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&f.mes_correspondiente===mes).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+  const ingMens=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&f.mes_correspondiente===mes).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+  const ventMat=(data.ventas_material||[]).filter(v=>v.mes_correspondiente===mes&&v.estado!=="anulado");
+  const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
+  const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
+  const ing=ingMens+ingMat;
   const gastos=data.gastos.filter(g=>g.mes_correspondiente===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
-  const ganancia=ing-gastos;
+  const ganancia=ingMens+ganMat-gastos;
   const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString()}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastos.toLocaleString()}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString()}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
   return(<div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
@@ -375,12 +397,12 @@ function FacturasPage({data,loadData,showToast}){
     const al=data.alumnos.find(a=>a.id===f.alumno_id);
     const padre=al?data.padres.find(p=>p.id===al.padre_id):null;
     const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;
-    const mora=calcMora(f);
+    const mora=calcMora(f, data.secciones, data.alumnos);
     const dataUrl=generarImgFactura(f,al,padre,sec,mora,tipo);
     setImgPreview({dataUrl,phone:padre?.telefono||"",destinatario:padre?.nombre||al?.nombre||"",numero:f.numero_factura});
   };
 
-  const openComp=(cobro=null)=>{if(cobro){const mora=calcMora(cobro);setForm({alumno_id:cobro.alumno_id,cobro_id:cobro.id,fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:cobro.mes_correspondiente,monto_total:String((Number(cobro.saldo)>0?Number(cobro.saldo):Number(cobro.monto_total)+mora)),tipo_pago:"efectivo",notas:""});}else{setForm({alumno_id:"",fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()],monto_total:"",tipo_pago:"efectivo",notas:"",cobro_id:""});}setModal("comprobante");};
+  const openComp=(cobro=null)=>{if(cobro){const mora=calcMora(cobro, data.secciones, data.alumnos);setForm({alumno_id:cobro.alumno_id,cobro_id:cobro.id,fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:cobro.mes_correspondiente,monto_total:String((Number(cobro.saldo)>0?Number(cobro.saldo):Number(cobro.monto_total)+mora)),tipo_pago:"efectivo",notas:""});}else{setForm({alumno_id:"",fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()],monto_total:"",tipo_pago:"efectivo",notas:"",cobro_id:""});}setModal("comprobante");};
 
   const crearCobrosSeccion = async () => {
     if(!bulkSec){showToast("Selecciona una sección","error");return;}
@@ -440,7 +462,7 @@ function FacturasPage({data,loadData,showToast}){
         <button onClick={()=>{setBulkSec("");setForm({...form,mes_correspondiente:MESES[new Date().getMonth()]});setModal("bulk");}} style={btn("#059669")}><Plus size={15}/>Crear cobros por sección</button>
       </div>
       <div style={card}>{cobros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay cobros. Crea cobros por sección.</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:750}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Padre","Sección","Mes","Total","Mora","Saldo","Estado",""].map(h=><th key={h} style={{textAlign:["Total","Mora","Saldo"].includes(h)?"right":"left",padding:"5px 4px",color:"#64748B",fontWeight:600,fontSize:10,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
-        <tbody>{[...cobros].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=calcMora(f);const tot=Number(f.monto_total)+mora;const cols={pagada:"#059669",pendiente:"#DC2626",parcial:"#D97706",anulada:"#64748B"};const isP=f.estado==="pendiente"||f.estado==="parcial";return(
+        <tbody>{[...cobros].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=calcMora(f, data.secciones, data.alumnos);const tot=Number(f.monto_total)+mora;const cols={pagada:"#059669",pendiente:"#DC2626",parcial:"#D97706",anulada:"#64748B"};const isP=f.estado==="pendiente"||f.estado==="parcial";return(
           <tr key={f.id} style={{borderBottom:"1px solid #F1F5F9",background:isP&&mora>0?"#FEF2F2":"transparent"}}>
             <td style={{padding:"5px 4px",fontWeight:600}}>{f.numero_factura}</td>
             <td style={{padding:"5px 4px"}}>{al?.nombre||"—"}</td>
@@ -506,7 +528,7 @@ function FacturasPage({data,loadData,showToast}){
 
     {modal==="comprobante"&&<Modal title="✅ Confirmar pago" onClose={()=>setModal(null)} onSave={saveComp} wide><div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}><div>
       {!form.cobro_id&&<div style={{marginBottom:12}}><label style={label}>Cobro pendiente *</label><select onChange={e=>{const c=pendCobros.find(c=>c.id===e.target.value);if(c)openComp(c);}} style={{...input,cursor:"pointer"}}><option value="">Seleccionar...</option>{pendCobros.map(c=>{const al=data.alumnos.find(a=>a.id===c.alumno_id);return<option key={c.id} value={c.id}>{c.numero_factura} — {al?.nombre} — {c.mes_correspondiente}</option>;})}</select></div>}
-      {form.cobro_id&&(()=>{const cobro=data.facturas.find(f=>f.id===form.cobro_id);const al=data.alumnos.find(a=>a.id===form.alumno_id);const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;const mora=cobro?calcMora(cobro):0;return(<div style={{background:"#F0FDF4",borderRadius:8,padding:12,marginBottom:12,fontSize:12,border:"1px solid #BBF7D0"}}><div style={{fontWeight:700,color:"#166534",marginBottom:4}}>✓ {cobro?.numero_factura}</div><div><strong>Alumno:</strong> {al?.nombre} | <strong>Padre:</strong> {p?.nombre}</div><div><strong>Monto:</strong> L {Number(cobro?.monto_total).toLocaleString()}</div>{mora>0&&<div style={{color:"#DC2626",fontWeight:700}}>⚠️ Mora: L {mora}</div>}</div>);})()}
+      {form.cobro_id&&(()=>{const cobro=data.facturas.find(f=>f.id===form.cobro_id);const al=data.alumnos.find(a=>a.id===form.alumno_id);const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;const mora=cobro?calcMora(cobro, data.secciones, data.alumnos):0;return(<div style={{background:"#F0FDF4",borderRadius:8,padding:12,marginBottom:12,fontSize:12,border:"1px solid #BBF7D0"}}><div style={{fontWeight:700,color:"#166534",marginBottom:4}}>✓ {cobro?.numero_factura}</div><div><strong>Alumno:</strong> {al?.nombre} | <strong>Padre:</strong> {p?.nombre}</div><div><strong>Monto:</strong> L {Number(cobro?.monto_total).toLocaleString()}</div>{mora>0&&<div style={{color:"#DC2626",fontWeight:700}}>⚠️ Mora: L {mora}</div>}</div>);})()}
     </div><div><div style={{marginBottom:12}}><label style={label}>Fecha de pago</label><input type="date" value={form.fecha_pago} onChange={e=>setForm({...form,fecha_pago:e.target.value})} style={input}/></div><Field label="Monto recibido (L)" value={form.monto_total} onChange={v=>setForm({...form,monto_total:v})} type="number"/><div style={{marginBottom:12}}><label style={label}>Tipo de pago</label><select value={form.tipo_pago} onChange={e=>setForm({...form,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div><Field label="Notas" value={form.notas} onChange={v=>setForm({...form,notas:v})} multiline/></div></div></Modal>}
 
     {imgPreview&&<ImgPreviewModal img={imgPreview} onClose={()=>setImgPreview(null)}/>}
@@ -516,25 +538,43 @@ function FacturasPage({data,loadData,showToast}){
 
 // ── PREVIEW DE IMAGEN (reutilizable) ──
 function ImgPreviewModal({img,onClose}){
-  const[copiado,setCopiado]=useState(false);
+  const[estado,setEstado]=useState(null); // null | "copiado" | "error"
   const num = telWA(img.phone);
 
-  // Copia la imagen al portapapeles y abre el chat del padre en la app de WhatsApp
-  const abrirChat = async () => {
+  // Copia la imagen al portapapeles.
+  // Pasar la promesa directo a ClipboardItem conserva el "gesto del usuario",
+  // que es lo que exige Chrome para permitir copiar.
+  const copiarImagen = async () => {
     try{
-      const resp = await fetch(img.dataUrl);
-      const blob = await resp.blob();
-      await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
-      setCopiado(true);
-    }catch(e){ /* si el navegador no deja copiar, igual abre el chat */ }
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': fetch(img.dataUrl).then(r=>r.blob()) })
+      ]);
+      setEstado("copiado"); return true;
+    }catch(e1){
+      try{ // segundo intento con el método clásico
+        const blob = await (await fetch(img.dataUrl)).blob();
+        await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+        setEstado("copiado"); return true;
+      }catch(e2){ setEstado("error"); return false; }
+    }
+  };
+
+  // Descarga la imagen a la carpeta de Descargas
+  const descargar = () => {
+    const a=document.createElement('a');
+    a.download=`${img.numero}.png`; a.href=img.dataUrl; a.click();
+  };
+
+  // Copia + abre el chat del padre en la app de WhatsApp
+  const abrirChat = async () => {
+    await copiarImagen();
     abrirWhatsApp(img.phone);
   };
 
   // Menú de compartir del celular (adjunta la imagen directo)
   const compartir = async () => {
     try{
-      const resp = await fetch(img.dataUrl);
-      const blob = await resp.blob();
+      const blob = await (await fetch(img.dataUrl)).blob();
       const file = new File([blob], `${img.numero}.png`, {type:'image/png'});
       if(navigator.canShare && navigator.canShare({files:[file]})){
         await navigator.share({files:[file], title:img.numero});
@@ -559,19 +599,24 @@ function ImgPreviewModal({img,onClose}){
 
       <img src={img.dataUrl} alt="Factura" style={{width:"100%",borderRadius:8,border:"1px solid #E2E8F0",marginBottom:10}}/>
 
-      {copiado && <div style={{background:"#ECFDF5",border:"1px solid #059669",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#059669",marginBottom:10,fontWeight:600}}>
-        ✓ Imagen copiada. En el chat que se abrió, pega con <strong>Ctrl+V</strong> y dale Enter.
+      {/* Estado de la copia */}
+      {estado==="copiado" && <div style={{background:"#ECFDF5",border:"1px solid #059669",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#059669",marginBottom:10,fontWeight:600}}>
+        ✓ Imagen copiada. En el chat de WhatsApp pega con <strong>Ctrl+V</strong> y dale Enter.
+      </div>}
+      {estado==="error" && <div style={{background:"#FFF7ED",border:"1px solid #F97316",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#9A3412",marginBottom:10}}>
+        No se pudo copiar automáticamente. Usá <strong>"Descargar"</strong> y luego arrastrá la imagen al chat (o usá el clip 📎 de WhatsApp).
       </div>}
 
       <div style={{background:"#FEF3C7",borderRadius:8,padding:10,fontSize:12,color:"#92400E",marginBottom:12}}>
-        <strong>💻 En computadora (con WhatsApp instalado):</strong> toca "Abrir chat" → se abre la conversación del padre y la imagen queda copiada → pega con <strong>Ctrl+V</strong> → Enter.<br/>
-        <strong>📱 En celular:</strong> usa "Compartir imagen" → elige WhatsApp → elige el contacto.
+        <strong>💻 En computadora:</strong> "Abrir chat" → se abre WhatsApp con el padre y la imagen queda copiada → <strong>Ctrl+V</strong> → Enter.<br/>
+        <strong>📱 En celular:</strong> "Compartir imagen" → elegí WhatsApp → elegí el contacto.
       </div>
 
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
         {num && <button onClick={abrirChat} style={btn("#25D366")}><Phone size={14}/>Abrir chat de {img.destinatario?.split(" ")[0]||"WhatsApp"}</button>}
-        <button onClick={compartir} style={btn("#7C3AED")}><Send size={14}/>Compartir imagen</button>
-        <button onClick={()=>{const a=document.createElement('a');a.download=`${img.numero}.png`;a.href=img.dataUrl;a.click();}} style={btn("#2563EB")}><Download size={14}/>Descargar</button>
+        <button onClick={copiarImagen} style={btn("#0891B2")}><FileText size={14}/>Copiar imagen</button>
+        <button onClick={compartir} style={btn("#7C3AED")}><Send size={14}/>Compartir</button>
+        <button onClick={descargar} style={btn("#2563EB")}><Download size={14}/>Descargar</button>
         <button onClick={onClose} style={btnO}><X size={14}/>Cerrar</button>
       </div>
 
@@ -584,7 +629,7 @@ function ImgPreviewModal({img,onClose}){
 
 // ── VISTA FACTURA ──
 function InvoiceView({invoice,data,onClose,onImagen}){
-  const f=invoice;const al=data.alumnos.find(a=>a.id===f.alumno_id);const padre=al?data.padres.find(p=>p.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=calcMora(f);
+  const f=invoice;const al=data.alumnos.find(a=>a.id===f.alumno_id);const padre=al?data.padres.find(p=>p.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=calcMora(f, data.secciones, data.alumnos);
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:520,maxHeight:"90vh",overflow:"auto"}}><div style={{padding:24}}>
     <div style={{textAlign:"center",borderBottom:"2px solid #F97316",paddingBottom:16,marginBottom:16}}><div style={{fontSize:28}}>🌱</div><h2 style={{fontSize:18,fontWeight:800,color:"#1E293B",margin:"4px 0"}}>Seeds English School</h2><p style={{fontSize:11,color:"#64748B",margin:0}}>Jesús de Otoro, Intibucá</p><p style={{fontSize:13,fontWeight:700,color:"#F97316",margin:"8px 0 0"}}>{f.tipo_factura==="comprobante"?"COMPROBANTE":"FACTURA"} {f.numero_factura}</p></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,fontSize:13,marginBottom:16}}><div><div style={{fontWeight:700,color:"#475569",marginBottom:6}}>Alumno</div><div><strong>Nombre:</strong> {al?.nombre||"—"}</div><div><strong>Padre:</strong> {padre?.nombre||"—"}</div><div><strong>Tel:</strong> {padre?.telefono||"—"}</div><div><strong>Sección:</strong> {sec?.nombre||"—"}</div></div><div><div style={{fontWeight:700,color:"#475569",marginBottom:6}}>Pago</div><div><strong>Emisión:</strong> {f.fecha_emision}</div><div><strong>Pago:</strong> {f.fecha_pago||"—"}</div><div><strong>Mes:</strong> {f.mes_correspondiente}</div><div><strong>Tipo:</strong> {f.tipo_pago}</div></div></div>
@@ -610,7 +655,7 @@ function HistorialPage({data,showToast}){
     const al=data.alumnos.find(a=>a.id===f.alumno_id);
     const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;
     const s=al?data.secciones.find(ss=>ss.id===al.seccion_id):null;
-    const mora=calcMora(f);
+    const mora=calcMora(f, data.secciones, data.alumnos);
     const dataUrl=generarImgFactura(f,al,p,s,mora,tipo);
     setImgPreview({dataUrl,phone:p?.telefono||"",destinatario:p?.nombre||al?.nombre||"",numero:f.numero_factura});
   };
@@ -697,7 +742,7 @@ function RecordatoriosPage({data,showToast}){
   const[selSec,setSelSec]=useState("");const[enviando,setEnviando]=useState(false);const[enviados,setEnviados]=useState([]);
   const[mensaje,setMensaje]=useState("Estimado padre de familia, le recordamos que la mensualidad de {mes} está pendiente (L {monto}). Favor enviar comprobante de pago. Seeds English School 🌱");
   const mes=MESES[new Date().getMonth()];
-  const contactos=(selSec?data.alumnos.filter(a=>a.seccion_id===selSec&&a.estado==="activo"):data.alumnos.filter(a=>a.estado==="activo")).filter(al=>al.beca!==true).filter(al=>!data.facturas.some(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&f.estado==="pagada"&&(f.tipo_factura||"cobro")==="cobro")).map(al=>{const p=data.padres.find(p=>p.id===al.padre_id);const sec=data.secciones.find(s=>s.id===al.seccion_id);const cobro=data.facturas.find(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro");const mora=cobro?calcMora(cobro):0;const base=(Number(al.monto_personalizado)>0)?Number(al.monto_personalizado):Number(sec?.mensualidad)||0;return{alumno_id:al.id,alumno:al.nombre,padre:p?.nombre,telefono:p?.telefono,email:p?.email,seccion:sec?.nombre,monto:base+mora,mora};});
+  const contactos=(selSec?data.alumnos.filter(a=>a.seccion_id===selSec&&a.estado==="activo"):data.alumnos.filter(a=>a.estado==="activo")).filter(al=>al.beca!==true).filter(al=>!data.facturas.some(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&f.estado==="pagada"&&(f.tipo_factura||"cobro")==="cobro")).map(al=>{const p=data.padres.find(p=>p.id===al.padre_id);const sec=data.secciones.find(s=>s.id===al.seccion_id);const cobro=data.facturas.find(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro");const mora=cobro?calcMora(cobro, data.secciones, data.alumnos):0;const base=(Number(al.monto_personalizado)>0)?Number(al.monto_personalizado):Number(sec?.mensualidad)||0;return{alumno_id:al.id,alumno:al.nombre,padre:p?.nombre,telefono:p?.telefono,email:p?.email,seccion:sec?.nombre,monto:base+mora,mora};});
   const envUno=(c)=>{if(!c.telefono){showToast(`${c.alumno}: Sin teléfono`,"error");return;}const msg=mensaje.replace("{mes}",mes).replace("{monto}",c.monto.toLocaleString());abrirWhatsApp(c.telefono,msg);setEnviados(p=>[...p,c.alumno_id]);showToast(`Chat abierto: ${c.padre||c.alumno}`);};
   const envTodos=()=>{const ct=contactos.filter(c=>c.telefono&&!enviados.includes(c.alumno_id));if(!ct.length){showToast("Sin pendientes","error");return;}setEnviando(true);let i=0;const iv=setInterval(()=>{if(i>=ct.length){clearInterval(iv);setEnviando(false);showToast(`✓ ${ct.length} enviados`);return;}envUno(ct[i]);i++;},2500);};
   const envEmail=()=>{const ct=contactos.filter(c=>c.email&&!enviados.includes(c.alumno_id));if(!ct.length){showToast("Sin correos","error");return;}const msg=mensaje.replace("{mes}",mes).replace("{monto}","su monto");window.open(`mailto:${ct.map(c=>c.email).join(",")}?subject=${encodeURIComponent("Recordatorio - Seeds")}&body=${encodeURIComponent(msg)}`,"_blank");setEnviados(p=>[...p,...ct.map(c=>c.alumno_id)]);showToast(`Correo con ${ct.length} destinatarios`);};
@@ -856,7 +901,7 @@ function FinanzasPage({data,loadData,showToast}){
 // ── SISTEMA (usuarios, respaldos) ──
 function SistemaPage({data,loadData,showToast,session}){
   const exportar=()=>{
-    const backup={fecha:new Date().toISOString(),version:2,...data};
+    const backup={fecha:new Date().toISOString(),version:3,...data};
     const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
     const a=document.createElement('a');
     a.download=`seeds_respaldo_${new Date().toISOString().split("T")[0]}.json`;
@@ -868,7 +913,7 @@ function SistemaPage({data,loadData,showToast,session}){
     if(!confirm("Esto restaurará los datos del respaldo (se combinan con los actuales). ¿Continuar?"))return;
     try{
       const text=await file.text();const backup=JSON.parse(text);
-      for(const table of ["secciones","maestros","padres","alumnos","facturas","gastos"]){
+      for(const table of ["secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material"]){
         if(backup[table]?.length) await db.upsertMany(table,backup[table]);
       }
       await loadData();showToast("✓ Respaldo restaurado");
@@ -905,6 +950,311 @@ function SistemaPage({data,loadData,showToast,session}){
         <span style={badge("#059669")}>{data.facturas.length} facturas</span>
         <span style={badge("#7C3AED")}>{data.gastos.length} gastos</span>
         <span style={badge("#64748B")}>{data.maestros.length} maestros</span>
+      </div>
+    </div>
+  </div>);
+}
+
+// ── CONFIGURACIÓN (mora por sección + materiales por sección) ──
+function ConfiguracionPage({data,loadData,showToast}){
+  const[editSec,setEditSec]=useState(null); // sección en edición de mora
+  const[moraForm,setMoraForm]=useState({mora_activa:false,mora_porcentaje:""});
+  const[matModal,setMatModal]=useState(null); // {seccion_id} o {id} para editar
+  const[matForm,setMatForm]=useState({nombre:"",precio_venta:"",costo:"",seccion_id:""});
+
+  const abrirMora=(s)=>{setMoraForm({mora_activa:s.mora_activa===true,mora_porcentaje:s.mora_porcentaje||""});setEditSec(s.id);};
+  const guardarMora=async()=>{
+    try{
+      await db.update("secciones",editSec,{mora_activa:moraForm.mora_activa===true,mora_porcentaje:parseFloat(moraForm.mora_porcentaje)||0});
+      await loadData();setEditSec(null);showToast("Configuración de mora guardada");
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+
+  const abrirMat=(seccion_id,mat=null)=>{
+    if(mat){setMatForm({nombre:mat.nombre,precio_venta:mat.precio_venta||"",costo:mat.costo||"",seccion_id:mat.seccion_id});setMatModal(mat.id);}
+    else{setMatForm({nombre:"",precio_venta:"",costo:"",seccion_id});setMatModal("new");}
+  };
+  const guardarMat=async()=>{
+    if(!matForm.nombre){showToast("Ponle nombre al material","error");return;}
+    try{
+      const row={nombre:matForm.nombre,precio_venta:parseFloat(matForm.precio_venta)||0,costo:parseFloat(matForm.costo)||0,seccion_id:matForm.seccion_id};
+      if(matModal==="new"){await db.insert("materiales",{id:uid(),...row,activo:true});showToast("Material agregado");}
+      else{await db.update("materiales",matModal,row);showToast("Material actualizado");}
+      await loadData();setMatModal(null);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+  const borrarMat=async(id)=>{if(!confirm("¿Eliminar este material?"))return;try{await db.remove("materiales",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
+
+  return(<div>
+    <div style={{...card,background:"#F5F3FF",border:"1px solid #DDD6FE"}}>
+      <h3 style={{fontSize:15,fontWeight:700,color:"#5B21B6",margin:"0 0 6px"}}>⚙️ Configuración por sección</h3>
+      <p style={{fontSize:13,color:"#6D28D9",margin:0}}>Aquí defines, para cada sección: el recargo por atraso (mora) y los materiales que vendes (libros, llaves) con su precio y costo.</p>
+    </div>
+
+    {data.secciones.length===0&&<div style={card}><p style={{fontSize:13,color:"#94A3B8",textAlign:"center"}}>Primero crea secciones en la pestaña "Secciones".</p></div>}
+
+    {data.secciones.map(s=>{
+      const mats=data.materiales.filter(m=>m.seccion_id===s.id);
+      return(<div key={s.id} style={card}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+          <h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:0}}>📚 {s.nombre} <span style={{fontSize:12,color:"#94A3B8",fontWeight:400}}>— L {Number(s.mensualidad).toLocaleString()}/mes</span></h3>
+        </div>
+
+        {/* MORA */}
+        <div style={{background:"#F8FAFC",borderRadius:8,padding:12,marginBottom:12,border:"1px solid #E2E8F0"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:"#475569"}}>⏰ Recargo por atraso (mora)</div>
+              {s.mora_activa===true&&Number(s.mora_porcentaje)>0
+                ? <div style={{fontSize:12,color:"#059669",fontWeight:600}}>Activo: {s.mora_porcentaje}% de la mensualidad por cada mes de atraso</div>
+                : <div style={{fontSize:12,color:"#94A3B8"}}>Desactivado (sin recargo)</div>}
+            </div>
+            <button onClick={()=>abrirMora(s)} style={btnO}><Edit size={13}/>Configurar mora</button>
+          </div>
+        </div>
+
+        {/* MATERIALES */}
+        <div style={{background:"#FFFBEB",borderRadius:8,padding:12,border:"1px solid #FDE68A"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:mats.length?10:0,flexWrap:"wrap",gap:8}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#92400E"}}>📦 Materiales de esta sección (libros, llaves)</div>
+            <button onClick={()=>abrirMat(s.id)} style={btn("#D97706")}><Plus size={13}/>Agregar material</button>
+          </div>
+          {mats.length>0&&<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr style={{borderBottom:"1px solid #FDE68A"}}>{["Material","Precio venta","Costo","Ganancia",""].map(h=><th key={h} style={{textAlign:["Precio venta","Costo","Ganancia"].includes(h)?"right":"left",padding:"5px 8px",color:"#92400E",fontWeight:600}}>{h}</th>)}</tr></thead>
+            <tbody>{mats.map(m=>{const g=Number(m.precio_venta)-Number(m.costo);return(<tr key={m.id} style={{borderBottom:"1px solid #FEF3C7"}}>
+              <td style={{padding:"5px 8px",fontWeight:600}}>{m.nombre}</td>
+              <td style={{padding:"5px 8px",textAlign:"right"}}>L {Number(m.precio_venta).toLocaleString()}</td>
+              <td style={{padding:"5px 8px",textAlign:"right",color:"#DC2626"}}>L {Number(m.costo).toLocaleString()}</td>
+              <td style={{padding:"5px 8px",textAlign:"right",fontWeight:700,color:"#059669"}}>L {g.toLocaleString()}</td>
+              <td style={{padding:"5px 8px",textAlign:"right",whiteSpace:"nowrap"}}>
+                <button onClick={()=>abrirMat(s.id,m)} style={{background:"none",border:"none",cursor:"pointer",padding:3}}><Edit size={13} color="#64748B"/></button>
+                <button onClick={()=>borrarMat(m.id)} style={{background:"none",border:"none",cursor:"pointer",padding:3}}><Trash2 size={13} color="#EF4444"/></button>
+              </td></tr>);})}</tbody>
+          </table></div>}
+        </div>
+      </div>);
+    })}
+
+    {/* Modal mora */}
+    {editSec&&<Modal title="⏰ Configurar recargo por atraso" onClose={()=>setEditSec(null)} onSave={guardarMora}>
+      <div onClick={()=>setMoraForm({...moraForm,mora_activa:!moraForm.mora_activa})} style={{padding:"10px 12px",borderRadius:8,cursor:"pointer",border:moraForm.mora_activa?"2px solid #059669":"1px solid #D1D5DB",background:moraForm.mora_activa?"#ECFDF5":"#fff",display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+        <div style={{width:20,height:20,borderRadius:5,border:moraForm.mora_activa?"none":"2px solid #D1D5DB",background:moraForm.mora_activa?"#059669":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{moraForm.mora_activa&&<Check size={14} color="#fff"/>}</div>
+        <div><div style={{fontSize:13,fontWeight:700,color:moraForm.mora_activa?"#059669":"#475569"}}>Aplicar recargo por atraso</div><div style={{fontSize:11,color:"#94A3B8"}}>Si está apagado, esta sección no tiene mora</div></div>
+      </div>
+      {moraForm.mora_activa&&<div style={{marginBottom:12}}>
+        <label style={label}>Porcentaje de recargo (%)</label>
+        <input type="number" value={moraForm.mora_porcentaje} onChange={e=>setMoraForm({...moraForm,mora_porcentaje:e.target.value})} placeholder="Ej: 12" style={input}/>
+        <div style={{fontSize:11,color:"#94A3B8",marginTop:4}}>Se cobra este % de la mensualidad por CADA mes de atraso. Ej: 12% en una mensualidad de L 1,000 con 2 meses de atraso = L 240.</div>
+      </div>}
+    </Modal>}
+
+    {/* Modal material */}
+    {matModal&&<Modal title={matModal==="new"?"📦 Nuevo material":"Editar material"} onClose={()=>setMatModal(null)} onSave={guardarMat}>
+      <Field label="Nombre del material" value={matForm.nombre} onChange={v=>setMatForm({...matForm,nombre:v})} placeholder="Ej: Llave digital Top Notch 2"/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <Field label="Precio de venta (L)" value={matForm.precio_venta} onChange={v=>setMatForm({...matForm,precio_venta:v})} type="number" placeholder="1000"/>
+        <Field label="Costo real (L)" value={matForm.costo} onChange={v=>setMatForm({...matForm,costo:v})} type="number" placeholder="560"/>
+      </div>
+      {(matForm.precio_venta||matForm.costo)&&<div style={{background:"#ECFDF5",border:"1px solid #BBF7D0",borderRadius:8,padding:10,fontSize:13,color:"#059669",fontWeight:700}}>
+        Ganancia por unidad: L {((parseFloat(matForm.precio_venta)||0)-(parseFloat(matForm.costo)||0)).toLocaleString()}
+      </div>}
+    </Modal>}
+  </div>);
+}
+
+// ── MATERIALES (registrar ventas de libros/llaves) ──
+function MaterialesPage({data,loadData,showToast}){
+  const[modal,setModal]=useState(null);
+  const[form,setForm]=useState({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],notas:""});
+  const[filtroSec,setFiltroSec]=useState("");
+
+  const matsSeccion=form.seccion_id?data.materiales.filter(m=>m.seccion_id===form.seccion_id&&m.activo!==false):[];
+  const alumnosSeccion=form.seccion_id?data.alumnos.filter(a=>a.seccion_id===form.seccion_id&&a.estado==="activo"):[];
+
+  const abrir=()=>{setForm({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],notas:""});setModal("new");};
+  const guardar=async()=>{
+    if(!form.material_id){showToast("Selecciona el material","error");return;}
+    if(!form.alumno_id){showToast("Selecciona el alumno","error");return;}
+    try{
+      const mat=data.materiales.find(m=>m.id===form.material_id);
+      const cant=parseInt(form.cantidad)||1;
+      const pv=Number(mat.precio_venta), co=Number(mat.costo);
+      const num=`MT-${String(data.ventas_material.length+1).padStart(4,"0")}`;
+      const venta={id:uid(),numero:num,material_id:mat.id,alumno_id:form.alumno_id,seccion_id:form.seccion_id,nombre_material:mat.nombre,precio_venta:pv*cant,costo:co*cant,ganancia:(pv-co)*cant,cantidad:cant,fecha_venta:new Date().toISOString().split("T")[0],mes_correspondiente:form.mes_correspondiente,estado:"pagado",tipo_pago:form.tipo_pago,notas:form.notas};
+      await db.insert("ventas_material",venta);
+      await loadData();setModal(null);showToast(`✓ Venta ${num} registrada`);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+  const anular=async(v)=>{if(!confirm("¿Anular esta venta?"))return;try{await db.update("ventas_material",v.id,{estado:"anulado"});await loadData();showToast("Anulada","error");}catch(e){showToast("Error: "+e.message,"error");}};
+
+  const ventas=data.ventas_material.filter(v=>!filtroSec||v.seccion_id===filtroSec);
+  const totVenta=ventas.filter(v=>v.estado!=="anulado").reduce((s,v)=>s+Number(v.precio_venta),0);
+  const totGanancia=ventas.filter(v=>v.estado!=="anulado").reduce((s,v)=>s+Number(v.ganancia),0);
+
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
+      <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+        <select value={filtroSec} onChange={e=>setFiltroSec(e.target.value)} style={{...input,width:200,cursor:"pointer"}}>
+          <option value="">Todas las secciones</option>
+          {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+        </select>
+      </div>
+      <button onClick={abrir} style={btn("#D97706")}><Plus size={15}/>Registrar venta</button>
+    </div>
+
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:16}}>
+      <div style={{...card,borderLeft:"3px solid #D97706",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Total vendido</div><div style={{fontSize:22,fontWeight:800,color:"#D97706"}}>L {totVenta.toLocaleString()}</div></div>
+      <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ganancia total</div><div style={{fontSize:22,fontWeight:800,color:"#059669"}}>L {totGanancia.toLocaleString()}</div></div>
+      <div style={{...card,borderLeft:"3px solid #2563EB",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ventas registradas</div><div style={{fontSize:22,fontWeight:800,color:"#2563EB"}}>{ventas.filter(v=>v.estado!=="anulado").length}</div></div>
+    </div>
+
+    <div style={card}>
+      {ventas.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay ventas registradas. Configura materiales en "Configuración" y registra ventas aquí.</p>:(
+        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Material","Alumno","Sección","Cant.","Venta","Costo","Ganancia","Fecha","Estado",""].map(h=><th key={h} style={{textAlign:["Venta","Costo","Ganancia","Cant."].includes(h)?"right":"left",padding:"5px 6px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+          <tbody>{[...ventas].reverse().map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const sec=data.secciones.find(s=>s.id===v.seccion_id);const anul=v.estado==="anulado";return(<tr key={v.id} style={{borderBottom:"1px solid #F1F5F9",opacity:anul?0.5:1}}>
+            <td style={{padding:"5px 6px",fontWeight:600}}>{v.numero}</td>
+            <td style={{padding:"5px 6px"}}>{v.nombre_material}</td>
+            <td style={{padding:"5px 6px"}}>{al?.nombre||"—"}</td>
+            <td style={{padding:"5px 6px"}}>{sec?<span style={badge("#F97316")}>{sec.nombre}</span>:"—"}</td>
+            <td style={{padding:"5px 6px",textAlign:"right"}}>{v.cantidad}</td>
+            <td style={{padding:"5px 6px",textAlign:"right",fontWeight:600}}>L {Number(v.precio_venta).toLocaleString()}</td>
+            <td style={{padding:"5px 6px",textAlign:"right",color:"#DC2626"}}>L {Number(v.costo).toLocaleString()}</td>
+            <td style={{padding:"5px 6px",textAlign:"right",fontWeight:700,color:"#059669"}}>L {Number(v.ganancia).toLocaleString()}</td>
+            <td style={{padding:"5px 6px"}}>{v.fecha_venta}</td>
+            <td style={{padding:"5px 6px"}}><span style={badge(anul?"#64748B":"#059669")}>{anul?"anulado":"pagado"}</span></td>
+            <td style={{padding:"5px 6px"}}>{!anul&&<button onClick={()=>anular(v)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><X size={13} color="#DC2626"/></button>}</td>
+          </tr>);})}</tbody>
+        </table></div>
+      )}
+    </div>
+
+    {modal&&<Modal title="📦 Registrar venta de material" onClose={()=>setModal(null)} onSave={guardar} wide>
+      <div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}>
+        <div>
+          <div style={{marginBottom:12}}><label style={label}>Sección *</label>
+            <select value={form.seccion_id} onChange={e=>setForm({...form,seccion_id:e.target.value,material_id:"",alumno_id:""})} style={{...input,cursor:"pointer"}}>
+              <option value="">Seleccionar</option>
+              {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+          </div>
+          <div style={{marginBottom:12}}><label style={label}>Material *</label>
+            <select value={form.material_id} onChange={e=>setForm({...form,material_id:e.target.value})} style={{...input,cursor:"pointer"}} disabled={!form.seccion_id}>
+              <option value="">{form.seccion_id?"Seleccionar":"Elige sección primero"}</option>
+              {matsSeccion.map(m=><option key={m.id} value={m.id}>{m.nombre} — L {Number(m.precio_venta).toLocaleString()}</option>)}
+            </select>
+            {form.seccion_id&&matsSeccion.length===0&&<div style={{fontSize:11,color:"#DC2626",marginTop:4}}>Esta sección no tiene materiales. Agrégalos en "Configuración".</div>}
+          </div>
+          <div style={{marginBottom:12}}><label style={label}>Alumno *</label>
+            <select value={form.alumno_id} onChange={e=>setForm({...form,alumno_id:e.target.value})} style={{...input,cursor:"pointer"}} disabled={!form.seccion_id}>
+              <option value="">{form.seccion_id?"Seleccionar":"Elige sección primero"}</option>
+              {alumnosSeccion.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <Field label="Cantidad" value={form.cantidad} onChange={v=>setForm({...form,cantidad:v})} type="number"/>
+            <div style={{marginBottom:12}}><label style={label}>Tipo de pago</label><select value={form.tipo_pago} onChange={e=>setForm({...form,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
+          </div>
+          <div style={{marginBottom:12}}><label style={label}>Mes</label><select value={form.mes_correspondiente} onChange={e=>setForm({...form,mes_correspondiente:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
+          {form.material_id&&(()=>{const mat=data.materiales.find(m=>m.id===form.material_id);const cant=parseInt(form.cantidad)||1;const pv=Number(mat?.precio_venta)*cant;const g=(Number(mat?.precio_venta)-Number(mat?.costo))*cant;return(
+            <div style={{background:"#ECFDF5",border:"1px solid #BBF7D0",borderRadius:8,padding:12,fontSize:13}}>
+              <div style={{color:"#166534",fontWeight:700,marginBottom:4}}>Resumen de venta</div>
+              <div>Total a cobrar: <strong>L {pv.toLocaleString()}</strong></div>
+              <div style={{color:"#059669"}}>Tu ganancia: <strong>L {g.toLocaleString()}</strong></div>
+            </div>);})()}
+        </div>
+      </div>
+    </Modal>}
+  </div>);
+}
+
+// ── REPORTES (resumen económico mensual completo) ──
+function ReportesPage({data}){
+  const[mesSel,setMesSel]=useState(MESES[new Date().getMonth()]);
+
+  // Ingresos por mensualidades (comprobantes de cobro pagados ese mes)
+  const compsMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&f.mes_correspondiente===mesSel);
+  const ingMensualidades=compsMes.reduce((s,f)=>s+Number(f.monto_total||0),0);
+
+  // Ventas de materiales de ese mes
+  const ventasMes=data.ventas_material.filter(v=>v.mes_correspondiente===mesSel&&v.estado!=="anulado");
+  const ingMateriales=ventasMes.reduce((s,v)=>s+Number(v.precio_venta),0);
+  const costoMateriales=ventasMes.reduce((s,v)=>s+Number(v.costo),0);
+  const gananciaMateriales=ventasMes.reduce((s,v)=>s+Number(v.ganancia),0);
+
+  // Gastos del mes
+  const gastosMes=data.gastos.filter(g=>g.mes_correspondiente===mesSel);
+  const totSalarios=gastosMes.filter(g=>g.tipo==="salario").reduce((s,g)=>s+Number(g.monto),0);
+  const totRenta=gastosMes.filter(g=>g.tipo==="renta").reduce((s,g)=>s+Number(g.monto),0);
+  const totOtros=gastosMes.filter(g=>g.tipo==="otro").reduce((s,g)=>s+Number(g.monto),0);
+  const totGastos=totSalarios+totRenta+totOtros;
+
+  // Ingreso total = mensualidades + venta de materiales (precio completo)
+  const ingresoTotal=ingMensualidades+ingMateriales;
+  // Resultado neto = ingresos - costo de materiales - gastos
+  const resultado=ingMensualidades+gananciaMateriales-totGastos;
+
+  const fila=(label,valor,color="#1E293B",bold=false)=>(
+    <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #F1F5F9"}}>
+      <span style={{fontSize:13,color:"#475569",fontWeight:bold?700:400}}>{label}</span>
+      <span style={{fontSize:13,fontWeight:bold?800:600,color}}>L {valor.toLocaleString()}</span>
+    </div>);
+
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
+      <h3 style={{fontSize:16,fontWeight:700,color:"#1E293B",margin:0}}>📊 Reporte económico — {mesSel}</h3>
+      <select value={mesSel} onChange={e=>setMesSel(e.target.value)} style={{...input,width:180,cursor:"pointer"}}>
+        {MESES.map(m=><option key={m} value={m}>{m}</option>)}
+      </select>
+    </div>
+
+    {/* Tarjetas resumen */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:16}}>
+      <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ingreso total</div><div style={{fontSize:22,fontWeight:800,color:"#059669"}}>L {ingresoTotal.toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>mensualidades + materiales</div></div>
+      <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Gastos</div><div style={{fontSize:22,fontWeight:800,color:"#DC2626"}}>L {totGastos.toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>salarios + renta + otros</div></div>
+      <div style={{...card,borderLeft:`3px solid ${resultado>=0?"#059669":"#DC2626"}`,margin:0}}><div style={{fontSize:12,color:"#64748B"}}>{resultado>=0?"Ganancia neta":"Pérdida neta"}</div><div style={{fontSize:22,fontWeight:800,color:resultado>=0?"#059669":"#DC2626"}}>L {Math.abs(resultado).toLocaleString()}</div></div>
+    </div>
+
+    <div style={{display:"grid",gridTemplateColumns:window.innerWidth>700?"1fr 1fr":"1fr",gap:16}}>
+      {/* INGRESOS */}
+      <div style={card}>
+        <h4 style={{fontSize:14,fontWeight:700,color:"#059669",margin:"0 0 10px"}}>💰 Ingresos</h4>
+        {fila("Mensualidades cobradas",ingMensualidades,"#059669")}
+        {fila("Venta de materiales",ingMateriales,"#D97706")}
+        <div style={{marginTop:6,paddingTop:6}}>{fila("Total ingresos",ingresoTotal,"#059669",true)}</div>
+        <div style={{marginTop:14,fontSize:12,color:"#64748B"}}>
+          <div style={{fontWeight:700,marginBottom:4}}>Detalle de materiales:</div>
+          {ventasMes.length===0?<div style={{color:"#94A3B8"}}>Sin ventas este mes</div>:ventasMes.slice(0,8).map(v=>(
+            <div key={v.id} style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}><span>{v.nombre_material} ×{v.cantidad}</span><span>L {Number(v.precio_venta).toLocaleString()}</span></div>
+          ))}
+        </div>
+      </div>
+
+      {/* EGRESOS Y GANANCIA */}
+      <div style={card}>
+        <h4 style={{fontSize:14,fontWeight:700,color:"#DC2626",margin:"0 0 10px"}}>📉 Gastos y resultado</h4>
+        {fila("Salarios a maestros",totSalarios,"#DC2626")}
+        {fila("Renta",totRenta,"#DC2626")}
+        {fila("Otros gastos",totOtros,"#DC2626")}
+        {fila("Costo de materiales vendidos",costoMateriales,"#DC2626")}
+        <div style={{marginTop:14,padding:12,background:resultado>=0?"#ECFDF5":"#FEF2F2",borderRadius:8}}>
+          <div style={{fontSize:12,color:"#64748B",marginBottom:6}}>Cálculo del resultado:</div>
+          <div style={{fontSize:12,color:"#475569"}}>Mensualidades: L {ingMensualidades.toLocaleString()}</div>
+          <div style={{fontSize:12,color:"#475569"}}>+ Ganancia materiales: L {gananciaMateriales.toLocaleString()}</div>
+          <div style={{fontSize:12,color:"#475569"}}>− Gastos: L {totGastos.toLocaleString()}</div>
+          <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid #D1D5DB",fontSize:16,fontWeight:800,color:resultado>=0?"#059669":"#DC2626"}}>
+            = L {resultado.toLocaleString()} {resultado>=0?"✓":""}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Nota explicativa */}
+    <div style={{...card,background:"#F8FAFC",marginTop:16}}>
+      <div style={{fontSize:12,color:"#64748B"}}>
+        <strong>Nota:</strong> El "Ingreso total" cuenta el precio completo de los materiales (lo que entra a caja). El "Resultado neto" usa solo la <em>ganancia</em> de los materiales (precio − costo), porque el costo es dinero que sale para reponerlos. Así el resultado refleja tu utilidad real.
       </div>
     </div>
   </div>);
