@@ -449,6 +449,7 @@ function FacturasPage({data,loadData,showToast}){
   const[form,setForm]=useState({alumno_id:"",fecha_pago:"",mes_correspondiente:"",monto_total:"",tipo_pago:"efectivo",notas:"",cobro_id:""});
   const[bulkSec,setBulkSec]=useState("");
   const[imgPreview,setImgPreview]=useState(null);
+  const[multiMes,setMultiMes]=useState({alumno_id:"",meses:[],fecha_pago:new Date().toISOString().split("T")[0],tipo_pago:"efectivo"});
 
   const mostrarImagen = (f, tipo="cobro") => {
     const al=data.alumnos.find(a=>a.id===f.alumno_id);
@@ -502,6 +503,46 @@ function FacturasPage({data,loadData,showToast}){
 
   const anular=async(f)=>{try{await db.update("facturas",f.id,{estado:"anulada"});await loadData();showToast("Anulada","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
+  // Cobrar/pagar VARIOS MESES juntos a un alumno.
+  // Crea cada mes como su propia factura (cobro + comprobante), marcados pagados.
+  const pagarVariosMeses = async () => {
+    if(!multiMes.alumno_id){showToast("Selecciona el alumno","error");return;}
+    if(multiMes.meses.length===0){showToast("Selecciona al menos un mes","error");return;}
+    try{
+      const al=data.alumnos.find(a=>a.id===multiMes.alumno_id);
+      const sec=data.secciones.find(s=>s.id===al.seccion_id);
+      const monto=(Number(al.monto_personalizado)>0)?Number(al.monto_personalizado):Number(sec?.mensualidad)||0;
+      let n=data.facturas.length;
+      const nuevas=[];
+      // Meses ya cubiertos (con comprobante) para no duplicar
+      const yaPagados=data.facturas.filter(f=>f.alumno_id===al.id&&f.tipo_factura==="comprobante").map(f=>f.mes_correspondiente);
+      for(const mes of multiMes.meses){
+        if(yaPagados.includes(mes)) continue; // ya está pagado ese mes, saltar
+        // ¿existe ya un cobro pendiente de ese mes? si sí, lo reusamos
+        let cobro=data.facturas.find(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
+        let cobroId;
+        if(cobro){cobroId=cobro.id;}
+        else{ // crear el cobro
+          n++; cobroId=uid();
+          nuevas.push({id:cobroId,numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:al.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:multiMes.fecha_pago,mes_correspondiente:mes,monto_total:monto,abono:0,saldo:0,tipo_pago:multiMes.tipo_pago,estado:"pagada",notas:"",cobro_id:null});
+        }
+        // crear el comprobante
+        n++;
+        nuevas.push({id:uid(),numero_factura:`CP-${String(n).padStart(4,"0")}`,alumno_id:al.id,tipo_factura:"comprobante",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:multiMes.fecha_pago,mes_correspondiente:mes,monto_total:monto,abono:0,saldo:0,tipo_pago:multiMes.tipo_pago,estado:"pagada",notas:"",cobro_id:cobroId});
+      }
+      if(nuevas.length===0){showToast("Esos meses ya están pagados","error");return;}
+      // insertar comprobantes nuevos + marcar cobros existentes como pagados
+      await db.insertMany("facturas",nuevas);
+      for(const mes of multiMes.meses){
+        const cobroExistente=data.facturas.find(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada"&&!yaPagados.includes(mes));
+        if(cobroExistente&&cobroExistente.estado!=="pagada"){await db.update("facturas",cobroExistente.id,{estado:"pagada",fecha_pago:multiMes.fecha_pago});}
+      }
+      await loadData();setModal(null);
+      const cant=multiMes.meses.filter(m=>!yaPagados.includes(m)).length;
+      showToast(`✓ ${cant} ${cant===1?"mes cobrado":"meses cobrados"} a ${al.nombre}`);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+
   const cobros=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro");
   const comps=data.facturas.filter(f=>f.tipo_factura==="comprobante");
   const pendCobros=cobros.filter(f=>f.estado==="pendiente"||f.estado==="parcial");
@@ -516,7 +557,10 @@ function FacturasPage({data,loadData,showToast}){
     {tab==="cobros"&&(<div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
         <p style={{fontSize:13,color:"#64748B",margin:0}}>{cobros.length} cobros</p>
-        <button onClick={()=>{setBulkSec("");setForm({...form,mes_correspondiente:MESES[new Date().getMonth()]});setModal("bulk");}} style={btn("#059669")}><Plus size={15}/>Crear cobros por sección</button>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={()=>{setMultiMes({alumno_id:"",meses:[],fecha_pago:new Date().toISOString().split("T")[0],tipo_pago:"efectivo"});setModal("multimes");}} style={btn("#7C3AED")}><Calendar size={15}/>Cobrar varios meses</button>
+          <button onClick={()=>{setBulkSec("");setForm({...form,mes_correspondiente:MESES[new Date().getMonth()]});setModal("bulk");}} style={btn("#059669")}><Plus size={15}/>Crear cobros por sección</button>
+        </div>
       </div>
       <div style={card}>{cobros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay cobros. Crea cobros por sección.</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:750}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Padre","Sección","Mes","Total","Mora","Saldo","Estado",""].map(h=><th key={h} style={{textAlign:["Total","Mora","Saldo"].includes(h)?"right":"left",padding:"5px 4px",color:"#64748B",fontWeight:600,fontSize:10,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
         <tbody>{[...cobros].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=calcMora(f, data.secciones, data.alumnos);const tot=Number(f.monto_total)+mora;const cols={pagada:"#059669",pendiente:"#DC2626",parcial:"#D97706",anulada:"#64748B"};const isP=f.estado==="pendiente"||f.estado==="parcial";return(
@@ -543,6 +587,47 @@ function FacturasPage({data,loadData,showToast}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><p style={{fontSize:13,color:"#64748B",margin:0}}>{comps.length} comprobantes</p><button onClick={()=>openComp()} style={btn("#2563EB")}><Plus size={15}/>Confirmar pago</button></div>
       <div style={card}>{comps.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay comprobantes</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Mes","Fecha","Total","Tipo","Cobro vinc.",""].map(h=><th key={h} style={{textAlign:h==="Total"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600,fontSize:11}}>{h}</th>)}</tr></thead><tbody>{[...comps].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const cv=f.cobro_id?data.facturas.find(c=>c.id===f.cobro_id):null;return(<tr key={f.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px",fontWeight:600}}>{f.numero_factura}</td><td style={{padding:"6px 8px"}}>{al?.nombre||"—"}</td><td style={{padding:"6px 8px"}}>{f.mes_correspondiente}</td><td style={{padding:"6px 8px"}}>{f.fecha_pago||"—"}</td><td style={{padding:"6px 8px",textAlign:"right"}}>L {Number(f.monto_total).toLocaleString()}</td><td style={{padding:"6px 8px"}}>{f.tipo_pago}</td><td style={{padding:"6px 8px"}}>{cv?<span style={badge("#059669")}>✓ {cv.numero_factura}</span>:"—"}</td><td style={{padding:"6px 8px",textAlign:"center"}}><button onClick={()=>mostrarImagen(f,"comprobante")} title="Ver/enviar" style={{background:"#059669",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:4,color:"#fff",fontSize:11,fontWeight:600}}><Send size={11}/>Enviar</button></td></tr>);})}</tbody></table></div>)}</div>
     </div>)}
+
+    {modal==="multimes"&&<Modal title="📅 Cobrar varios meses a un alumno" onClose={()=>setModal(null)} onSave={pagarVariosMeses} wide>
+      <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:10,fontSize:12,color:"#6D28D9",marginBottom:14}}>
+        Ideal cuando una madre paga varios meses juntos o adelanta. Se crea cada mes como su propia factura pagada, con su comprobante.
+      </div>
+      <div style={{marginBottom:12}}><label style={label}>Alumno *</label>
+        <select value={multiMes.alumno_id} onChange={e=>setMultiMes({...multiMes,alumno_id:e.target.value})} style={{...input,cursor:"pointer"}}>
+          <option value="">Seleccionar alumno</option>
+          {data.alumnos.filter(a=>a.estado==="activo"&&a.beca!==true).map(a=>{const sec=data.secciones.find(s=>s.id===a.seccion_id);return<option key={a.id} value={a.id}>{a.nombre}{sec?` — ${sec.nombre}`:""}</option>;})}
+        </select>
+      </div>
+      {multiMes.alumno_id&&(()=>{
+        const al=data.alumnos.find(a=>a.id===multiMes.alumno_id);
+        const sec=data.secciones.find(s=>s.id===al?.seccion_id);
+        const monto=(Number(al?.monto_personalizado)>0)?Number(al.monto_personalizado):Number(sec?.mensualidad)||0;
+        const yaPagados=data.facturas.filter(f=>f.alumno_id===al.id&&f.tipo_factura==="comprobante").map(f=>f.mes_correspondiente);
+        return(<>
+          <div style={{marginBottom:8}}><label style={label}>Meses a cobrar (toca para marcar)</label>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:6}}>
+              {MESES.map(mes=>{
+                const pagado=yaPagados.includes(mes);
+                const sel=multiMes.meses.includes(mes);
+                return(<div key={mes} onClick={()=>{if(pagado)return;const ms=sel?multiMes.meses.filter(m=>m!==mes):[...multiMes.meses,mes];setMultiMes({...multiMes,meses:ms});}}
+                  style={{padding:"8px 4px",borderRadius:6,textAlign:"center",fontSize:12,fontWeight:600,cursor:pagado?"not-allowed":"pointer",border:sel?"2px solid #7C3AED":pagado?"1px solid #BBF7D0":"1px solid #D1D5DB",background:pagado?"#ECFDF5":sel?"#F5F3FF":"#fff",color:pagado?"#059669":sel?"#7C3AED":"#475569",opacity:pagado?0.7:1}}>
+                  {mes.slice(0,3)}{pagado?" ✓":sel?" ●":""}
+                </div>);
+              })}
+            </div>
+            <div style={{fontSize:11,color:"#94A3B8",marginTop:6}}>Los meses en verde con ✓ ya están pagados. Mensualidad: L {monto.toLocaleString()}</div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>
+            <div><label style={label}>Fecha de pago</label><input type="date" value={multiMes.fecha_pago} onChange={e=>setMultiMes({...multiMes,fecha_pago:e.target.value})} style={input}/></div>
+            <div><label style={label}>Tipo de pago</label><select value={multiMes.tipo_pago} onChange={e=>setMultiMes({...multiMes,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
+          </div>
+          {multiMes.meses.length>0&&<div style={{marginTop:12,padding:12,background:"#ECFDF5",border:"1px solid #BBF7D0",borderRadius:8}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#166534"}}>{multiMes.meses.length} {multiMes.meses.length===1?"mes":"meses"}: {multiMes.meses.join(", ")}</div>
+            <div style={{fontSize:16,fontWeight:800,color:"#059669",marginTop:4}}>Total: L {(monto*multiMes.meses.length).toLocaleString()}</div>
+          </div>}
+        </>);
+      })()}
+    </Modal>}
 
     {modal==="bulk"&&<Modal title="📄 Crear cobros por sección" onClose={()=>setModal(null)} onSave={crearCobrosSeccion} wide>
       <div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}>
@@ -1127,6 +1212,7 @@ function MaterialesPage({data,loadData,showToast}){
   const[form,setForm]=useState({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],notas:"",pagar_ya:false});
   const[filtroSec,setFiltroSec]=useState("");
   const[compForm,setCompForm]=useState(null); // venta pendiente que se está cobrando
+  const[bulkMat,setBulkMat]=useState({seccion_id:"",material_id:"",mes_correspondiente:MESES[new Date().getMonth()],alumnos:[]});
 
   const matsSeccion=form.seccion_id?data.materiales.filter(m=>m.seccion_id===form.seccion_id&&m.activo!==false):[];
   const alumnosSeccion=form.seccion_id?data.alumnos.filter(a=>a.seccion_id===form.seccion_id&&a.estado==="activo"):[];
@@ -1141,6 +1227,25 @@ function MaterialesPage({data,loadData,showToast}){
   };
 
   const abrir=()=>{setForm({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],notas:"",pagar_ya:false});setModal("new");};
+
+  // Crear cobros de un material para VARIOS alumnos de una sección a la vez.
+  // Se crean como cobros pendientes (luego se confirma el pago de cada uno).
+  const crearCobrosMaterialSeccion = async () => {
+    if(!bulkMat.material_id){showToast("Selecciona el material","error");return;}
+    if(bulkMat.alumnos.length===0){showToast("Selecciona al menos un alumno","error");return;}
+    try{
+      const mat=data.materiales.find(m=>m.id===bulkMat.material_id);
+      const pv=Number(mat.precio_venta), co=Number(mat.costo);
+      let n=data.ventas_material.length;
+      const nuevas=bulkMat.alumnos.map(aid=>{
+        n++;
+        return {id:uid(),numero:`MT-${String(n).padStart(4,"0")}`,material_id:mat.id,alumno_id:aid,seccion_id:bulkMat.seccion_id,nombre_material:mat.nombre,precio_venta:pv,costo:co,ganancia:pv-co,cantidad:1,fecha_venta:new Date().toISOString().split("T")[0],mes_correspondiente:bulkMat.mes_correspondiente,estado:"pendiente",fecha_pago:null,tipo_pago:"efectivo",notas:""};
+      });
+      await db.insertMany("ventas_material",nuevas);
+      await loadData();setModal(null);
+      showToast(`✓ ${nuevas.length} cobros de "${mat.nombre}" creados`);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
 
   // Crear la venta: como cobro pendiente, o pagada de una vez
   const guardar=async()=>{
@@ -1188,7 +1293,10 @@ function MaterialesPage({data,loadData,showToast}){
         <option value="">Todas las secciones</option>
         {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
       </select>
-      <button onClick={abrir} style={btn("#D97706")}><Plus size={15}/>Registrar material</button>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <button onClick={()=>{setBulkMat({seccion_id:"",material_id:"",mes_correspondiente:MESES[new Date().getMonth()],alumnos:[]});setModal("bulkmat");}} style={btn("#7C3AED")}><Users size={15}/>Cobrar a una sección</button>
+        <button onClick={abrir} style={btn("#D97706")}><Plus size={15}/>Registrar material</button>
+      </div>
     </div>
 
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:16}}>
@@ -1245,7 +1353,59 @@ function MaterialesPage({data,loadData,showToast}){
     </div>}
 
     {/* Modal registrar */}
-    {modal&&<Modal title="📦 Registrar material" onClose={()=>setModal(null)} onSave={guardar} wide>
+    {modal==="bulkmat"&&<Modal title="👥 Cobrar material a una sección" onClose={()=>setModal(null)} onSave={crearCobrosMaterialSeccion} wide>
+      <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:10,fontSize:12,color:"#6D28D9",marginBottom:14}}>
+        Crea el cobro del mismo material (ej: una llave) a varios alumnos de la sección de una vez. Quedan como cobros pendientes; luego confirmás el pago de cada uno.
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}>
+        <div>
+          <div style={{marginBottom:12}}><label style={label}>Sección *</label>
+            <select value={bulkMat.seccion_id} onChange={e=>setBulkMat({...bulkMat,seccion_id:e.target.value,material_id:"",alumnos:[]})} style={{...input,cursor:"pointer"}}>
+              <option value="">Seleccionar</option>
+              {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+          </div>
+          <div style={{marginBottom:12}}><label style={label}>Material *</label>
+            <select value={bulkMat.material_id} onChange={e=>setBulkMat({...bulkMat,material_id:e.target.value})} style={{...input,cursor:"pointer"}} disabled={!bulkMat.seccion_id}>
+              <option value="">{bulkMat.seccion_id?"Seleccionar":"Elige sección primero"}</option>
+              {(bulkMat.seccion_id?data.materiales.filter(m=>m.seccion_id===bulkMat.seccion_id&&m.activo!==false):[]).map(m=><option key={m.id} value={m.id}>{m.nombre} — L {Number(m.precio_venta).toLocaleString()}</option>)}
+            </select>
+            {bulkMat.seccion_id&&data.materiales.filter(m=>m.seccion_id===bulkMat.seccion_id).length===0&&<div style={{fontSize:11,color:"#DC2626",marginTop:4}}>Esta sección no tiene materiales. Agrégalos en "Configuración".</div>}
+          </div>
+          <div style={{marginBottom:12}}><label style={label}>Mes</label>
+            <select value={bulkMat.mes_correspondiente} onChange={e=>setBulkMat({...bulkMat,mes_correspondiente:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select>
+          </div>
+        </div>
+        <div>
+          {bulkMat.seccion_id&&(()=>{
+            const als=data.alumnos.filter(a=>a.seccion_id===bulkMat.seccion_id&&a.estado==="activo");
+            if(als.length===0)return<div style={{background:"#F8FAFC",borderRadius:8,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}}>No hay alumnos activos en esta sección</div>;
+            const todosSel=bulkMat.alumnos.length===als.length;
+            return(<div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <label style={{...label,margin:0}}>Alumnos ({bulkMat.alumnos.length}/{als.length})</label>
+                <button onClick={()=>setBulkMat({...bulkMat,alumnos:todosSel?[]:als.map(a=>a.id)})} style={{...btnO,padding:"4px 10px",fontSize:11}}>{todosSel?"Ninguno":"Todos"}</button>
+              </div>
+              <div style={{maxHeight:220,overflowY:"auto",border:"1px solid #E2E8F0",borderRadius:8,padding:6}}>
+                {als.map(a=>{const sel=bulkMat.alumnos.includes(a.id);return(
+                  <div key={a.id} onClick={()=>{const arr=sel?bulkMat.alumnos.filter(x=>x!==a.id):[...bulkMat.alumnos,a.id];setBulkMat({...bulkMat,alumnos:arr});}} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:6,cursor:"pointer",background:sel?"#F5F3FF":"transparent"}}>
+                    <div style={{width:18,height:18,borderRadius:4,border:sel?"none":"2px solid #D1D5DB",background:sel?"#7C3AED":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{sel&&<Check size={12} color="#fff"/>}</div>
+                    <span style={{fontSize:13}}>{a.nombre}</span>
+                  </div>);})}
+              </div>
+              {bulkMat.material_id&&bulkMat.alumnos.length>0&&(()=>{const mat=data.materiales.find(m=>m.id===bulkMat.material_id);const tot=Number(mat?.precio_venta)*bulkMat.alumnos.length;return(
+                <div style={{marginTop:10,padding:10,background:"#ECFDF5",border:"1px solid #BBF7D0",borderRadius:8,fontSize:13}}>
+                  <div style={{fontWeight:700,color:"#166534"}}>{bulkMat.alumnos.length} cobros de "{mat?.nombre}"</div>
+                  <div style={{color:"#059669"}}>Total a cobrar: <strong>L {tot.toLocaleString()}</strong></div>
+                </div>);})()}
+            </div>);
+          })()}
+          {!bulkMat.seccion_id&&<div style={{background:"#F8FAFC",borderRadius:8,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}}>Selecciona una sección</div>}
+        </div>
+      </div>
+    </Modal>}
+
+    {modal==="new"&&<Modal title="📦 Registrar material" onClose={()=>setModal(null)} onSave={guardar} wide>
       <div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}>
         <div>
           <div style={{marginBottom:12}}><label style={label}>Sección *</label>
