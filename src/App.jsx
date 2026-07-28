@@ -449,7 +449,6 @@ function FacturasPage({data,loadData,showToast}){
   const[form,setForm]=useState({alumno_id:"",fecha_pago:"",mes_correspondiente:"",monto_total:"",tipo_pago:"efectivo",notas:"",cobro_id:""});
   const[bulkSec,setBulkSec]=useState("");
   const[imgPreview,setImgPreview]=useState(null);
-  const[multiMes,setMultiMes]=useState({alumno_id:"",meses:[],fecha_pago:new Date().toISOString().split("T")[0],tipo_pago:"efectivo"});
 
   const mostrarImagen = (f, tipo="cobro") => {
     const al=data.alumnos.find(a=>a.id===f.alumno_id);
@@ -505,43 +504,6 @@ function FacturasPage({data,loadData,showToast}){
 
   // Cobrar/pagar VARIOS MESES juntos a un alumno.
   // Crea cada mes como su propia factura (cobro + comprobante), marcados pagados.
-  const pagarVariosMeses = async () => {
-    if(!multiMes.alumno_id){showToast("Selecciona el alumno","error");return;}
-    if(multiMes.meses.length===0){showToast("Selecciona al menos un mes","error");return;}
-    try{
-      const al=data.alumnos.find(a=>a.id===multiMes.alumno_id);
-      const sec=data.secciones.find(s=>s.id===al.seccion_id);
-      const monto=(Number(al.monto_personalizado)>0)?Number(al.monto_personalizado):Number(sec?.mensualidad)||0;
-      let n=data.facturas.length;
-      const nuevas=[];
-      // Meses ya cubiertos (con comprobante) para no duplicar
-      const yaPagados=data.facturas.filter(f=>f.alumno_id===al.id&&f.tipo_factura==="comprobante").map(f=>f.mes_correspondiente);
-      for(const mes of multiMes.meses){
-        if(yaPagados.includes(mes)) continue; // ya está pagado ese mes, saltar
-        // ¿existe ya un cobro pendiente de ese mes? si sí, lo reusamos
-        let cobro=data.facturas.find(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
-        let cobroId;
-        if(cobro){cobroId=cobro.id;}
-        else{ // crear el cobro
-          n++; cobroId=uid();
-          nuevas.push({id:cobroId,numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:al.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:multiMes.fecha_pago,mes_correspondiente:mes,monto_total:monto,abono:0,saldo:0,tipo_pago:multiMes.tipo_pago,estado:"pagada",notas:"",cobro_id:null});
-        }
-        // crear el comprobante
-        n++;
-        nuevas.push({id:uid(),numero_factura:`CP-${String(n).padStart(4,"0")}`,alumno_id:al.id,tipo_factura:"comprobante",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:multiMes.fecha_pago,mes_correspondiente:mes,monto_total:monto,abono:0,saldo:0,tipo_pago:multiMes.tipo_pago,estado:"pagada",notas:"",cobro_id:cobroId});
-      }
-      if(nuevas.length===0){showToast("Esos meses ya están pagados","error");return;}
-      // insertar comprobantes nuevos + marcar cobros existentes como pagados
-      await db.insertMany("facturas",nuevas);
-      for(const mes of multiMes.meses){
-        const cobroExistente=data.facturas.find(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada"&&!yaPagados.includes(mes));
-        if(cobroExistente&&cobroExistente.estado!=="pagada"){await db.update("facturas",cobroExistente.id,{estado:"pagada",fecha_pago:multiMes.fecha_pago});}
-      }
-      await loadData();setModal(null);
-      const cant=multiMes.meses.filter(m=>!yaPagados.includes(m)).length;
-      showToast(`✓ ${cant} ${cant===1?"mes cobrado":"meses cobrados"} a ${al.nombre}`);
-    }catch(e){showToast("Error: "+e.message,"error");}
-  };
 
   const cobros=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro");
   const comps=data.facturas.filter(f=>f.tipo_factura==="comprobante");
@@ -557,10 +519,7 @@ function FacturasPage({data,loadData,showToast}){
     {tab==="cobros"&&(<div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
         <p style={{fontSize:13,color:"#64748B",margin:0}}>{cobros.length} cobros</p>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <button onClick={()=>{setMultiMes({alumno_id:"",meses:[],fecha_pago:new Date().toISOString().split("T")[0],tipo_pago:"efectivo"});setModal("multimes");}} style={btn("#7C3AED")}><Calendar size={15}/>Cobrar varios meses</button>
-          <button onClick={()=>{setBulkSec("");setForm({...form,mes_correspondiente:MESES[new Date().getMonth()]});setModal("bulk");}} style={btn("#059669")}><Plus size={15}/>Crear cobros por sección</button>
-        </div>
+        <button onClick={()=>{setBulkSec("");setForm({...form,mes_correspondiente:MESES[new Date().getMonth()]});setModal("bulk");}} style={btn("#059669")}><Plus size={15}/>Crear cobros por sección</button>
       </div>
       <div style={card}>{cobros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay cobros. Crea cobros por sección.</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:750}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Padre","Sección","Mes","Total","Mora","Saldo","Estado",""].map(h=><th key={h} style={{textAlign:["Total","Mora","Saldo"].includes(h)?"right":"left",padding:"5px 4px",color:"#64748B",fontWeight:600,fontSize:10,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
         <tbody>{[...cobros].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=calcMora(f, data.secciones, data.alumnos);const tot=Number(f.monto_total)+mora;const cols={pagada:"#059669",pendiente:"#DC2626",parcial:"#D97706",anulada:"#64748B"};const isP=f.estado==="pendiente"||f.estado==="parcial";return(
@@ -587,47 +546,6 @@ function FacturasPage({data,loadData,showToast}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><p style={{fontSize:13,color:"#64748B",margin:0}}>{comps.length} comprobantes</p><button onClick={()=>openComp()} style={btn("#2563EB")}><Plus size={15}/>Confirmar pago</button></div>
       <div style={card}>{comps.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay comprobantes</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Mes","Fecha","Total","Tipo","Cobro vinc.",""].map(h=><th key={h} style={{textAlign:h==="Total"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600,fontSize:11}}>{h}</th>)}</tr></thead><tbody>{[...comps].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const cv=f.cobro_id?data.facturas.find(c=>c.id===f.cobro_id):null;return(<tr key={f.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px",fontWeight:600}}>{f.numero_factura}</td><td style={{padding:"6px 8px"}}>{al?.nombre||"—"}</td><td style={{padding:"6px 8px"}}>{f.mes_correspondiente}</td><td style={{padding:"6px 8px"}}>{f.fecha_pago||"—"}</td><td style={{padding:"6px 8px",textAlign:"right"}}>L {Number(f.monto_total).toLocaleString()}</td><td style={{padding:"6px 8px"}}>{f.tipo_pago}</td><td style={{padding:"6px 8px"}}>{cv?<span style={badge("#059669")}>✓ {cv.numero_factura}</span>:"—"}</td><td style={{padding:"6px 8px",textAlign:"center"}}><button onClick={()=>mostrarImagen(f,"comprobante")} title="Ver/enviar" style={{background:"#059669",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:4,color:"#fff",fontSize:11,fontWeight:600}}><Send size={11}/>Enviar</button></td></tr>);})}</tbody></table></div>)}</div>
     </div>)}
-
-    {modal==="multimes"&&<Modal title="📅 Cobrar varios meses a un alumno" onClose={()=>setModal(null)} onSave={pagarVariosMeses} wide>
-      <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:10,fontSize:12,color:"#6D28D9",marginBottom:14}}>
-        Ideal cuando una madre paga varios meses juntos o adelanta. Se crea cada mes como su propia factura pagada, con su comprobante.
-      </div>
-      <div style={{marginBottom:12}}><label style={label}>Alumno *</label>
-        <select value={multiMes.alumno_id} onChange={e=>setMultiMes({...multiMes,alumno_id:e.target.value})} style={{...input,cursor:"pointer"}}>
-          <option value="">Seleccionar alumno</option>
-          {data.alumnos.filter(a=>a.estado==="activo"&&a.beca!==true).map(a=>{const sec=data.secciones.find(s=>s.id===a.seccion_id);return<option key={a.id} value={a.id}>{a.nombre}{sec?` — ${sec.nombre}`:""}</option>;})}
-        </select>
-      </div>
-      {multiMes.alumno_id&&(()=>{
-        const al=data.alumnos.find(a=>a.id===multiMes.alumno_id);
-        const sec=data.secciones.find(s=>s.id===al?.seccion_id);
-        const monto=(Number(al?.monto_personalizado)>0)?Number(al.monto_personalizado):Number(sec?.mensualidad)||0;
-        const yaPagados=data.facturas.filter(f=>f.alumno_id===al.id&&f.tipo_factura==="comprobante").map(f=>f.mes_correspondiente);
-        return(<>
-          <div style={{marginBottom:8}}><label style={label}>Meses a cobrar (toca para marcar)</label>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:6}}>
-              {MESES.map(mes=>{
-                const pagado=yaPagados.includes(mes);
-                const sel=multiMes.meses.includes(mes);
-                return(<div key={mes} onClick={()=>{if(pagado)return;const ms=sel?multiMes.meses.filter(m=>m!==mes):[...multiMes.meses,mes];setMultiMes({...multiMes,meses:ms});}}
-                  style={{padding:"8px 4px",borderRadius:6,textAlign:"center",fontSize:12,fontWeight:600,cursor:pagado?"not-allowed":"pointer",border:sel?"2px solid #7C3AED":pagado?"1px solid #BBF7D0":"1px solid #D1D5DB",background:pagado?"#ECFDF5":sel?"#F5F3FF":"#fff",color:pagado?"#059669":sel?"#7C3AED":"#475569",opacity:pagado?0.7:1}}>
-                  {mes.slice(0,3)}{pagado?" ✓":sel?" ●":""}
-                </div>);
-              })}
-            </div>
-            <div style={{fontSize:11,color:"#94A3B8",marginTop:6}}>Los meses en verde con ✓ ya están pagados. Mensualidad: L {monto.toLocaleString()}</div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>
-            <div><label style={label}>Fecha de pago</label><input type="date" value={multiMes.fecha_pago} onChange={e=>setMultiMes({...multiMes,fecha_pago:e.target.value})} style={input}/></div>
-            <div><label style={label}>Tipo de pago</label><select value={multiMes.tipo_pago} onChange={e=>setMultiMes({...multiMes,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
-          </div>
-          {multiMes.meses.length>0&&<div style={{marginTop:12,padding:12,background:"#ECFDF5",border:"1px solid #BBF7D0",borderRadius:8}}>
-            <div style={{fontSize:13,fontWeight:700,color:"#166534"}}>{multiMes.meses.length} {multiMes.meses.length===1?"mes":"meses"}: {multiMes.meses.join(", ")}</div>
-            <div style={{fontSize:16,fontWeight:800,color:"#059669",marginTop:4}}>Total: L {(monto*multiMes.meses.length).toLocaleString()}</div>
-          </div>}
-        </>);
-      })()}
-    </Modal>}
 
     {modal==="bulk"&&<Modal title="📄 Crear cobros por sección" onClose={()=>setModal(null)} onSave={crearCobrosSeccion} wide>
       <div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}>
@@ -785,9 +703,11 @@ function InvoiceView({invoice,data,onClose,onImagen}){
 }
 
 // ── HISTORIAL ──
-function HistorialPage({data,showToast}){
+function HistorialPage({data,loadData,showToast}){
   const[selSec,setSelSec]=useState("");const[selAl,setSelAl]=useState("");
   const[imgPreview,setImgPreview]=useState(null);
+  const[pagoModal,setPagoModal]=useState(null); // {mes, cobroExistente}
+  const[pagoForm,setPagoForm]=useState({fecha_pago:new Date().toISOString().split("T")[0],tipo_pago:"efectivo"});
   const als=data.alumnos.filter(a=>!selSec||a.seccion_id===selSec);
   const alumno=selAl?data.alumnos.find(a=>a.id===selAl):null;
   const padre=alumno?data.padres.find(p=>p.id===alumno.padre_id):null;
@@ -800,6 +720,40 @@ function HistorialPage({data,showToast}){
     const mora=calcMora(f, data.secciones, data.alumnos);
     const dataUrl=generarImgFactura(f,al,p,s,mora,tipo);
     setImgPreview({dataUrl,phone:p?.telefono||"",destinatario:p?.nombre||al?.nombre||"",numero:f.numero_factura});
+  };
+
+  // Abrir modal para marcar un mes como pagado desde el historial
+  const abrirPago=(mes,cobroExistente)=>{
+    setPagoForm({fecha_pago:new Date().toISOString().split("T")[0],tipo_pago:cobroExistente?.tipo_pago||"efectivo"});
+    setPagoModal({mes,cobroExistente});
+  };
+
+  // Marcar pagado: crea el cobro si no existe, y el comprobante, todo en un paso
+  const marcarPagado=async()=>{
+    if(!alumno){return;}
+    const {mes,cobroExistente}=pagoModal;
+    try{
+      const monto=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
+      let n=data.facturas.length;
+      let cobroId;
+      const nuevas=[];
+      if(cobroExistente){
+        cobroId=cobroExistente.id;
+      }else{
+        // crear el cobro (ya pagado)
+        n++; cobroId=uid();
+        nuevas.push({id:cobroId,numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,monto_total:monto,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:null});
+      }
+      // crear el comprobante
+      n++;
+      const comp={id:uid(),numero_factura:`CP-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"comprobante",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,monto_total:monto,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:cobroId};
+      nuevas.push(comp);
+      await db.insertMany("facturas",nuevas);
+      if(cobroExistente&&cobroExistente.estado!=="pagada"){await db.update("facturas",cobroExistente.id,{estado:"pagada",fecha_pago:pagoForm.fecha_pago});}
+      await loadData();setPagoModal(null);
+      setTimeout(()=>verImagen(comp,"comprobante"),300);
+      showToast(`✓ ${mes} pagado — comprobante listo`);
+    }catch(e){showToast("Error: "+e.message,"error");}
   };
 
   const tablaMensual = selAl ? MESES.map(mes => {
@@ -862,7 +816,11 @@ function HistorialPage({data,showToast}){
                     <span style={badge("#059669")}>{comp.numero_factura} · ✓ Pagado</span>
                     <span style={{fontSize:11,color:"#475569"}}>{comp.fecha_pago} · {comp.tipo_pago}</span>
                     <button onClick={()=>verImagen(comp,"comprobante")} style={{background:"#059669",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}}><Send size={10} color="#fff"/></button>
-                  </div>):(<span style={{color:"#D1D5DB",fontSize:11}}>—</span>)}
+                  </div>):(
+                    esFuturo
+                      ? <span style={{color:"#D1D5DB",fontSize:11}}>—</span>
+                      : <button onClick={()=>abrirPago(mes,cobro)} style={{background:"#059669",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}><Check size={12}/>Marcar pagado</button>
+                  )}
                 </td>
               </tr>);
             })}
@@ -874,7 +832,24 @@ function HistorialPage({data,showToast}){
         <span style={badge("#DC2626")}>⏳ Pendientes: {tablaMensual.filter(t=>t.cobro&&t.cobro.estado==="pendiente").length}</span>
       </div>
     </div>}
-    {!selAl&&<div style={card}><h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 8px"}}>Selecciona un alumno</h3><p style={{fontSize:13,color:"#94A3B8"}}>Filtra por sección y selecciona el alumno para ver su tabla de cobros y comprobantes mes por mes, con botones para reenviar cada imagen.</p></div>}
+    {!selAl&&<div style={card}><h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 8px"}}>Selecciona un alumno</h3><p style={{fontSize:13,color:"#94A3B8"}}>Filtra por sección y selecciona el alumno para ver su tabla de cobros y comprobantes mes por mes. Puedes marcar cualquier mes como pagado con un solo clic.</p></div>}
+
+    {/* Modal marcar pagado desde historial */}
+    {pagoModal&&alumno&&<Modal title={`✅ Registrar pago — ${pagoModal.mes}`} onClose={()=>setPagoModal(null)} onSave={marcarPagado}>
+      <div style={{background:"#F0FDF4",borderRadius:8,padding:12,marginBottom:14,fontSize:13,border:"1px solid #BBF7D0"}}>
+        <div><strong>Alumno:</strong> {alumno.nombre}</div>
+        <div><strong>Mes:</strong> {pagoModal.mes}</div>
+        <div><strong>Monto:</strong> L {monto.toLocaleString()}</div>
+        {pagoModal.cobroExistente
+          ? <div style={{color:"#059669",fontSize:12,marginTop:4}}>Ya tenía cobro creado ({pagoModal.cobroExistente.numero_factura}). Se marcará pagado.</div>
+          : <div style={{color:"#6D28D9",fontSize:12,marginTop:4}}>Se creará el cobro y el comprobante en un solo paso.</div>}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div><label style={label}>Fecha de pago</label><input type="date" value={pagoForm.fecha_pago} onChange={e=>setPagoForm({...pagoForm,fecha_pago:e.target.value})} style={input}/></div>
+        <div><label style={label}>Tipo de pago</label><select value={pagoForm.tipo_pago} onChange={e=>setPagoForm({...pagoForm,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
+      </div>
+    </Modal>}
+
     {imgPreview&&<ImgPreviewModal img={imgPreview} onClose={()=>setImgPreview(null)}/>}
   </div>);
 }
