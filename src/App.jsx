@@ -142,7 +142,64 @@ const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
   return cv.toDataURL('image/png');
 };
 
-// ══════════════════════════
+// ── Imagen de factura de MATERIAL (cobro o comprobante) ──
+const generarImgMaterial = (v, al, padre, sec, tipo) => {
+  const esPago = tipo === "comprobante";
+  const cv = document.createElement('canvas'); cv.width=600; cv.height=560;
+  const c = cv.getContext('2d');
+  c.fillStyle='#fff'; c.fillRect(0,0,600,560);
+  c.fillStyle=esPago?'#059669':'#D97706'; c.fillRect(0,0,600,84);
+  c.fillStyle='#fff'; c.font='bold 22px Segoe UI,sans-serif'; c.textAlign='center';
+  c.fillText('Seeds English School',300,34);
+  c.fillStyle=esPago?'#D1FAE5':'#FEF3C7'; c.font='12px Segoe UI,sans-serif';
+  c.fillText('Jesús de Otoro, Intibucá, Honduras',300,55);
+  c.fillStyle='#fff'; c.font='11px Segoe UI,sans-serif';
+  c.fillText(String(v.fecha_venta||''),300,74);
+  c.fillStyle=esPago?'#059669':'#D97706'; c.fillRect(0,84,600,4);
+  c.fillStyle=esPago?'#059669':'#D97706'; c.font='bold 19px Segoe UI,sans-serif';
+  c.fillText(esPago?'COMPROBANTE DE MATERIAL':'COBRO DE MATERIAL',300,116);
+  c.fillStyle='#1E293B'; c.font='bold 15px Segoe UI,sans-serif';
+  c.fillText(v.numero,300,140);
+  c.strokeStyle='#E2E8F0'; c.lineWidth=1;
+  c.beginPath(); c.moveTo(40,158); c.lineTo(560,158); c.stroke();
+  c.textAlign='left'; c.fillStyle=esPago?'#059669':'#D97706'; c.font='bold 12px Segoe UI,sans-serif';
+  c.fillText('DATOS DEL ALUMNO',50,182);
+  c.fillStyle='#334155'; c.font='13px Segoe UI,sans-serif';
+  c.fillText(`Alumno:   ${al?.nombre||'—'}`,50,204);
+  c.fillText(`Padre:    ${padre?.nombre||'—'}`,50,224);
+  c.fillText(`Teléfono: ${padre?.telefono||'—'}`,50,244);
+  c.fillText(`Sección:  ${sec?.nombre||'—'}`,50,264);
+  c.fillStyle=esPago?'#059669':'#D97706'; c.font='bold 12px Segoe UI,sans-serif';
+  c.fillText('DETALLE',350,182);
+  c.fillStyle='#334155'; c.font='13px Segoe UI,sans-serif';
+  c.fillText(`Mes: ${v.mes_correspondiente||'—'}`,350,204);
+  if(esPago){c.fillText(`Fecha pago: ${v.fecha_pago||v.fecha_venta||'—'}`,350,224);c.fillText(`Tipo pago: ${v.tipo_pago||'—'}`,350,244);}
+  c.beginPath(); c.moveTo(40,288); c.lineTo(560,288); c.stroke();
+  c.fillStyle='#F1F5F9'; c.fillRect(40,298,520,32);
+  c.fillStyle='#475569'; c.font='bold 12px Segoe UI,sans-serif';
+  c.fillText('Material',55,319); c.textAlign='center'; c.fillText('Cant.',360,319);
+  c.textAlign='right'; c.fillText('Total',545,319);
+  c.textAlign='left'; c.fillStyle='#1E293B'; c.font='14px Segoe UI,sans-serif';
+  c.fillText(v.nombre_material||'Material',55,353);
+  c.textAlign='center'; c.fillText(String(v.cantidad||1),360,353);
+  c.textAlign='right'; c.fillText(`L ${Number(v.precio_venta).toLocaleString()}`,545,353);
+  let y=378;
+  c.beginPath();c.moveTo(40,y);c.lineTo(560,y);c.stroke();y+=12;
+  c.fillStyle=esPago?'#059669':'#D97706'; c.fillRect(40,y,520,48);
+  c.fillStyle='#fff'; c.font='bold 20px Segoe UI,sans-serif';
+  c.textAlign='left'; c.fillText(esPago?'TOTAL PAGADO:':'TOTAL A PAGAR:',60,y+31);
+  c.textAlign='right'; c.fillText(`L ${Number(v.precio_venta).toLocaleString()}`,540,y+31);
+  y+=68;
+  if(esPago){
+    c.save();c.translate(300,y+20);c.rotate(-0.13);
+    c.strokeStyle='#059669';c.lineWidth=4;c.font='bold 44px Segoe UI,sans-serif';c.textAlign='center';
+    c.strokeText('✓ PAGADO',0,0);c.restore();y+=50;
+  }
+  c.fillStyle='#64748B'; c.font='11px Segoe UI,sans-serif'; c.textAlign='center';
+  c.fillText('Seeds English School 🌱',300,y+15);
+  c.strokeStyle='#E2E8F0'; c.lineWidth=2; c.strokeRect(1,1,598,558);
+  return cv.toDataURL('image/png');
+};
 //  APP PRINCIPAL
 // ══════════════════════════
 export default function App() {
@@ -278,7 +335,7 @@ function Dashboard({data,setPage}){
   const pend=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
   const mes=MESES[new Date().getMonth()];
   const ingMens=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&f.mes_correspondiente===mes).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
-  const ventMat=(data.ventas_material||[]).filter(v=>v.mes_correspondiente===mes&&v.estado!=="anulado");
+  const ventMat=(data.ventas_material||[]).filter(v=>v.mes_correspondiente===mes&&v.estado==="pagado");
   const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
   const ing=ingMens+ingMat;
@@ -1062,16 +1119,30 @@ function ConfiguracionPage({data,loadData,showToast}){
   </div>);
 }
 
-// ── MATERIALES (registrar ventas de libros/llaves) ──
+// ── MATERIALES (cobro + comprobante, igual que mensualidades) ──
 function MaterialesPage({data,loadData,showToast}){
+  const[tab,setTab]=useState("cobros");
   const[modal,setModal]=useState(null);
-  const[form,setForm]=useState({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],notas:""});
+  const[imgPreview,setImgPreview]=useState(null);
+  const[form,setForm]=useState({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],notas:"",pagar_ya:false});
   const[filtroSec,setFiltroSec]=useState("");
+  const[compForm,setCompForm]=useState(null); // venta pendiente que se está cobrando
 
   const matsSeccion=form.seccion_id?data.materiales.filter(m=>m.seccion_id===form.seccion_id&&m.activo!==false):[];
   const alumnosSeccion=form.seccion_id?data.alumnos.filter(a=>a.seccion_id===form.seccion_id&&a.estado==="activo"):[];
 
-  const abrir=()=>{setForm({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],notas:""});setModal("new");};
+  // Mostrar imagen (cobro o comprobante) de una venta
+  const mostrarImagen=(v,tipo)=>{
+    const al=data.alumnos.find(a=>a.id===v.alumno_id);
+    const padre=al?data.padres.find(p=>p.id===al.padre_id):null;
+    const sec=data.secciones.find(s=>s.id===v.seccion_id);
+    const dataUrl=generarImgMaterial(v,al,padre,sec,tipo);
+    setImgPreview({dataUrl,phone:padre?.telefono||"",destinatario:padre?.nombre||al?.nombre||"",numero:v.numero});
+  };
+
+  const abrir=()=>{setForm({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],notas:"",pagar_ya:false});setModal("new");};
+
+  // Crear la venta: como cobro pendiente, o pagada de una vez
   const guardar=async()=>{
     if(!form.material_id){showToast("Selecciona el material","error");return;}
     if(!form.alumno_id){showToast("Selecciona el alumno","error");return;}
@@ -1080,56 +1151,101 @@ function MaterialesPage({data,loadData,showToast}){
       const cant=parseInt(form.cantidad)||1;
       const pv=Number(mat.precio_venta), co=Number(mat.costo);
       const num=`MT-${String(data.ventas_material.length+1).padStart(4,"0")}`;
-      const venta={id:uid(),numero:num,material_id:mat.id,alumno_id:form.alumno_id,seccion_id:form.seccion_id,nombre_material:mat.nombre,precio_venta:pv*cant,costo:co*cant,ganancia:(pv-co)*cant,cantidad:cant,fecha_venta:new Date().toISOString().split("T")[0],mes_correspondiente:form.mes_correspondiente,estado:"pagado",tipo_pago:form.tipo_pago,notas:form.notas};
+      const hoy=new Date().toISOString().split("T")[0];
+      const venta={id:uid(),numero:num,material_id:mat.id,alumno_id:form.alumno_id,seccion_id:form.seccion_id,nombre_material:mat.nombre,precio_venta:pv*cant,costo:co*cant,ganancia:(pv-co)*cant,cantidad:cant,fecha_venta:hoy,mes_correspondiente:form.mes_correspondiente,estado:form.pagar_ya?"pagado":"pendiente",fecha_pago:form.pagar_ya?hoy:null,tipo_pago:form.tipo_pago,notas:form.notas};
       await db.insert("ventas_material",venta);
-      await loadData();setModal(null);showToast(`✓ Venta ${num} registrada`);
+      await loadData();setModal(null);
+      if(form.pagar_ya){setTimeout(()=>mostrarImagen(venta,"comprobante"),300);showToast(`✓ ${num} pagado — comprobante listo`);}
+      else{setTimeout(()=>mostrarImagen(venta,"cobro"),300);showToast(`✓ Cobro ${num} creado`);}
     }catch(e){showToast("Error: "+e.message,"error");}
   };
+
+  // Confirmar pago de un cobro pendiente
+  const confirmarPago=async(v,tipoPago)=>{
+    try{
+      const hoy=new Date().toISOString().split("T")[0];
+      await db.update("ventas_material",v.id,{estado:"pagado",fecha_pago:hoy,tipo_pago:tipoPago||v.tipo_pago||"efectivo"});
+      await loadData();setCompForm(null);
+      const actualizada={...v,estado:"pagado",fecha_pago:hoy,tipo_pago:tipoPago||v.tipo_pago};
+      setTimeout(()=>mostrarImagen(actualizada,"comprobante"),300);
+      showToast("Pago confirmado ✓ — comprobante listo");
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+
   const anular=async(v)=>{if(!confirm("¿Anular esta venta?"))return;try{await db.update("ventas_material",v.id,{estado:"anulado"});await loadData();showToast("Anulada","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
-  const ventas=data.ventas_material.filter(v=>!filtroSec||v.seccion_id===filtroSec);
-  const totVenta=ventas.filter(v=>v.estado!=="anulado").reduce((s,v)=>s+Number(v.precio_venta),0);
-  const totGanancia=ventas.filter(v=>v.estado!=="anulado").reduce((s,v)=>s+Number(v.ganancia),0);
+  const todas=data.ventas_material.filter(v=>!filtroSec||v.seccion_id===filtroSec);
+  const cobros=todas.filter(v=>v.estado==="pendiente");
+  const pagados=todas.filter(v=>v.estado==="pagado");
+  const totVenta=pagados.reduce((s,v)=>s+Number(v.precio_venta),0);
+  const totGanancia=pagados.reduce((s,v)=>s+Number(v.ganancia),0);
+  const totPend=cobros.reduce((s,v)=>s+Number(v.precio_venta),0);
+  const tBtn=(a)=>({padding:"10px 20px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #D97706":"3px solid transparent",background:"transparent",color:a?"#D97706":"#64748B"});
 
   return(<div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
-      <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-        <select value={filtroSec} onChange={e=>setFiltroSec(e.target.value)} style={{...input,width:200,cursor:"pointer"}}>
-          <option value="">Todas las secciones</option>
-          {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
-        </select>
-      </div>
-      <button onClick={abrir} style={btn("#D97706")}><Plus size={15}/>Registrar venta</button>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+      <select value={filtroSec} onChange={e=>setFiltroSec(e.target.value)} style={{...input,width:200,cursor:"pointer"}}>
+        <option value="">Todas las secciones</option>
+        {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+      </select>
+      <button onClick={abrir} style={btn("#D97706")}><Plus size={15}/>Registrar material</button>
     </div>
 
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:16}}>
-      <div style={{...card,borderLeft:"3px solid #D97706",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Total vendido</div><div style={{fontSize:22,fontWeight:800,color:"#D97706"}}>L {totVenta.toLocaleString()}</div></div>
-      <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ganancia total</div><div style={{fontSize:22,fontWeight:800,color:"#059669"}}>L {totGanancia.toLocaleString()}</div></div>
-      <div style={{...card,borderLeft:"3px solid #2563EB",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ventas registradas</div><div style={{fontSize:22,fontWeight:800,color:"#2563EB"}}>{ventas.filter(v=>v.estado!=="anulado").length}</div></div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:16}}>
+      <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Pendiente de cobro</div><div style={{fontSize:20,fontWeight:800,color:"#DC2626"}}>L {totPend.toLocaleString()}</div></div>
+      <div style={{...card,borderLeft:"3px solid #D97706",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Total cobrado</div><div style={{fontSize:20,fontWeight:800,color:"#D97706"}}>L {totVenta.toLocaleString()}</div></div>
+      <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ganancia cobrada</div><div style={{fontSize:20,fontWeight:800,color:"#059669"}}>L {totGanancia.toLocaleString()}</div></div>
     </div>
 
-    <div style={card}>
-      {ventas.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay ventas registradas. Configura materiales en "Configuración" y registra ventas aquí.</p>:(
+    <div style={{display:"flex",borderBottom:"1px solid #E2E8F0",marginBottom:16}}>
+      <button onClick={()=>setTab("cobros")} style={tBtn(tab==="cobros")}>📄 Cobros pendientes ({cobros.length})</button>
+      <button onClick={()=>setTab("pagados")} style={tBtn(tab==="pagados")}>✅ Pagados ({pagados.length})</button>
+    </div>
+
+    {/* COBROS PENDIENTES */}
+    {tab==="cobros"&&<div style={card}>
+      {cobros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay cobros de material pendientes</p>:(
         <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Material","Alumno","Sección","Cant.","Venta","Costo","Ganancia","Fecha","Estado",""].map(h=><th key={h} style={{textAlign:["Venta","Costo","Ganancia","Cant."].includes(h)?"right":"left",padding:"5px 6px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
-          <tbody>{[...ventas].reverse().map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const sec=data.secciones.find(s=>s.id===v.seccion_id);const anul=v.estado==="anulado";return(<tr key={v.id} style={{borderBottom:"1px solid #F1F5F9",opacity:anul?0.5:1}}>
+          <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Material","Alumno","Sección","Cant.","Total","Mes",""].map(h=><th key={h} style={{textAlign:["Total","Cant."].includes(h)?"right":"left",padding:"5px 6px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+          <tbody>{[...cobros].reverse().map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const sec=data.secciones.find(s=>s.id===v.seccion_id);return(<tr key={v.id} style={{borderBottom:"1px solid #F1F5F9"}}>
+            <td style={{padding:"5px 6px",fontWeight:600}}>{v.numero}</td>
+            <td style={{padding:"5px 6px"}}>{v.nombre_material}</td>
+            <td style={{padding:"5px 6px"}}>{al?.nombre||"—"}</td>
+            <td style={{padding:"5px 6px"}}>{sec?<span style={badge("#F97316")}>{sec.nombre}</span>:"—"}</td>
+            <td style={{padding:"5px 6px",textAlign:"right"}}>{v.cantidad}</td>
+            <td style={{padding:"5px 6px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(v.precio_venta).toLocaleString()}</td>
+            <td style={{padding:"5px 6px"}}>{v.mes_correspondiente}</td>
+            <td style={{padding:"5px 6px",textAlign:"right",whiteSpace:"nowrap"}}>
+              <button onClick={()=>mostrarImagen(v,"cobro")} title="Enviar cobro" style={{background:"#25D366",border:"none",cursor:"pointer",padding:"3px 6px",borderRadius:4,marginRight:3}}><Phone size={12} color="#fff"/></button>
+              <button onClick={()=>setCompForm({venta:v,tipo_pago:v.tipo_pago||"efectivo"})} title="Confirmar pago" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 6px",borderRadius:4,marginRight:3}}><Check size={12} color="#fff"/></button>
+              <button onClick={()=>anular(v)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><X size={13} color="#DC2626"/></button>
+            </td></tr>);})}</tbody>
+        </table></div>
+      )}
+    </div>}
+
+    {/* PAGADOS */}
+    {tab==="pagados"&&<div style={card}>
+      {pagados.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay materiales pagados aún</p>:(
+        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Material","Alumno","Sección","Cant.","Venta","Ganancia","Fecha pago",""].map(h=><th key={h} style={{textAlign:["Venta","Ganancia","Cant."].includes(h)?"right":"left",padding:"5px 6px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+          <tbody>{[...pagados].reverse().map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const sec=data.secciones.find(s=>s.id===v.seccion_id);return(<tr key={v.id} style={{borderBottom:"1px solid #F1F5F9"}}>
             <td style={{padding:"5px 6px",fontWeight:600}}>{v.numero}</td>
             <td style={{padding:"5px 6px"}}>{v.nombre_material}</td>
             <td style={{padding:"5px 6px"}}>{al?.nombre||"—"}</td>
             <td style={{padding:"5px 6px"}}>{sec?<span style={badge("#F97316")}>{sec.nombre}</span>:"—"}</td>
             <td style={{padding:"5px 6px",textAlign:"right"}}>{v.cantidad}</td>
             <td style={{padding:"5px 6px",textAlign:"right",fontWeight:600}}>L {Number(v.precio_venta).toLocaleString()}</td>
-            <td style={{padding:"5px 6px",textAlign:"right",color:"#DC2626"}}>L {Number(v.costo).toLocaleString()}</td>
             <td style={{padding:"5px 6px",textAlign:"right",fontWeight:700,color:"#059669"}}>L {Number(v.ganancia).toLocaleString()}</td>
-            <td style={{padding:"5px 6px"}}>{v.fecha_venta}</td>
-            <td style={{padding:"5px 6px"}}><span style={badge(anul?"#64748B":"#059669")}>{anul?"anulado":"pagado"}</span></td>
-            <td style={{padding:"5px 6px"}}>{!anul&&<button onClick={()=>anular(v)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><X size={13} color="#DC2626"/></button>}</td>
+            <td style={{padding:"5px 6px"}}>{v.fecha_pago||"—"}</td>
+            <td style={{padding:"5px 6px",textAlign:"center"}}><button onClick={()=>mostrarImagen(v,"comprobante")} title="Ver/enviar comprobante" style={{background:"#059669",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:4,color:"#fff",fontSize:11,fontWeight:600}}><Send size={11}/>Enviar</button></td>
           </tr>);})}</tbody>
         </table></div>
       )}
-    </div>
+    </div>}
 
-    {modal&&<Modal title="📦 Registrar venta de material" onClose={()=>setModal(null)} onSave={guardar} wide>
+    {/* Modal registrar */}
+    {modal&&<Modal title="📦 Registrar material" onClose={()=>setModal(null)} onSave={guardar} wide>
       <div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}>
         <div>
           <div style={{marginBottom:12}}><label style={label}>Sección *</label>
@@ -1155,20 +1271,42 @@ function MaterialesPage({data,loadData,showToast}){
         <div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <Field label="Cantidad" value={form.cantidad} onChange={v=>setForm({...form,cantidad:v})} type="number"/>
-            <div style={{marginBottom:12}}><label style={label}>Tipo de pago</label><select value={form.tipo_pago} onChange={e=>setForm({...form,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
+            <div style={{marginBottom:12}}><label style={label}>Mes</label><select value={form.mes_correspondiente} onChange={e=>setForm({...form,mes_correspondiente:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
           </div>
-          <div style={{marginBottom:12}}><label style={label}>Mes</label><select value={form.mes_correspondiente} onChange={e=>setForm({...form,mes_correspondiente:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
+          {/* Interruptor: pagar ya o dejar pendiente */}
+          <div onClick={()=>setForm({...form,pagar_ya:!form.pagar_ya})} style={{padding:"10px 12px",borderRadius:8,cursor:"pointer",border:form.pagar_ya?"2px solid #059669":"1px solid #D1D5DB",background:form.pagar_ya?"#ECFDF5":"#fff",display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <div style={{width:20,height:20,borderRadius:5,border:form.pagar_ya?"none":"2px solid #D1D5DB",background:form.pagar_ya?"#059669":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{form.pagar_ya&&<Check size={14} color="#fff"/>}</div>
+            <div><div style={{fontSize:13,fontWeight:700,color:form.pagar_ya?"#059669":"#475569"}}>Ya está pagado</div><div style={{fontSize:11,color:"#94A3B8"}}>{form.pagar_ya?"Se genera el comprobante de una vez":"Se crea como cobro pendiente"}</div></div>
+          </div>
+          {form.pagar_ya&&<div style={{marginBottom:12}}><label style={label}>Tipo de pago</label><select value={form.tipo_pago} onChange={e=>setForm({...form,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div>}
           {form.material_id&&(()=>{const mat=data.materiales.find(m=>m.id===form.material_id);const cant=parseInt(form.cantidad)||1;const pv=Number(mat?.precio_venta)*cant;const g=(Number(mat?.precio_venta)-Number(mat?.costo))*cant;return(
             <div style={{background:"#ECFDF5",border:"1px solid #BBF7D0",borderRadius:8,padding:12,fontSize:13}}>
-              <div style={{color:"#166534",fontWeight:700,marginBottom:4}}>Resumen de venta</div>
+              <div style={{color:"#166534",fontWeight:700,marginBottom:4}}>Resumen</div>
               <div>Total a cobrar: <strong>L {pv.toLocaleString()}</strong></div>
               <div style={{color:"#059669"}}>Tu ganancia: <strong>L {g.toLocaleString()}</strong></div>
             </div>);})()}
         </div>
       </div>
     </Modal>}
+
+    {/* Modal confirmar pago de un cobro pendiente */}
+    {compForm&&<Modal title="✅ Confirmar pago de material" onClose={()=>setCompForm(null)} onSave={()=>confirmarPago(compForm.venta,compForm.tipo_pago)}>
+      {(()=>{const v=compForm.venta;const al=data.alumnos.find(a=>a.id===v.alumno_id);return(
+        <div style={{background:"#F0FDF4",borderRadius:8,padding:12,marginBottom:12,fontSize:13,border:"1px solid #BBF7D0"}}>
+          <div style={{fontWeight:700,color:"#166534",marginBottom:4}}>✓ {v.numero}</div>
+          <div><strong>Material:</strong> {v.nombre_material} ×{v.cantidad}</div>
+          <div><strong>Alumno:</strong> {al?.nombre}</div>
+          <div><strong>Total:</strong> L {Number(v.precio_venta).toLocaleString()}</div>
+        </div>);})()}
+      <div style={{marginBottom:12}}><label style={label}>Tipo de pago</label>
+        <select value={compForm.tipo_pago} onChange={e=>setCompForm({...compForm,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select>
+      </div>
+    </Modal>}
+
+    {imgPreview&&<ImgPreviewModal img={imgPreview} onClose={()=>setImgPreview(null)}/>}
   </div>);
 }
+
 
 // ── REPORTES (resumen económico mensual completo) ──
 function ReportesPage({data}){
@@ -1179,7 +1317,10 @@ function ReportesPage({data}){
   const ingMensualidades=compsMes.reduce((s,f)=>s+Number(f.monto_total||0),0);
 
   // Ventas de materiales de ese mes
-  const ventasMes=data.ventas_material.filter(v=>v.mes_correspondiente===mesSel&&v.estado!=="anulado");
+  // Ventas de materiales de ese mes. Solo las PAGADAS entran como ingreso.
+  const ventasMes=data.ventas_material.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pagado");
+  const ventasPendMes=data.ventas_material.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pendiente");
+  const pendMateriales=ventasPendMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ingMateriales=ventasMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const costoMateriales=ventasMes.reduce((s,v)=>s+Number(v.costo),0);
   const gananciaMateriales=ventasMes.reduce((s,v)=>s+Number(v.ganancia),0);
@@ -1222,11 +1363,12 @@ function ReportesPage({data}){
       <div style={card}>
         <h4 style={{fontSize:14,fontWeight:700,color:"#059669",margin:"0 0 10px"}}>💰 Ingresos</h4>
         {fila("Mensualidades cobradas",ingMensualidades,"#059669")}
-        {fila("Venta de materiales",ingMateriales,"#D97706")}
+        {fila("Venta de materiales (pagados)",ingMateriales,"#D97706")}
+        {pendMateriales>0&&fila("Materiales por cobrar (pendiente)",pendMateriales,"#94A3B8")}
         <div style={{marginTop:6,paddingTop:6}}>{fila("Total ingresos",ingresoTotal,"#059669",true)}</div>
         <div style={{marginTop:14,fontSize:12,color:"#64748B"}}>
-          <div style={{fontWeight:700,marginBottom:4}}>Detalle de materiales:</div>
-          {ventasMes.length===0?<div style={{color:"#94A3B8"}}>Sin ventas este mes</div>:ventasMes.slice(0,8).map(v=>(
+          <div style={{fontWeight:700,marginBottom:4}}>Materiales cobrados este mes:</div>
+          {ventasMes.length===0?<div style={{color:"#94A3B8"}}>Sin materiales cobrados este mes</div>:ventasMes.slice(0,8).map(v=>(
             <div key={v.id} style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}><span>{v.nombre_material} ×{v.cantidad}</span><span>L {Number(v.precio_venta).toLocaleString()}</span></div>
           ))}
         </div>
