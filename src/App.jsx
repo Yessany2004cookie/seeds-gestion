@@ -802,14 +802,14 @@ function HistorialPage({data,loadData,showToast}){
           <tbody>
             {tablaMensual.map(({mes,cobro,comp})=>{
               const esFuturo=MESES.indexOf(mes)>new Date().getMonth();
-              return(<tr key={mes} style={{borderBottom:"1px solid #F1F5F9",background:esFuturo?"#F8FAFC":"transparent"}}>
-                <td style={{padding:"8px 10px",fontWeight:700,color:esFuturo?"#94A3B8":"#1E293B"}}>{mes.slice(0,3)}</td>
+              return(<tr key={mes} style={{borderBottom:"1px solid #F1F5F9",background:esFuturo?"#FAFAFF":"transparent"}}>
+                <td style={{padding:"8px 10px",fontWeight:700,color:esFuturo?"#7C3AED":"#1E293B"}}>{mes.slice(0,3)}{esFuturo?<span style={{fontSize:9,fontWeight:600,color:"#A78BFA",display:"block"}}>adelantado</span>:""}</td>
                 <td style={{padding:"8px 10px"}}>
                   {cobro?(<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                     <span style={badge(cobro.estado==="pagada"?"#059669":cobro.estado==="pendiente"?"#DC2626":"#D97706")}>{cobro.numero_factura} · {cobro.estado}</span>
                     <span style={{fontSize:11,color:"#475569"}}>L {Number(cobro.monto_total).toLocaleString()}</span>
                     <button onClick={()=>verImagen(cobro,"cobro")} style={{background:"#2563EB",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}}><Send size={10} color="#fff"/></button>
-                  </div>):(<span style={{color:esFuturo?"#D1D5DB":"#DC2626",fontSize:11}}>{esFuturo?"—":"Sin cobro"}</span>)}
+                  </div>):(<span style={{color:"#94A3B8",fontSize:11}}>Sin cobro</span>)}
                 </td>
                 <td style={{padding:"8px 10px"}}>
                   {comp?(<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
@@ -817,9 +817,7 @@ function HistorialPage({data,loadData,showToast}){
                     <span style={{fontSize:11,color:"#475569"}}>{comp.fecha_pago} · {comp.tipo_pago}</span>
                     <button onClick={()=>verImagen(comp,"comprobante")} style={{background:"#059669",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}}><Send size={10} color="#fff"/></button>
                   </div>):(
-                    esFuturo
-                      ? <span style={{color:"#D1D5DB",fontSize:11}}>—</span>
-                      : <button onClick={()=>abrirPago(mes,cobro)} style={{background:"#059669",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}><Check size={12}/>Marcar pagado</button>
+                    <button onClick={()=>abrirPago(mes,cobro)} style={{background:esFuturo?"#7C3AED":"#059669",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}><Check size={12}/>Marcar pagado</button>
                   )}
                 </td>
               </tr>);
