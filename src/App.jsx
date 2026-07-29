@@ -448,6 +448,8 @@ function FacturasPage({data,loadData,showToast}){
   const[tab,setTab]=useState("cobros");const[modal,setModal]=useState(null);const[viewInv,setViewInv]=useState(null);
   const[form,setForm]=useState({alumno_id:"",fecha_pago:"",mes_correspondiente:"",monto_total:"",tipo_pago:"efectivo",notas:"",cobro_id:""});
   const[bulkSec,setBulkSec]=useState("");
+  const[fSec,setFSec]=useState("");   // filtro por sección
+  const[fMes,setFMes]=useState("");   // filtro por mes
   const[imgPreview,setImgPreview]=useState(null);
 
   const mostrarImagen = (f, tipo="cobro") => {
@@ -468,9 +470,14 @@ function FacturasPage({data,loadData,showToast}){
     if(!sec){showToast("Sección no encontrada","error");return;}
     const alumnosSec = data.alumnos.filter(a=>a.seccion_id===bulkSec && a.estado==="activo");
     if(alumnosSec.length===0){showToast("No hay alumnos activos en esta sección","error");return;}
-    const yaConCobro = data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.mes_correspondiente===mes&&f.estado!=="anulada").map(f=>f.alumno_id);
-    // Se excluyen los becados y los que ya tienen cobro de ese mes
-    const sinCobro = alumnosSec.filter(a=>!yaConCobro.includes(a.id) && a.beca!==true);
+    // Alumnos que ya NO necesitan cobro de este mes:
+    //  - tienen un cobro de ese mes (pendiente o pagado), o
+    //  - tienen un comprobante (pago) de ese mes  ← cubre pagos adelantados
+    const conCobro = data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.mes_correspondiente===mes&&f.estado!=="anulada").map(f=>f.alumno_id);
+    const conPago = data.facturas.filter(f=>f.tipo_factura==="comprobante"&&f.mes_correspondiente===mes&&f.estado!=="anulada").map(f=>f.alumno_id);
+    const yaCubierto = new Set([...conCobro, ...conPago]);
+    // Se excluyen los becados y los que ya tienen cobro o pago de ese mes
+    const sinCobro = alumnosSec.filter(a=>!yaCubierto.has(a.id) && a.beca!==true);
     if(sinCobro.length===0){showToast(`No hay cobros nuevos por crear para ${mes}`,"error");return;}
     try{
       let count = data.facturas.length;
@@ -505,10 +512,30 @@ function FacturasPage({data,loadData,showToast}){
   // Cobrar/pagar VARIOS MESES juntos a un alumno.
   // Crea cada mes como su propia factura (cobro + comprobante), marcados pagados.
 
-  const cobros=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro");
-  const comps=data.facturas.filter(f=>f.tipo_factura==="comprobante");
-  const pendCobros=cobros.filter(f=>f.estado==="pendiente"||f.estado==="parcial");
+  // Aplica filtros de sección y mes
+  const pasaFiltro=(f)=>{
+    if(fMes && f.mes_correspondiente!==fMes) return false;
+    if(fSec){const al=data.alumnos.find(a=>a.id===f.alumno_id);if(!al||al.seccion_id!==fSec)return false;}
+    return true;
+  };
+  const cobros=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro").filter(pasaFiltro);
+  const comps=data.facturas.filter(f=>f.tipo_factura==="comprobante").filter(pasaFiltro);
+  const pendCobros=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&(f.estado==="pendiente"||f.estado==="parcial"));
   const tBtn=(a)=>({padding:"10px 20px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #F97316":"3px solid transparent",background:"transparent",color:a?"#F97316":"#64748B"});
+  // Barra de filtros reutilizable
+  const barraFiltros=(
+    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
+      <select value={fSec} onChange={e=>setFSec(e.target.value)} style={{...input,width:180,cursor:"pointer"}}>
+        <option value="">Todas las secciones</option>
+        {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+      </select>
+      <select value={fMes} onChange={e=>setFMes(e.target.value)} style={{...input,width:150,cursor:"pointer"}}>
+        <option value="">Todos los meses</option>
+        {MESES.map(m=><option key={m} value={m}>{m}</option>)}
+      </select>
+      {(fSec||fMes)&&<button onClick={()=>{setFSec("");setFMes("");}} style={{...btnO,padding:"6px 12px",fontSize:12}}><X size={13}/>Limpiar</button>}
+    </div>
+  );
 
   return(<div>
     <div style={{display:"flex",borderBottom:"1px solid #E2E8F0",marginBottom:16}}>
@@ -517,11 +544,12 @@ function FacturasPage({data,loadData,showToast}){
     </div>
 
     {tab==="cobros"&&(<div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
-        <p style={{fontSize:13,color:"#64748B",margin:0}}>{cobros.length} cobros</p>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+        <p style={{fontSize:13,color:"#64748B",margin:0}}>{cobros.length} {cobros.length===1?"cobro":"cobros"}{(fSec||fMes)?" (filtrado)":""}</p>
         <button onClick={()=>{setBulkSec("");setForm({...form,mes_correspondiente:MESES[new Date().getMonth()]});setModal("bulk");}} style={btn("#059669")}><Plus size={15}/>Crear cobros por sección</button>
       </div>
-      <div style={card}>{cobros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay cobros. Crea cobros por sección.</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:750}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Padre","Sección","Mes","Total","Mora","Saldo","Estado",""].map(h=><th key={h} style={{textAlign:["Total","Mora","Saldo"].includes(h)?"right":"left",padding:"5px 4px",color:"#64748B",fontWeight:600,fontSize:10,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+      {barraFiltros}
+      <div style={card}>{cobros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>{(fSec||fMes)?"No hay cobros con esos filtros.":"No hay cobros. Crea cobros por sección."}</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:750}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Padre","Sección","Mes","Total","Mora","Saldo","Estado",""].map(h=><th key={h} style={{textAlign:["Total","Mora","Saldo"].includes(h)?"right":"left",padding:"5px 4px",color:"#64748B",fontWeight:600,fontSize:10,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
         <tbody>{[...cobros].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=calcMora(f, data.secciones, data.alumnos);const tot=Number(f.monto_total)+mora;const cols={pagada:"#059669",pendiente:"#DC2626",parcial:"#D97706",anulada:"#64748B"};const isP=f.estado==="pendiente"||f.estado==="parcial";return(
           <tr key={f.id} style={{borderBottom:"1px solid #F1F5F9",background:isP&&mora>0?"#FEF2F2":"transparent"}}>
             <td style={{padding:"5px 4px",fontWeight:600}}>{f.numero_factura}</td>
@@ -543,8 +571,9 @@ function FacturasPage({data,loadData,showToast}){
     </div>)}
 
     {tab==="comprobantes"&&(<div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><p style={{fontSize:13,color:"#64748B",margin:0}}>{comps.length} comprobantes</p><button onClick={()=>openComp()} style={btn("#2563EB")}><Plus size={15}/>Confirmar pago</button></div>
-      <div style={card}>{comps.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay comprobantes</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Mes","Fecha","Total","Tipo","Cobro vinc.",""].map(h=><th key={h} style={{textAlign:h==="Total"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600,fontSize:11}}>{h}</th>)}</tr></thead><tbody>{[...comps].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const cv=f.cobro_id?data.facturas.find(c=>c.id===f.cobro_id):null;return(<tr key={f.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px",fontWeight:600}}>{f.numero_factura}</td><td style={{padding:"6px 8px"}}>{al?.nombre||"—"}</td><td style={{padding:"6px 8px"}}>{f.mes_correspondiente}</td><td style={{padding:"6px 8px"}}>{f.fecha_pago||"—"}</td><td style={{padding:"6px 8px",textAlign:"right"}}>L {Number(f.monto_total).toLocaleString()}</td><td style={{padding:"6px 8px"}}>{f.tipo_pago}</td><td style={{padding:"6px 8px"}}>{cv?<span style={badge("#059669")}>✓ {cv.numero_factura}</span>:"—"}</td><td style={{padding:"6px 8px",textAlign:"center"}}><button onClick={()=>mostrarImagen(f,"comprobante")} title="Ver/enviar" style={{background:"#059669",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:4,color:"#fff",fontSize:11,fontWeight:600}}><Send size={11}/>Enviar</button></td></tr>);})}</tbody></table></div>)}</div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}><p style={{fontSize:13,color:"#64748B",margin:0}}>{comps.length} {comps.length===1?"comprobante":"comprobantes"}{(fSec||fMes)?" (filtrado)":""}</p><button onClick={()=>openComp()} style={btn("#2563EB")}><Plus size={15}/>Confirmar pago</button></div>
+      {barraFiltros}
+      <div style={card}>{comps.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>{(fSec||fMes)?"No hay comprobantes con esos filtros.":"No hay comprobantes"}</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Sección","Mes","Fecha","Total","Tipo","Cobro vinc.",""].map(h=><th key={h} style={{textAlign:h==="Total"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600,fontSize:11}}>{h}</th>)}</tr></thead><tbody>{[...comps].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const cv=f.cobro_id?data.facturas.find(c=>c.id===f.cobro_id):null;return(<tr key={f.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px",fontWeight:600}}>{f.numero_factura}</td><td style={{padding:"6px 8px"}}>{al?.nombre||"—"}</td><td style={{padding:"6px 8px"}}>{sec?<span style={badge("#F97316")}>{sec.nombre}</span>:"—"}</td><td style={{padding:"6px 8px"}}>{f.mes_correspondiente}</td><td style={{padding:"6px 8px"}}>{f.fecha_pago||"—"}</td><td style={{padding:"6px 8px",textAlign:"right"}}>L {Number(f.monto_total).toLocaleString()}</td><td style={{padding:"6px 8px"}}>{f.tipo_pago}</td><td style={{padding:"6px 8px"}}>{cv?<span style={badge("#059669")}>✓ {cv.numero_factura}</span>:"—"}</td><td style={{padding:"6px 8px",textAlign:"center"}}><button onClick={()=>mostrarImagen(f,"comprobante")} title="Ver/enviar" style={{background:"#059669",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:4,color:"#fff",fontSize:11,fontWeight:600}}><Send size={11}/>Enviar</button></td></tr>);})}</tbody></table></div>)}</div>
     </div>)}
 
     {modal==="bulk"&&<Modal title="📄 Crear cobros por sección" onClose={()=>setModal(null)} onSave={crearCobrosSeccion} wide>
@@ -568,14 +597,17 @@ function FacturasPage({data,loadData,showToast}){
             const als=data.alumnos.filter(a=>a.seccion_id===bulkSec&&a.estado==="activo");
             const becados=als.filter(a=>a.beca===true);
             const mes=form.mes_correspondiente||MESES[new Date().getMonth()];
-            const yaTienen=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.mes_correspondiente===mes&&f.estado!=="anulada").map(f=>f.alumno_id);
-            const nuevos=als.filter(a=>!yaTienen.includes(a.id)&&a.beca!==true);
+            const conCobro=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.mes_correspondiente===mes&&f.estado!=="anulada").map(f=>f.alumno_id);
+            const conPago=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&f.mes_correspondiente===mes&&f.estado!=="anulada").map(f=>f.alumno_id);
+            const yaCubierto=new Set([...conCobro,...conPago]);
+            const nuevos=als.filter(a=>!yaCubierto.has(a.id)&&a.beca!==true);
+            const cubiertosCount=als.filter(a=>yaCubierto.has(a.id)&&a.beca!==true).length;
             return(<div style={{background:"#F0FDF4",borderRadius:8,padding:14,fontSize:12,border:"1px solid #BBF7D0"}}>
               <div style={{fontWeight:700,color:"#166534",marginBottom:8}}>Resumen:</div>
               <div>📚 {sec?.nombre} — L {Number(sec?.mensualidad).toLocaleString()}</div>
               <div>👥 Alumnos activos: {als.length}</div>
               {becados.length>0&&<div style={{color:"#7C3AED",fontWeight:600}}>🎓 Becados (se excluyen): {becados.length}</div>}
-              <div>✅ Ya con cobro de {mes}: {als.filter(a=>yaTienen.includes(a.id)).length}</div>
+              <div>✅ Ya con cobro o pago de {mes}: {cubiertosCount}</div>
               <div style={{marginTop:8,padding:"8px 10px",background:"#fff",borderRadius:6,fontWeight:700,color:"#059669",fontSize:14}}>📝 Se crearán: {nuevos.length} cobros</div>
               {nuevos.length>0&&<div style={{marginTop:8,fontSize:11,color:"#475569"}}>{nuevos.map(a=>{const m=(Number(a.monto_personalizado)>0)?Number(a.monto_personalizado):Number(sec?.mensualidad);return`${a.nombre} (L ${m.toLocaleString()})`;}).join(", ")}</div>}
               {becados.length>0&&<div style={{marginTop:6,fontSize:11,color:"#7C3AED"}}>Becados: {becados.map(a=>a.nombre).join(", ")}</div>}
