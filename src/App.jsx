@@ -11,6 +11,13 @@ const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto"
 const TIPOS_PAGO = [{value:"efectivo",label:"Efectivo"},{value:"transferencia",label:"Transferencia"},{value:"tarjeta",label:"Tarjeta"},{value:"deposito",label:"Depósito"}];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
+// ── Helpers de sucursal ──
+// IDs de las secciones que pertenecen a la sucursal activa.
+const seccionesDeSucursal = (data, sucId) => new Set(data.secciones.filter(s=>s.sucursal_id===sucId).map(s=>s.id));
+// ¿El alumno tiene al menos una matrícula (sección) en esta sucursal?
+// Nota: como un alumno puede estar en varias sucursales, filtramos por su sección.
+const alumnoEnSucursal = (al, secIds) => secIds.has(al.seccion_id);
+
 // ── Normaliza teléfono para WhatsApp (Honduras) ──
 // Detecta solo si el número ya trae el código de país 504 o no.
 // Acepta: "9765-4321", "+504 9765 4321", "50497654321", "00504...", etc.
@@ -61,9 +68,11 @@ const calcMora = (f, secciones=[], alumnos=[]) => {
   const mesIdx = MESES.indexOf(f.mes_correspondiente);
   if (mesIdx === -1) return 0;
   const year = parseInt(String(f.fecha_emision||"").split("-")[0]) || hoy.getFullYear();
-  const deadline = new Date(year, mesIdx, 28, 23, 59, 59);
+  // Día de vencimiento configurable por sección (por defecto 28)
+  const diaVenc = Math.min(Math.max(Number(sec.dia_vencimiento)||28,1),31);
+  const deadline = new Date(year, mesIdx, diaVenc, 23, 59, 59);
   if (hoy <= deadline) return 0;
-  // Cuántos meses de atraso (mínimo 1 pasado el día 28)
+  // Cuántos meses de atraso (mínimo 1 pasado el vencimiento)
   const mesesAtraso = Math.max(1, Math.ceil((hoy - deadline) / (1000*60*60*24*30)));
   const pct = Number(sec.mora_porcentaje) / 100;
   const recargo = Number(f.monto_total) * pct * mesesAtraso;
@@ -112,7 +121,7 @@ const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
   c.fillStyle='#334155'; c.font='13px Segoe UI,sans-serif';
   c.fillText(`Mes: ${f.mes_correspondiente}`,350,214);
   if(esPago){c.fillText(`Fecha pago: ${f.fecha_pago||'—'}`,350,234);c.fillText(`Tipo pago: ${f.tipo_pago}`,350,254);}
-  else{c.fillText(`Límite: 28 de ${f.mes_correspondiente}`,350,234);}
+  else{c.fillText(`Límite: ${Math.min(Math.max(Number(sec?.dia_vencimiento)||28,1),31)} de ${f.mes_correspondiente}`,350,234);}
   c.beginPath(); c.moveTo(40,300); c.lineTo(560,300); c.stroke();
   c.fillStyle='#F1F5F9'; c.fillRect(40,310,520,32);
   c.fillStyle='#475569'; c.font='bold 12px Segoe UI,sans-serif';
@@ -207,7 +216,8 @@ export default function App() {
   const [page, setPage] = useState("dashboard");
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [data, setData] = useState({ maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[] });
+  const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[] });
+  const [sucursalActiva, setSucursalActiva] = useState(null); // id de la sucursal seleccionada
   const [toast, setToast] = useState(null);
 
   const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
@@ -222,12 +232,19 @@ export default function App() {
   // Cargar todos los datos
   const loadData = useCallback(async () => {
     try {
-      const [maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material] = await Promise.all([
-        db.all("maestros"), db.all("secciones"), db.all("padres"),
+      const [sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material] = await Promise.all([
+        db.all("sucursales"), db.all("maestros"), db.all("secciones"), db.all("padres"),
         db.all("alumnos"), db.all("facturas"), db.all("gastos"),
         db.all("materiales"), db.all("ventas_material")
       ]);
-      setData({maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material});
+      setData({sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material});
+      // Elegir sucursal activa: la guardada, o la primera disponible
+      setSucursalActiva(prev=>{
+        if(prev && sucursales.some(s=>s.id===prev)) return prev;
+        const guardada=localStorage.getItem("seeds_sucursal");
+        if(guardada && sucursales.some(s=>s.id===guardada)) return guardada;
+        return sucursales[0]?.id || null;
+      });
     } catch(e) { showToast("Error cargando datos: "+e.message,"error"); }
   }, []);
 
@@ -247,18 +264,35 @@ export default function App() {
     {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema",icon:LogIn},
   ];
 
-  const props = { data, loadData, showToast };
+  // Vista de datos filtrada por la sucursal activa.
+  // Como la sucursal vive en la sección, filtramos secciones y de ahí todo lo demás.
+  const secIds = new Set(data.secciones.filter(s=>s.sucursal_id===sucursalActiva).map(s=>s.id));
+  const alumnosSuc = data.alumnos.filter(a=>secIds.has(a.seccion_id));
+  const alumnoIds = new Set(alumnosSuc.map(a=>a.id));
+  const dataSuc = {
+    ...data,
+    secciones: data.secciones.filter(s=>s.sucursal_id===sucursalActiva),
+    alumnos: alumnosSuc,
+    facturas: data.facturas.filter(f=>alumnoIds.has(f.alumno_id)),
+    materiales: data.materiales.filter(m=>secIds.has(m.seccion_id)),
+    ventas_material: data.ventas_material.filter(v=>secIds.has(v.seccion_id)||alumnoIds.has(v.alumno_id)),
+    gastos: data.gastos.filter(g=>g.sucursal_id===sucursalActiva),
+    // padres y maestros quedan completos (se comparten entre sucursales)
+  };
+  const propsSuc = { data: dataSuc, loadData, showToast, sucursalActiva };
+
+  const props = { data, loadData, showToast, sucursalActiva };
   const pageMap = {
-    dashboard:<Dashboard data={data} setPage={setPage}/>,
+    dashboard:<Dashboard data={dataSuc} setPage={setPage}/>,
     secciones:<SeccionesPage {...props}/>,
     maestros:<MaestrosPage {...props}/>,
-    alumnos:<AlumnosPage {...props}/>,
-    facturas:<FacturasPage {...props}/>,
-    materiales:<MaterialesPage {...props}/>,
-    historial:<HistorialPage {...props}/>,
-    recordatorios:<RecordatoriosPage {...props}/>,
-    finanzas:<FinanzasPage {...props}/>,
-    reportes:<ReportesPage {...props}/>,
+    alumnos:<AlumnosPage {...propsSuc}/>,
+    facturas:<FacturasPage {...propsSuc}/>,
+    materiales:<MaterialesPage {...propsSuc}/>,
+    historial:<HistorialPage {...propsSuc}/>,
+    recordatorios:<RecordatoriosPage {...propsSuc}/>,
+    finanzas:<FinanzasPage {...propsSuc}/>,
+    reportes:<ReportesPage {...propsSuc}/>,
     config:<ConfiguracionPage {...props}/>,
     sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}/>,
   };
@@ -285,8 +319,14 @@ export default function App() {
             <h1 style={{fontSize:17,fontWeight:700,color:"#1E293B",margin:0}}>{NAV.find(n=>n.id===page)?.label||""}</h1>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
+            {data.sucursales.length>0&&<div style={{display:"flex",alignItems:"center",gap:6,background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:"4px 8px"}}>
+              <BookOpen size={14} color="#7C3AED"/>
+              <select value={sucursalActiva||""} onChange={e=>{setSucursalActiva(e.target.value);try{localStorage.setItem("seeds_sucursal",e.target.value);}catch(x){}}} style={{border:"none",background:"transparent",fontSize:13,fontWeight:700,color:"#6D28D9",cursor:"pointer",outline:"none",fontFamily:"inherit",maxWidth:160}}>
+                {data.sucursales.filter(s=>s.activa!==false).map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+            </div>}
             <button onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"none",border:"1px solid #E2E8F0",borderRadius:6,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
-            <div style={{fontSize:12,color:"#64748B"}}>{session.user.email}</div>
+            <div style={{fontSize:12,color:"#64748B"}} className="hide-mobile">{session.user.email}</div>
           </div>
         </header>
         <div style={{flex:1,overflow:"auto",padding:20}}>{pageMap[page]}</div>
@@ -351,14 +391,17 @@ function Dashboard({data,setPage}){
 }
 
 // ── SECCIONES ──
-function SeccionesPage({data,loadData,showToast}){
+function SeccionesPage({data,loadData,showToast,sucursalActiva}){
   const[modal,setModal]=useState(null);const[form,setForm]=useState({nombre:"",horario:"",descripcion:"",mensualidad:""});
+  const seccionesSuc=data.secciones.filter(s=>s.sucursal_id===sucursalActiva);
+  const nombreSuc=data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||"";
   const open=(s=null)=>{setForm(s?{nombre:s.nombre,horario:s.horario||"",descripcion:s.descripcion||"",mensualidad:s.mensualidad||""}:{nombre:"",horario:"",descripcion:"",mensualidad:""});setModal(s?.id||"new");};
   const sv=async()=>{
     if(!form.nombre)return;
+    if(!sucursalActiva){showToast("Primero crea una sucursal en Configuración","error");return;}
     try{
       const row={nombre:form.nombre,horario:form.horario,descripcion:form.descripcion,mensualidad:parseFloat(form.mensualidad)||0};
-      if(modal==="new"){await db.insert("secciones",{id:uid(),...row,activa:true});showToast("Sección creada");}
+      if(modal==="new"){await db.insert("secciones",{id:uid(),...row,activa:true,sucursal_id:sucursalActiva});showToast("Sección creada");}
       else{await db.update("secciones",modal,row);showToast("Actualizada");}
       await loadData();setModal(null);
     }catch(e){showToast("Error: "+e.message,"error");}
@@ -369,9 +412,10 @@ function SeccionesPage({data,loadData,showToast}){
     catch(e){showToast("No se puede eliminar (tiene alumnos)","error");}
   };
   return(<div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><p style={{fontSize:13,color:"#64748B",margin:0}}>{data.secciones.length} secciones</p><button onClick={()=>open()} style={btn()}><Plus size={15}/>Nueva sección</button></div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}><p style={{fontSize:13,color:"#64748B",margin:0}}>{seccionesSuc.length} {seccionesSuc.length===1?"sección":"secciones"} en <strong>{nombreSuc}</strong></p><button onClick={()=>open()} style={btn()}><Plus size={15}/>Nueva sección</button></div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
-      {data.secciones.map(s=>{const ac=data.alumnos.filter(a=>a.seccion_id===s.id&&a.estado==="activo").length;return(<div key={s.id} style={card}><div style={{display:"flex",justifyContent:"space-between",alignItems:"start"}}><div><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:0}}>{s.nombre}</h3>{s.horario&&<p style={{fontSize:12,color:"#64748B",margin:"4px 0 0"}}>{s.horario}</p>}</div><div style={{display:"flex",gap:4}}><button onClick={()=>open(s)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>del(s.id)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Trash2 size={15} color="#EF4444"/></button></div></div><div style={{marginTop:12,display:"flex",gap:12}}><span style={{...badge("#2563EB"),display:"flex",alignItems:"center",gap:4}}><Users size={12}/>{ac}</span><span style={{...badge("#059669"),display:"flex",alignItems:"center",gap:4}}><DollarSign size={12}/>L {(Number(s.mensualidad)||0).toLocaleString()}</span></div>{s.descripcion&&<p style={{fontSize:12,color:"#94A3B8",margin:"10px 0 0"}}>{s.descripcion}</p>}</div>);})}
+      {seccionesSuc.map(s=>{const ac=data.alumnos.filter(a=>a.seccion_id===s.id&&a.estado==="activo").length;return(<div key={s.id} style={card}><div style={{display:"flex",justifyContent:"space-between",alignItems:"start"}}><div><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:0}}>{s.nombre}</h3>{s.horario&&<p style={{fontSize:12,color:"#64748B",margin:"4px 0 0"}}>{s.horario}</p>}</div><div style={{display:"flex",gap:4}}><button onClick={()=>open(s)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>del(s.id)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Trash2 size={15} color="#EF4444"/></button></div></div><div style={{marginTop:12,display:"flex",gap:12}}><span style={{...badge("#2563EB"),display:"flex",alignItems:"center",gap:4}}><Users size={12}/>{ac}</span><span style={{...badge("#059669"),display:"flex",alignItems:"center",gap:4}}><DollarSign size={12}/>L {(Number(s.mensualidad)||0).toLocaleString()}</span></div>{s.descripcion&&<p style={{fontSize:12,color:"#94A3B8",margin:"10px 0 0"}}>{s.descripcion}</p>}</div>);})}
+      {seccionesSuc.length===0&&<div style={{...card,gridColumn:"1/-1"}}><p style={{fontSize:13,color:"#94A3B8",textAlign:"center"}}>No hay secciones en {nombreSuc}. Crea la primera con el botón de arriba.</p></div>}
     </div>
     {modal&&<Modal title={modal==="new"?"Nueva sección":"Editar sección"} onClose={()=>setModal(null)} onSave={sv}><Field label="Nombre" value={form.nombre} onChange={v=>setForm({...form,nombre:v})} placeholder="Ej: Grupo A"/><Field label="Horario" value={form.horario} onChange={v=>setForm({...form,horario:v})} placeholder="Lun-Mié 3-4 PM"/><Field label="Mensualidad (L)" value={form.mensualidad} onChange={v=>setForm({...form,mensualidad:v})} type="number"/><Field label="Descripción" value={form.descripcion} onChange={v=>setForm({...form,descripcion:v})} multiline/></Modal>}
   </div>);
@@ -908,7 +952,7 @@ function RecordatoriosPage({data,showToast}){
 }
 
 // ── FINANZAS ──
-function FinanzasPage({data,loadData,showToast}){
+function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const[tab,setTab]=useState("resumen");const[modal,setModal]=useState(null);
   const[imgPreview,setImgPreview]=useState(null);
   const[form,setForm]=useState({tipo:"salario",maestro_id:"",descripcion:"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()]});
@@ -921,7 +965,7 @@ function FinanzasPage({data,loadData,showToast}){
     if(!form.monto||parseFloat(form.monto)<=0){showToast("Ingresa el monto","error");return;}
     if(form.tipo==="salario"&&!form.maestro_id){showToast("Selecciona un maestro","error");return;}
     try{
-      const gasto={id:uid(),tipo:form.tipo,maestro_id:form.maestro_id||null,descripcion:form.descripcion,monto:parseFloat(form.monto),fecha:form.fecha,mes_correspondiente:form.mes_correspondiente};
+      const gasto={id:uid(),tipo:form.tipo,maestro_id:form.maestro_id||null,descripcion:form.descripcion,monto:parseFloat(form.monto),fecha:form.fecha,mes_correspondiente:form.mes_correspondiente,sucursal_id:sucursalActiva};
       await db.insert("gastos",gasto);
       await loadData();setModal(null);
       if(form.tipo==="salario"){
@@ -1060,7 +1104,7 @@ function SistemaPage({data,loadData,showToast,session}){
     if(!confirm("Esto restaurará los datos del respaldo (se combinan con los actuales). ¿Continuar?"))return;
     try{
       const text=await file.text();const backup=JSON.parse(text);
-      for(const table of ["secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material"]){
+      for(const table of ["sucursales","secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material"]){
         if(backup[table]?.length) await db.upsertMany(table,backup[table]);
       }
       await loadData();showToast("✓ Respaldo restaurado");
@@ -1103,16 +1147,38 @@ function SistemaPage({data,loadData,showToast,session}){
 }
 
 // ── CONFIGURACIÓN (mora por sección + materiales por sección) ──
-function ConfiguracionPage({data,loadData,showToast}){
+function ConfiguracionPage({data,loadData,showToast,sucursalActiva}){
   const[editSec,setEditSec]=useState(null); // sección en edición de mora
-  const[moraForm,setMoraForm]=useState({mora_activa:false,mora_porcentaje:""});
+  const[moraForm,setMoraForm]=useState({mora_activa:false,mora_porcentaje:"",dia_vencimiento:"28"});
   const[matModal,setMatModal]=useState(null); // {seccion_id} o {id} para editar
   const[matForm,setMatForm]=useState({nombre:"",precio_venta:"",costo:"",seccion_id:""});
+  const[sucModal,setSucModal]=useState(null); // "new" o id
+  const[sucForm,setSucForm]=useState({nombre:"",descripcion:""});
 
-  const abrirMora=(s)=>{setMoraForm({mora_activa:s.mora_activa===true,mora_porcentaje:s.mora_porcentaje||""});setEditSec(s.id);};
+  // Solo las secciones de la sucursal activa
+  const seccionesSuc=data.secciones.filter(s=>s.sucursal_id===sucursalActiva);
+
+  const abrirSuc=(s=null)=>{if(s){setSucForm({nombre:s.nombre,descripcion:s.descripcion||""});setSucModal(s.id);}else{setSucForm({nombre:"",descripcion:""});setSucModal("new");}};
+  const guardarSuc=async()=>{
+    if(!sucForm.nombre){showToast("Ponle nombre a la sucursal","error");return;}
+    try{
+      if(sucModal==="new"){await db.insert("sucursales",{id:uid(),nombre:sucForm.nombre,descripcion:sucForm.descripcion,activa:true});showToast("Sucursal creada");}
+      else{await db.update("sucursales",sucModal,{nombre:sucForm.nombre,descripcion:sucForm.descripcion});showToast("Sucursal actualizada");}
+      await loadData();setSucModal(null);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+  const borrarSuc=async(id)=>{
+    const secs=data.secciones.filter(s=>s.sucursal_id===id);
+    if(secs.length>0){showToast("No se puede: la sucursal tiene secciones. Muévelas o elimínalas primero.","error");return;}
+    if(!confirm("¿Eliminar esta sucursal?"))return;
+    try{await db.remove("sucursales",id);await loadData();showToast("Sucursal eliminada","error");}catch(e){showToast("Error: "+e.message,"error");}
+  };
+
+  const abrirMora=(s)=>{setMoraForm({mora_activa:s.mora_activa===true,mora_porcentaje:s.mora_porcentaje||"",dia_vencimiento:String(s.dia_vencimiento||28)});setEditSec(s.id);};
   const guardarMora=async()=>{
     try{
-      await db.update("secciones",editSec,{mora_activa:moraForm.mora_activa===true,mora_porcentaje:parseFloat(moraForm.mora_porcentaje)||0});
+      const dia=Math.min(Math.max(parseInt(moraForm.dia_vencimiento)||28,1),31);
+      await db.update("secciones",editSec,{mora_activa:moraForm.mora_activa===true,mora_porcentaje:parseFloat(moraForm.mora_porcentaje)||0,dia_vencimiento:dia});
       await loadData();setEditSec(null);showToast("Configuración de mora guardada");
     }catch(e){showToast("Error: "+e.message,"error");}
   };
@@ -1133,30 +1199,56 @@ function ConfiguracionPage({data,loadData,showToast}){
   const borrarMat=async(id)=>{if(!confirm("¿Eliminar este material?"))return;try{await db.remove("materiales",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
   return(<div>
-    <div style={{...card,background:"#F5F3FF",border:"1px solid #DDD6FE"}}>
-      <h3 style={{fontSize:15,fontWeight:700,color:"#5B21B6",margin:"0 0 6px"}}>⚙️ Configuración por sección</h3>
-      <p style={{fontSize:13,color:"#6D28D9",margin:0}}>Aquí defines, para cada sección: el recargo por atraso (mora) y los materiales que vendes (libros, llaves) con su precio y costo.</p>
+    {/* GESTIÓN DE SUCURSALES */}
+    <div style={card}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+        <div>
+          <h3 style={{fontSize:15,fontWeight:700,color:"#5B21B6",margin:0}}>🏢 Sucursales / Apartados</h3>
+          <p style={{fontSize:12,color:"#6D28D9",margin:"2px 0 0"}}>Separa tu operación (modalidades, campus, etc.). Cambia entre ellas con el selector de arriba.</p>
+        </div>
+        <button onClick={()=>abrirSuc()} style={btn("#7C3AED")}><Plus size={15}/>Nueva sucursal</button>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+        {data.sucursales.map(s=>{
+          const nSec=data.secciones.filter(sec=>sec.sucursal_id===s.id).length;
+          const activa=s.id===sucursalActiva;
+          return(<div key={s.id} style={{border:activa?"2px solid #7C3AED":"1px solid #E2E8F0",borderRadius:8,padding:"8px 12px",background:activa?"#F5F3FF":"#fff",display:"flex",alignItems:"center",gap:10}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:activa?"#6D28D9":"#1E293B"}}>{s.nombre}{activa?" ●":""}</div>
+              <div style={{fontSize:11,color:"#94A3B8"}}>{nSec} {nSec===1?"sección":"secciones"}</div>
+            </div>
+            <button onClick={()=>abrirSuc(s)} style={{background:"none",border:"none",cursor:"pointer",padding:3}}><Edit size={13} color="#64748B"/></button>
+            <button onClick={()=>borrarSuc(s.id)} style={{background:"none",border:"none",cursor:"pointer",padding:3}}><Trash2 size={13} color="#EF4444"/></button>
+          </div>);
+        })}
+      </div>
     </div>
 
-    {data.secciones.length===0&&<div style={card}><p style={{fontSize:13,color:"#94A3B8",textAlign:"center"}}>Primero crea secciones en la pestaña "Secciones".</p></div>}
+    <div style={{...card,background:"#F5F3FF",border:"1px solid #DDD6FE"}}>
+      <h3 style={{fontSize:15,fontWeight:700,color:"#5B21B6",margin:"0 0 6px"}}>⚙️ Configuración de secciones — {data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||""}</h3>
+      <p style={{fontSize:13,color:"#6D28D9",margin:0}}>Para cada sección de esta sucursal: vencimiento, recargo por atraso (mora) y materiales (libros, llaves) con su precio y costo.</p>
+    </div>
 
-    {data.secciones.map(s=>{
+    {seccionesSuc.length===0&&<div style={card}><p style={{fontSize:13,color:"#94A3B8",textAlign:"center"}}>Esta sucursal no tiene secciones. Créalas en la pestaña "Secciones".</p></div>}
+
+    {seccionesSuc.map(s=>{
       const mats=data.materiales.filter(m=>m.seccion_id===s.id);
       return(<div key={s.id} style={card}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
           <h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:0}}>📚 {s.nombre} <span style={{fontSize:12,color:"#94A3B8",fontWeight:400}}>— L {Number(s.mensualidad).toLocaleString()}/mes</span></h3>
         </div>
 
-        {/* MORA */}
+        {/* VENCIMIENTO Y MORA */}
         <div style={{background:"#F8FAFC",borderRadius:8,padding:12,marginBottom:12,border:"1px solid #E2E8F0"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
             <div>
-              <div style={{fontSize:13,fontWeight:700,color:"#475569"}}>⏰ Recargo por atraso (mora)</div>
+              <div style={{fontSize:13,fontWeight:700,color:"#475569"}}>📅 Vencimiento y recargo</div>
+              <div style={{fontSize:12,color:"#334155"}}>Vence el día <strong>{s.dia_vencimiento||28}</strong> de cada mes</div>
               {s.mora_activa===true&&Number(s.mora_porcentaje)>0
-                ? <div style={{fontSize:12,color:"#059669",fontWeight:600}}>Activo: {s.mora_porcentaje}% de la mensualidad por cada mes de atraso</div>
-                : <div style={{fontSize:12,color:"#94A3B8"}}>Desactivado (sin recargo)</div>}
+                ? <div style={{fontSize:12,color:"#059669",fontWeight:600}}>Mora: {s.mora_porcentaje}% por cada mes de atraso</div>
+                : <div style={{fontSize:12,color:"#94A3B8"}}>Sin recargo por atraso</div>}
             </div>
-            <button onClick={()=>abrirMora(s)} style={btnO}><Edit size={13}/>Configurar mora</button>
+            <button onClick={()=>abrirMora(s)} style={btnO}><Edit size={13}/>Configurar</button>
           </div>
         </div>
 
@@ -1182,17 +1274,32 @@ function ConfiguracionPage({data,loadData,showToast}){
       </div>);
     })}
 
-    {/* Modal mora */}
-    {editSec&&<Modal title="⏰ Configurar recargo por atraso" onClose={()=>setEditSec(null)} onSave={guardarMora}>
-      <div onClick={()=>setMoraForm({...moraForm,mora_activa:!moraForm.mora_activa})} style={{padding:"10px 12px",borderRadius:8,cursor:"pointer",border:moraForm.mora_activa?"2px solid #059669":"1px solid #D1D5DB",background:moraForm.mora_activa?"#ECFDF5":"#fff",display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-        <div style={{width:20,height:20,borderRadius:5,border:moraForm.mora_activa?"none":"2px solid #D1D5DB",background:moraForm.mora_activa?"#059669":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{moraForm.mora_activa&&<Check size={14} color="#fff"/>}</div>
-        <div><div style={{fontSize:13,fontWeight:700,color:moraForm.mora_activa?"#059669":"#475569"}}>Aplicar recargo por atraso</div><div style={{fontSize:11,color:"#94A3B8"}}>Si está apagado, esta sección no tiene mora</div></div>
+    {/* Modal vencimiento y mora */}
+    {editSec&&<Modal title="📅 Vencimiento y recargo por atraso" onClose={()=>setEditSec(null)} onSave={guardarMora}>
+      <div style={{marginBottom:16}}>
+        <label style={label}>Día de vencimiento del cobro</label>
+        <select value={moraForm.dia_vencimiento} onChange={e=>setMoraForm({...moraForm,dia_vencimiento:e.target.value})} style={{...input,cursor:"pointer"}}>
+          {Array.from({length:31},(_,i)=>i+1).map(d=><option key={d} value={String(d)}>Día {d} de cada mes</option>)}
+        </select>
+        <div style={{fontSize:11,color:"#94A3B8",marginTop:4}}>Es la fecha límite que aparece en la factura de cobro. Si hay mora, empieza a contar después de este día.</div>
       </div>
-      {moraForm.mora_activa&&<div style={{marginBottom:12}}>
-        <label style={label}>Porcentaje de recargo (%)</label>
-        <input type="number" value={moraForm.mora_porcentaje} onChange={e=>setMoraForm({...moraForm,mora_porcentaje:e.target.value})} placeholder="Ej: 12" style={input}/>
-        <div style={{fontSize:11,color:"#94A3B8",marginTop:4}}>Se cobra este % de la mensualidad por CADA mes de atraso. Ej: 12% en una mensualidad de L 1,000 con 2 meses de atraso = L 240.</div>
-      </div>}
+      <div style={{borderTop:"1px solid #E2E8F0",paddingTop:14}}>
+        <div onClick={()=>setMoraForm({...moraForm,mora_activa:!moraForm.mora_activa})} style={{padding:"10px 12px",borderRadius:8,cursor:"pointer",border:moraForm.mora_activa?"2px solid #059669":"1px solid #D1D5DB",background:moraForm.mora_activa?"#ECFDF5":"#fff",display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+          <div style={{width:20,height:20,borderRadius:5,border:moraForm.mora_activa?"none":"2px solid #D1D5DB",background:moraForm.mora_activa?"#059669":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{moraForm.mora_activa&&<Check size={14} color="#fff"/>}</div>
+          <div><div style={{fontSize:13,fontWeight:700,color:moraForm.mora_activa?"#059669":"#475569"}}>Aplicar recargo por atraso</div><div style={{fontSize:11,color:"#94A3B8"}}>Si está apagado, esta sección no tiene mora</div></div>
+        </div>
+        {moraForm.mora_activa&&<div style={{marginBottom:12}}>
+          <label style={label}>Porcentaje de recargo (%)</label>
+          <input type="number" value={moraForm.mora_porcentaje} onChange={e=>setMoraForm({...moraForm,mora_porcentaje:e.target.value})} placeholder="Ej: 12" style={input}/>
+          <div style={{fontSize:11,color:"#94A3B8",marginTop:4}}>Se cobra este % de la mensualidad por CADA mes de atraso. Ej: 12% en una mensualidad de L 1,000 con 2 meses de atraso = L 240.</div>
+        </div>}
+      </div>
+    </Modal>}
+
+    {/* Modal sucursal */}
+    {sucModal&&<Modal title={sucModal==="new"?"🏢 Nueva sucursal":"Editar sucursal"} onClose={()=>setSucModal(null)} onSave={guardarSuc}>
+      <Field label="Nombre" value={sucForm.nombre} onChange={v=>setSucForm({...sucForm,nombre:v})} placeholder="Ej: Seeds Online, Campus Norte"/>
+      <Field label="Descripción (opcional)" value={sucForm.descripcion} onChange={v=>setSucForm({...sucForm,descripcion:v})} multiline/>
     </Modal>}
 
     {/* Modal material */}
@@ -1210,7 +1317,7 @@ function ConfiguracionPage({data,loadData,showToast}){
 }
 
 // ── MATERIALES (cobro + comprobante, igual que mensualidades) ──
-function MaterialesPage({data,loadData,showToast}){
+function MaterialesPage({data,loadData,showToast,sucursalActiva}){
   const[tab,setTab]=useState("cobros");
   const[modal,setModal]=useState(null);
   const[imgPreview,setImgPreview]=useState(null);
@@ -1244,7 +1351,7 @@ function MaterialesPage({data,loadData,showToast}){
       let n=data.ventas_material.length;
       const nuevas=bulkMat.alumnos.map(aid=>{
         n++;
-        return {id:uid(),numero:`MT-${String(n).padStart(4,"0")}`,material_id:mat.id,alumno_id:aid,seccion_id:bulkMat.seccion_id,nombre_material:mat.nombre,precio_venta:pv,costo:co,ganancia:pv-co,cantidad:1,fecha_venta:new Date().toISOString().split("T")[0],mes_correspondiente:bulkMat.mes_correspondiente,estado:"pendiente",fecha_pago:null,tipo_pago:"efectivo",notas:""};
+        return {id:uid(),numero:`MT-${String(n).padStart(4,"0")}`,material_id:mat.id,alumno_id:aid,seccion_id:bulkMat.seccion_id,sucursal_id:sucursalActiva,nombre_material:mat.nombre,precio_venta:pv,costo:co,ganancia:pv-co,cantidad:1,fecha_venta:new Date().toISOString().split("T")[0],mes_correspondiente:bulkMat.mes_correspondiente,estado:"pendiente",fecha_pago:null,tipo_pago:"efectivo",notas:""};
       });
       await db.insertMany("ventas_material",nuevas);
       await loadData();setModal(null);
@@ -1262,7 +1369,7 @@ function MaterialesPage({data,loadData,showToast}){
       const pv=Number(mat.precio_venta), co=Number(mat.costo);
       const num=`MT-${String(data.ventas_material.length+1).padStart(4,"0")}`;
       const hoy=new Date().toISOString().split("T")[0];
-      const venta={id:uid(),numero:num,material_id:mat.id,alumno_id:form.alumno_id,seccion_id:form.seccion_id,nombre_material:mat.nombre,precio_venta:pv*cant,costo:co*cant,ganancia:(pv-co)*cant,cantidad:cant,fecha_venta:hoy,mes_correspondiente:form.mes_correspondiente,estado:form.pagar_ya?"pagado":"pendiente",fecha_pago:form.pagar_ya?hoy:null,tipo_pago:form.tipo_pago,notas:form.notas};
+      const venta={id:uid(),numero:num,material_id:mat.id,alumno_id:form.alumno_id,seccion_id:form.seccion_id,sucursal_id:sucursalActiva,nombre_material:mat.nombre,precio_venta:pv*cant,costo:co*cant,ganancia:(pv-co)*cant,cantidad:cant,fecha_venta:hoy,mes_correspondiente:form.mes_correspondiente,estado:form.pagar_ya?"pagado":"pendiente",fecha_pago:form.pagar_ya?hoy:null,tipo_pago:form.tipo_pago,notas:form.notas};
       await db.insert("ventas_material",venta);
       await loadData();setModal(null);
       if(form.pagar_ya){setTimeout(()=>mostrarImagen(venta,"comprobante"),300);showToast(`✓ ${num} pagado — comprobante listo`);}
