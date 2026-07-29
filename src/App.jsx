@@ -4,7 +4,7 @@ import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
   Plus, Trash2, Edit, Search, Calendar, X, Eye,
   Send, Home, UserPlus, GraduationCap, Phone, Mail, DollarSign,
-  Check, AlertCircle, Menu, RefreshCw, Download, Upload
+  Check, AlertCircle, Menu, RefreshCw, Download, Upload, Award
 } from "lucide-react";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -210,14 +210,81 @@ const generarImgMaterial = (v, al, padre, sec, tipo) => {
   c.strokeStyle='#E2E8F0'; c.lineWidth=2; c.strokeRect(1,1,598,558);
   return cv.toDataURL('image/png');
 };
-//  APP PRINCIPAL
+
+// ── Imagen de factura de GRADUACIÓN (cobro o comprobante, varios conceptos) ──
+const generarImgGraduacion = (v, al, padre, sec, tipo) => {
+  const esPago = tipo === "comprobante";
+  const detalle = Array.isArray(v.detalle) ? v.detalle : (typeof v.detalle==="string" ? JSON.parse(v.detalle||"[]") : []);
+  const filas = detalle.length || 1;
+  const cv = document.createElement('canvas'); cv.width=600; cv.height=520 + filas*30;
+  const H = cv.height;
+  const c = cv.getContext('2d');
+  c.fillStyle='#fff'; c.fillRect(0,0,600,H);
+  // Encabezado morado (graduación)
+  c.fillStyle=esPago?'#059669':'#7C3AED'; c.fillRect(0,0,600,84);
+  c.fillStyle='#fff'; c.font='bold 22px Segoe UI,sans-serif'; c.textAlign='center';
+  c.fillText('Seeds English School',300,34);
+  c.fillStyle=esPago?'#D1FAE5':'#EDE9FE'; c.font='12px Segoe UI,sans-serif';
+  c.fillText('Jesús de Otoro, Intibucá, Honduras',300,55);
+  c.fillStyle='#fff'; c.font='11px Segoe UI,sans-serif';
+  c.fillText(String(v.fecha_venta||''),300,74);
+  c.fillStyle=esPago?'#059669':'#7C3AED'; c.fillRect(0,84,600,4);
+  c.fillStyle=esPago?'#059669':'#7C3AED'; c.font='bold 19px Segoe UI,sans-serif';
+  c.fillText(esPago?'🎓 COMPROBANTE DE GRADUACIÓN':'🎓 COBRO DE GRADUACIÓN',300,116);
+  c.fillStyle='#1E293B'; c.font='bold 15px Segoe UI,sans-serif';
+  c.fillText(v.numero,300,140);
+  c.strokeStyle='#E2E8F0'; c.lineWidth=1;
+  c.beginPath(); c.moveTo(40,158); c.lineTo(560,158); c.stroke();
+  c.textAlign='left'; c.fillStyle=esPago?'#059669':'#7C3AED'; c.font='bold 12px Segoe UI,sans-serif';
+  c.fillText('DATOS DEL ALUMNO',50,182);
+  c.fillStyle='#334155'; c.font='13px Segoe UI,sans-serif';
+  c.fillText(`Alumno:   ${al?.nombre||'—'}`,50,204);
+  c.fillText(`Padre:    ${padre?.nombre||'—'}`,50,224);
+  c.fillText(`Teléfono: ${padre?.telefono||'—'}`,50,244);
+  c.fillText(`Sección:  ${sec?.nombre||'—'}`,50,264);
+  c.fillStyle=esPago?'#059669':'#7C3AED'; c.font='bold 12px Segoe UI,sans-serif';
+  c.fillText('DETALLE',350,182);
+  c.fillStyle='#334155'; c.font='13px Segoe UI,sans-serif';
+  c.fillText(`Mes: ${v.mes_correspondiente||'—'}`,350,204);
+  if(esPago){c.fillText(`Fecha pago: ${v.fecha_pago||v.fecha_venta||'—'}`,350,224);c.fillText(`Tipo pago: ${v.tipo_pago||'—'}`,350,244);}
+  else{c.fillText(`Límite: ${Math.min(Math.max(Number(v.dia_vencimiento)||28,1),31)} de ${v.mes_correspondiente||''}`,350,224);}
+  c.beginPath(); c.moveTo(40,288); c.lineTo(560,288); c.stroke();
+  // Tabla de conceptos
+  c.fillStyle='#F1F5F9'; c.fillRect(40,298,520,32);
+  c.fillStyle='#475569'; c.font='bold 12px Segoe UI,sans-serif';
+  c.textAlign='left'; c.fillText('Concepto',55,319);
+  c.textAlign='right'; c.fillText('Monto',545,319);
+  let y=348;
+  c.font='14px Segoe UI,sans-serif';
+  (detalle.length?detalle:[{nombre:v.nombre_concepto||'Graduación',precio_venta:v.precio_venta}]).forEach(d=>{
+    c.textAlign='left'; c.fillStyle='#1E293B'; c.fillText(d.nombre||'Concepto',55,y);
+    c.textAlign='right'; c.fillText(`L ${Number(d.precio_venta).toLocaleString()}`,545,y);
+    y+=30;
+  });
+  y+=6;
+  c.strokeStyle='#E2E8F0';c.beginPath();c.moveTo(40,y);c.lineTo(560,y);c.stroke();y+=12;
+  c.fillStyle=esPago?'#059669':'#7C3AED'; c.fillRect(40,y,520,48);
+  c.fillStyle='#fff'; c.font='bold 20px Segoe UI,sans-serif';
+  c.textAlign='left'; c.fillText(esPago?'TOTAL PAGADO:':'TOTAL A PAGAR:',60,y+31);
+  c.textAlign='right'; c.fillText(`L ${Number(v.precio_venta).toLocaleString()}`,540,y+31);
+  y+=68;
+  if(esPago){
+    c.save();c.translate(300,y+20);c.rotate(-0.13);
+    c.strokeStyle='#059669';c.lineWidth=4;c.font='bold 44px Segoe UI,sans-serif';c.textAlign='center';
+    c.strokeText('✓ PAGADO',0,0);c.restore();y+=50;
+  }
+  c.fillStyle='#64748B'; c.font='11px Segoe UI,sans-serif'; c.textAlign='center';
+  c.fillText('Seeds English School 🌱',300,y+15);
+  c.strokeStyle='#E2E8F0'; c.lineWidth=2; c.strokeRect(1,1,598,H-2);
+  return cv.toDataURL('image/png');
+};
 // ══════════════════════════
 export default function App() {
   const [session, setSession] = useState(null);
   const [page, setPage] = useState("dashboard");
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[] });
+  const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[] });
   const [sucursalActiva, setSucursalActiva] = useState(null); // id de la sucursal seleccionada
   const [toast, setToast] = useState(null);
 
@@ -233,12 +300,13 @@ export default function App() {
   // Cargar todos los datos
   const loadData = useCallback(async () => {
     try {
-      const [sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material] = await Promise.all([
+      const [sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material,conceptos_graduacion,cobros_graduacion] = await Promise.all([
         db.all("sucursales"), db.all("maestros"), db.all("secciones"), db.all("padres"),
         db.all("alumnos"), db.all("facturas"), db.all("gastos"),
-        db.all("materiales"), db.all("ventas_material")
+        db.all("materiales"), db.all("ventas_material"),
+        db.all("conceptos_graduacion"), db.all("cobros_graduacion")
       ]);
-      setData({sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material});
+      setData({sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material,conceptos_graduacion,cobros_graduacion});
       // Elegir sucursal activa: la guardada, o la primera disponible
       setSucursalActiva(prev=>{
         if(prev && sucursales.some(s=>s.id===prev)) return prev;
@@ -260,6 +328,7 @@ export default function App() {
     {id:"dashboard",label:"Inicio",icon:Home},{id:"secciones",label:"Secciones",icon:BookOpen},
     {id:"maestros",label:"Maestros",icon:GraduationCap},{id:"alumnos",label:"Matrícula",icon:Users},
     {id:"facturas",label:"Facturas",icon:FileText},{id:"materiales",label:"Materiales",icon:CreditCard},
+    {id:"graduacion",label:"Graduación",icon:Award},
     {id:"historial",label:"Historial",icon:Calendar},{id:"recordatorios",label:"Recordatorios",icon:Bell},
     {id:"finanzas",label:"Finanzas",icon:DollarSign},{id:"reportes",label:"Reportes",icon:FileText},
     {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema",icon:LogIn},
@@ -277,6 +346,8 @@ export default function App() {
     facturas: data.facturas.filter(f=>alumnoIds.has(f.alumno_id)),
     materiales: data.materiales.filter(m=>secIds.has(m.seccion_id)),
     ventas_material: data.ventas_material.filter(v=>secIds.has(v.seccion_id)||alumnoIds.has(v.alumno_id)),
+    conceptos_graduacion: data.conceptos_graduacion.filter(cg=>secIds.has(cg.seccion_id)),
+    cobros_graduacion: data.cobros_graduacion.filter(cg=>secIds.has(cg.seccion_id)||alumnoIds.has(cg.alumno_id)),
     gastos: data.gastos.filter(g=>g.sucursal_id===sucursalActiva),
     // padres y maestros quedan completos (se comparten entre sucursales)
   };
@@ -290,6 +361,7 @@ export default function App() {
     alumnos:<AlumnosPage {...propsSuc}/>,
     facturas:<FacturasPage {...propsSuc}/>,
     materiales:<MaterialesPage {...propsSuc}/>,
+    graduacion:<GraduacionPage {...propsSuc}/>,
     historial:<HistorialPage {...propsSuc}/>,
     recordatorios:<RecordatoriosPage {...propsSuc}/>,
     finanzas:<FinanzasPage {...propsSuc}/>,
@@ -379,9 +451,12 @@ function Dashboard({data,setPage}){
   const ventMat=(data.ventas_material||[]).filter(v=>v.mes_correspondiente===mes&&v.estado==="pagado");
   const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
-  const ing=ingMens+ingMat;
+  const gradPag=(data.cobros_graduacion||[]).filter(v=>v.mes_correspondiente===mes&&v.estado==="pagado");
+  const ingGrad=gradPag.reduce((s,v)=>s+Number(v.precio_venta),0);
+  const ganGrad=gradPag.reduce((s,v)=>s+Number(v.ganancia),0);
+  const ing=ingMens+ingMat+ingGrad;
   const gastos=data.gastos.filter(g=>g.mes_correspondiente===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
-  const ganancia=ingMens+ganMat-gastos;
+  const ganancia=ingMens+ganMat+ganGrad-gastos;
   const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString()}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastos.toLocaleString()}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString()}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
   return(<div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
@@ -1133,7 +1208,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
 // ── SISTEMA (usuarios, respaldos) ──
 function SistemaPage({data,loadData,showToast,session}){
   const exportar=()=>{
-    const backup={fecha:new Date().toISOString(),version:3,...data};
+    const backup={fecha:new Date().toISOString(),version:4,...data};
     const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
     const a=document.createElement('a');
     a.download=`seeds_respaldo_${new Date().toISOString().split("T")[0]}.json`;
@@ -1145,7 +1220,7 @@ function SistemaPage({data,loadData,showToast,session}){
     if(!confirm("Esto restaurará los datos del respaldo (se combinan con los actuales). ¿Continuar?"))return;
     try{
       const text=await file.text();const backup=JSON.parse(text);
-      for(const table of ["sucursales","secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material"]){
+      for(const table of ["sucursales","secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material","conceptos_graduacion","cobros_graduacion"]){
         if(backup[table]?.length) await db.upsertMany(table,backup[table]);
       }
       await loadData();showToast("✓ Respaldo restaurado");
@@ -1193,6 +1268,8 @@ function ConfiguracionPage({data,loadData,showToast,sucursalActiva}){
   const[moraForm,setMoraForm]=useState({mora_activa:false,mora_porcentaje:"",dia_vencimiento:"28"});
   const[matModal,setMatModal]=useState(null); // {seccion_id} o {id} para editar
   const[matForm,setMatForm]=useState({nombre:"",precio_venta:"",costo:"",seccion_id:""});
+  const[gradModal,setGradModal]=useState(null); // concepto de graduación
+  const[gradForm,setGradForm]=useState({nombre:"",precio_venta:"",costo:"",seccion_id:""});
   const[sucModal,setSucModal]=useState(null); // "new" o id
   const[sucForm,setSucForm]=useState({nombre:"",descripcion:""});
 
@@ -1238,6 +1315,22 @@ function ConfiguracionPage({data,loadData,showToast,sucursalActiva}){
     }catch(e){showToast("Error: "+e.message,"error");}
   };
   const borrarMat=async(id)=>{if(!confirm("¿Eliminar este material?"))return;try{await db.remove("materiales",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
+
+  // Conceptos de graduación (catálogo por sección)
+  const abrirGrad=(seccion_id,cg=null)=>{
+    if(cg){setGradForm({nombre:cg.nombre,precio_venta:cg.precio_venta||"",costo:cg.costo||"",seccion_id:cg.seccion_id});setGradModal(cg.id);}
+    else{setGradForm({nombre:"",precio_venta:"",costo:"",seccion_id});setGradModal("new");}
+  };
+  const guardarGrad=async()=>{
+    if(!gradForm.nombre){showToast("Ponle nombre al concepto","error");return;}
+    try{
+      const row={nombre:gradForm.nombre,precio_venta:parseFloat(gradForm.precio_venta)||0,costo:parseFloat(gradForm.costo)||0,seccion_id:gradForm.seccion_id,sucursal_id:sucursalActiva};
+      if(gradModal==="new"){await db.insert("conceptos_graduacion",{id:uid(),...row,activo:true});showToast("Concepto agregado");}
+      else{await db.update("conceptos_graduacion",gradModal,row);showToast("Concepto actualizado");}
+      await loadData();setGradModal(null);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+  const borrarGrad=async(id)=>{if(!confirm("¿Eliminar este concepto?"))return;try{await db.remove("conceptos_graduacion",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
   return(<div>
     {/* GESTIÓN DE SUCURSALES */}
@@ -1312,6 +1405,27 @@ function ConfiguracionPage({data,loadData,showToast,sucursalActiva}){
               </td></tr>);})}</tbody>
           </table></div>}
         </div>
+
+        {/* CONCEPTOS DE GRADUACIÓN */}
+        {(()=>{const grads=data.conceptos_graduacion.filter(cg=>cg.seccion_id===s.id);return(
+        <div style={{background:"#F5F3FF",borderRadius:8,padding:12,border:"1px solid #DDD6FE",marginTop:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:grads.length?10:0,flexWrap:"wrap",gap:8}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#6D28D9"}}>🎓 Graduación (certificado, entrega)</div>
+            <button onClick={()=>abrirGrad(s.id)} style={btn("#7C3AED")}><Plus size={13}/>Agregar concepto</button>
+          </div>
+          {grads.length>0&&<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr style={{borderBottom:"1px solid #DDD6FE"}}>{["Concepto","Precio venta","Costo","Ganancia",""].map(h=><th key={h} style={{textAlign:["Precio venta","Costo","Ganancia"].includes(h)?"right":"left",padding:"5px 8px",color:"#6D28D9",fontWeight:600}}>{h}</th>)}</tr></thead>
+            <tbody>{grads.map(cg=>{const g=Number(cg.precio_venta)-Number(cg.costo);return(<tr key={cg.id} style={{borderBottom:"1px solid #EDE9FE"}}>
+              <td style={{padding:"5px 8px",fontWeight:600}}>{cg.nombre}</td>
+              <td style={{padding:"5px 8px",textAlign:"right"}}>L {Number(cg.precio_venta).toLocaleString()}</td>
+              <td style={{padding:"5px 8px",textAlign:"right",color:"#DC2626"}}>L {Number(cg.costo).toLocaleString()}</td>
+              <td style={{padding:"5px 8px",textAlign:"right",fontWeight:700,color:"#059669"}}>L {g.toLocaleString()}</td>
+              <td style={{padding:"5px 8px",textAlign:"right",whiteSpace:"nowrap"}}>
+                <button onClick={()=>abrirGrad(s.id,cg)} style={{background:"none",border:"none",cursor:"pointer",padding:3}}><Edit size={13} color="#64748B"/></button>
+                <button onClick={()=>borrarGrad(cg.id)} style={{background:"none",border:"none",cursor:"pointer",padding:3}}><Trash2 size={13} color="#EF4444"/></button>
+              </td></tr>);})}</tbody>
+          </table></div>}
+        </div>);})()}
       </div>);
     })}
 
@@ -1352,6 +1466,18 @@ function ConfiguracionPage({data,loadData,showToast,sucursalActiva}){
       </div>
       {(matForm.precio_venta||matForm.costo)&&<div style={{background:"#ECFDF5",border:"1px solid #BBF7D0",borderRadius:8,padding:10,fontSize:13,color:"#059669",fontWeight:700}}>
         Ganancia por unidad: L {((parseFloat(matForm.precio_venta)||0)-(parseFloat(matForm.costo)||0)).toLocaleString()}
+      </div>}
+    </Modal>}
+
+    {/* Modal concepto de graduación */}
+    {gradModal&&<Modal title={gradModal==="new"?"🎓 Nuevo concepto de graduación":"Editar concepto"} onClose={()=>setGradModal(null)} onSave={guardarGrad}>
+      <Field label="Nombre del concepto" value={gradForm.nombre} onChange={v=>setGradForm({...gradForm,nombre:v})} placeholder="Ej: Certificado, Gastos de entrega"/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <Field label="Precio de venta (L)" value={gradForm.precio_venta} onChange={v=>setGradForm({...gradForm,precio_venta:v})} type="number" placeholder="300"/>
+        <Field label="Costo real (L)" value={gradForm.costo} onChange={v=>setGradForm({...gradForm,costo:v})} type="number" placeholder="120"/>
+      </div>
+      {(gradForm.precio_venta||gradForm.costo)&&<div style={{background:"#ECFDF5",border:"1px solid #BBF7D0",borderRadius:8,padding:10,fontSize:13,color:"#059669",fontWeight:700}}>
+        Ganancia: L {((parseFloat(gradForm.precio_venta)||0)-(parseFloat(gradForm.costo)||0)).toLocaleString()}
       </div>}
     </Modal>}
   </div>);
@@ -1627,6 +1753,278 @@ function MaterialesPage({data,loadData,showToast,sucursalActiva}){
 }
 
 
+// ── GRADUACIÓN (certificados + entrega, cobro con varios conceptos juntos) ──
+function GraduacionPage({data,loadData,showToast,sucursalActiva}){
+  const[tab,setTab]=useState("cobros");
+  const[modal,setModal]=useState(null);
+  const[imgPreview,setImgPreview]=useState(null);
+  const[filtroSec,setFiltroSec]=useState("");
+  const[compForm,setCompForm]=useState(null);
+  // form individual: sección, alumno, conceptos seleccionados, mes, vencimiento
+  const[form,setForm]=useState({seccion_id:"",alumno_id:"",conceptos:[],mes_correspondiente:MESES[new Date().getMonth()],dia_vencimiento:"28",tipo_pago:"efectivo",notas:"",pagar_ya:false});
+  // bulk: sección, conceptos, mes, vencimiento, alumnos
+  const[bulk,setBulk]=useState({seccion_id:"",conceptos:[],mes_correspondiente:MESES[new Date().getMonth()],dia_vencimiento:"28",alumnos:[]});
+
+  const conceptosSeccion=(secId)=>data.conceptos_graduacion.filter(cg=>cg.seccion_id===secId&&cg.activo!==false);
+  const alumnosSeccion=form.seccion_id?data.alumnos.filter(a=>a.seccion_id===form.seccion_id&&a.estado==="activo"):[];
+
+  const mostrarImagen=(v,tipo)=>{
+    const al=data.alumnos.find(a=>a.id===v.alumno_id);
+    const padre=al?data.padres.find(p=>p.id===al.padre_id):null;
+    const sec=data.secciones.find(s=>s.id===v.seccion_id);
+    const dataUrl=generarImgGraduacion(v,al,padre,sec,tipo);
+    setImgPreview({dataUrl,phone:padre?.telefono||"",destinatario:padre?.nombre||al?.nombre||"",numero:v.numero});
+  };
+
+  const abrir=()=>{setForm({seccion_id:"",alumno_id:"",conceptos:[],mes_correspondiente:MESES[new Date().getMonth()],dia_vencimiento:"28",tipo_pago:"efectivo",notas:"",pagar_ya:false});setModal("new");};
+  const abrirBulk=()=>{setBulk({seccion_id:"",conceptos:[],mes_correspondiente:MESES[new Date().getMonth()],dia_vencimiento:"28",alumnos:[]});setModal("bulk");};
+
+  // Construye el detalle y totales a partir de una lista de ids de conceptos
+  const armarDetalle=(ids)=>{
+    const items=ids.map(cid=>data.conceptos_graduacion.find(c=>c.id===cid)).filter(Boolean);
+    const detalle=items.map(c=>({nombre:c.nombre,precio_venta:Number(c.precio_venta),costo:Number(c.costo)}));
+    const precio=detalle.reduce((s,d)=>s+d.precio_venta,0);
+    const costo=detalle.reduce((s,d)=>s+d.costo,0);
+    return {detalle,precio,costo,ganancia:precio-costo};
+  };
+
+  // Crear cobro individual (uno o varios conceptos juntos)
+  const guardar=async()=>{
+    if(!form.alumno_id){showToast("Selecciona el alumno","error");return;}
+    if(form.conceptos.length===0){showToast("Selecciona al menos un concepto","error");return;}
+    try{
+      const {detalle,precio,costo,ganancia}=armarDetalle(form.conceptos);
+      const num=`GR-${String(data.cobros_graduacion.length+1).padStart(4,"0")}`;
+      const hoy=new Date().toISOString().split("T")[0];
+      const cobro={id:uid(),numero:num,alumno_id:form.alumno_id,seccion_id:form.seccion_id,sucursal_id:sucursalActiva,mes_correspondiente:form.mes_correspondiente,dia_vencimiento:Math.min(Math.max(parseInt(form.dia_vencimiento)||28,1),31),fecha_venta:hoy,precio_venta:precio,costo,ganancia,detalle,estado:form.pagar_ya?"pagado":"pendiente",fecha_pago:form.pagar_ya?hoy:null,tipo_pago:form.tipo_pago,notas:form.notas};
+      await db.insert("cobros_graduacion",cobro);
+      await loadData();setModal(null);
+      if(form.pagar_ya){setTimeout(()=>mostrarImagen(cobro,"comprobante"),300);showToast(`✓ ${num} pagado — comprobante listo`);}
+      else{setTimeout(()=>mostrarImagen(cobro,"cobro"),300);showToast(`✓ Cobro ${num} creado`);}
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+
+  // Crear cobros de graduación para VARIOS alumnos de una sección
+  const crearBulk=async()=>{
+    if(bulk.conceptos.length===0){showToast("Selecciona al menos un concepto","error");return;}
+    if(bulk.alumnos.length===0){showToast("Selecciona al menos un alumno","error");return;}
+    try{
+      const {detalle,precio,costo,ganancia}=armarDetalle(bulk.conceptos);
+      let n=data.cobros_graduacion.length;
+      const hoy=new Date().toISOString().split("T")[0];
+      const nuevas=bulk.alumnos.map(aid=>{n++;return {id:uid(),numero:`GR-${String(n).padStart(4,"0")}`,alumno_id:aid,seccion_id:bulk.seccion_id,sucursal_id:sucursalActiva,mes_correspondiente:bulk.mes_correspondiente,dia_vencimiento:Math.min(Math.max(parseInt(bulk.dia_vencimiento)||28,1),31),fecha_venta:hoy,precio_venta:precio,costo,ganancia,detalle,estado:"pendiente",fecha_pago:null,tipo_pago:"efectivo",notas:""};});
+      await db.insertMany("cobros_graduacion",nuevas);
+      await loadData();setModal(null);
+      showToast(`✓ ${nuevas.length} cobros de graduación creados`);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+
+  const confirmarPago=async(v,tipoPago)=>{
+    try{
+      const hoy=new Date().toISOString().split("T")[0];
+      await db.update("cobros_graduacion",v.id,{estado:"pagado",fecha_pago:hoy,tipo_pago:tipoPago||v.tipo_pago||"efectivo"});
+      await loadData();setCompForm(null);
+      const actualizada={...v,estado:"pagado",fecha_pago:hoy,tipo_pago:tipoPago||v.tipo_pago};
+      setTimeout(()=>mostrarImagen(actualizada,"comprobante"),300);
+      showToast("Pago confirmado ✓ — comprobante listo");
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+
+  const anular=async(v)=>{if(!confirm("¿Anular este cobro de graduación?"))return;try{await db.update("cobros_graduacion",v.id,{estado:"anulado"});await loadData();showToast("Anulado","error");}catch(e){showToast("Error: "+e.message,"error");}};
+
+  const todas=data.cobros_graduacion.filter(v=>!filtroSec||v.seccion_id===filtroSec);
+  const cobros=todas.filter(v=>v.estado==="pendiente");
+  const pagados=todas.filter(v=>v.estado==="pagado");
+  const totVenta=pagados.reduce((s,v)=>s+Number(v.precio_venta),0);
+  const totGanancia=pagados.reduce((s,v)=>s+Number(v.ganancia),0);
+  const totPend=cobros.reduce((s,v)=>s+Number(v.precio_venta),0);
+  const tBtn=(a)=>({padding:"10px 20px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #7C3AED":"3px solid transparent",background:"transparent",color:a?"#7C3AED":"#64748B"});
+
+  // Selector de conceptos (checkboxes) reutilizable
+  const selectorConceptos=(secId,seleccion,onToggle)=>{
+    const cs=conceptosSeccion(secId);
+    if(!secId)return <div style={{background:"#F8FAFC",borderRadius:8,padding:16,textAlign:"center",color:"#94A3B8",fontSize:13}}>Elige una sección primero</div>;
+    if(cs.length===0)return <div style={{fontSize:12,color:"#DC2626",padding:8}}>Esta sección no tiene conceptos de graduación. Agrégalos en "Configuración".</div>;
+    return(<div style={{border:"1px solid #E2E8F0",borderRadius:8,padding:6}}>
+      {cs.map(c=>{const sel=seleccion.includes(c.id);return(
+        <div key={c.id} onClick={()=>onToggle(c.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 8px",borderRadius:6,cursor:"pointer",background:sel?"#F5F3FF":"transparent"}}>
+          <div style={{width:18,height:18,borderRadius:4,border:sel?"none":"2px solid #D1D5DB",background:sel?"#7C3AED":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{sel&&<Check size={12} color="#fff"/>}</div>
+          <div style={{flex:1}}><span style={{fontSize:13,fontWeight:600}}>{c.nombre}</span></div>
+          <span style={{fontSize:13,fontWeight:700,color:"#7C3AED"}}>L {Number(c.precio_venta).toLocaleString()}</span>
+        </div>);})}
+    </div>);
+  };
+
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+      <select value={filtroSec} onChange={e=>setFiltroSec(e.target.value)} style={{...input,width:200,cursor:"pointer"}}>
+        <option value="">Todas las secciones</option>
+        {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+      </select>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <button onClick={abrirBulk} style={btn("#7C3AED")}><Users size={15}/>Cobrar a una sección</button>
+        <button onClick={abrir} style={btn("#7C3AED")}><Plus size={15}/>Registrar graduación</button>
+      </div>
+    </div>
+
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:16}}>
+      <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Pendiente de cobro</div><div style={{fontSize:20,fontWeight:800,color:"#DC2626"}}>L {totPend.toLocaleString()}</div></div>
+      <div style={{...card,borderLeft:"3px solid #7C3AED",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Total cobrado</div><div style={{fontSize:20,fontWeight:800,color:"#7C3AED"}}>L {totVenta.toLocaleString()}</div></div>
+      <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ganancia cobrada</div><div style={{fontSize:20,fontWeight:800,color:"#059669"}}>L {totGanancia.toLocaleString()}</div></div>
+    </div>
+
+    <div style={{display:"flex",borderBottom:"1px solid #E2E8F0",marginBottom:16}}>
+      <button onClick={()=>setTab("cobros")} style={tBtn(tab==="cobros")}>📄 Cobros pendientes ({cobros.length})</button>
+      <button onClick={()=>setTab("pagados")} style={tBtn(tab==="pagados")}>✅ Pagados ({pagados.length})</button>
+    </div>
+
+    {tab==="cobros"&&<div style={card}>
+      {cobros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay cobros de graduación pendientes</p>:(
+        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Sección","Conceptos","Total","Mes",""].map(h=><th key={h} style={{textAlign:h==="Total"?"right":"left",padding:"5px 6px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+          <tbody>{[...cobros].reverse().map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const sec=data.secciones.find(s=>s.id===v.seccion_id);const det=Array.isArray(v.detalle)?v.detalle:[];return(<tr key={v.id} style={{borderBottom:"1px solid #F1F5F9"}}>
+            <td style={{padding:"5px 6px",fontWeight:600}}>{v.numero}</td>
+            <td style={{padding:"5px 6px"}}>{al?.nombre||"—"}</td>
+            <td style={{padding:"5px 6px"}}>{sec?<span style={badge("#7C3AED")}>{sec.nombre}</span>:"—"}</td>
+            <td style={{padding:"5px 6px",fontSize:11,color:"#64748B"}}>{det.map(d=>d.nombre).join(" + ")||"—"}</td>
+            <td style={{padding:"5px 6px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(v.precio_venta).toLocaleString()}</td>
+            <td style={{padding:"5px 6px"}}>{v.mes_correspondiente}</td>
+            <td style={{padding:"5px 6px",textAlign:"right",whiteSpace:"nowrap"}}>
+              <button onClick={()=>mostrarImagen(v,"cobro")} title="Enviar cobro" style={{background:"#25D366",border:"none",cursor:"pointer",padding:"3px 6px",borderRadius:4,marginRight:3}}><Phone size={12} color="#fff"/></button>
+              <button onClick={()=>setCompForm({venta:v,tipo_pago:v.tipo_pago||"efectivo"})} title="Confirmar pago" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 6px",borderRadius:4,marginRight:3}}><Check size={12} color="#fff"/></button>
+              <button onClick={()=>anular(v)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><X size={13} color="#DC2626"/></button>
+            </td></tr>);})}</tbody>
+        </table></div>
+      )}
+    </div>}
+
+    {tab==="pagados"&&<div style={card}>
+      {pagados.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay graduaciones pagadas aún</p>:(
+        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Sección","Conceptos","Venta","Ganancia","Fecha pago",""].map(h=><th key={h} style={{textAlign:["Venta","Ganancia"].includes(h)?"right":"left",padding:"5px 6px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+          <tbody>{[...pagados].reverse().map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const sec=data.secciones.find(s=>s.id===v.seccion_id);const det=Array.isArray(v.detalle)?v.detalle:[];return(<tr key={v.id} style={{borderBottom:"1px solid #F1F5F9"}}>
+            <td style={{padding:"5px 6px",fontWeight:600}}>{v.numero}</td>
+            <td style={{padding:"5px 6px"}}>{al?.nombre||"—"}</td>
+            <td style={{padding:"5px 6px"}}>{sec?<span style={badge("#7C3AED")}>{sec.nombre}</span>:"—"}</td>
+            <td style={{padding:"5px 6px",fontSize:11,color:"#64748B"}}>{det.map(d=>d.nombre).join(" + ")||"—"}</td>
+            <td style={{padding:"5px 6px",textAlign:"right",fontWeight:600}}>L {Number(v.precio_venta).toLocaleString()}</td>
+            <td style={{padding:"5px 6px",textAlign:"right",fontWeight:700,color:"#059669"}}>L {Number(v.ganancia).toLocaleString()}</td>
+            <td style={{padding:"5px 6px"}}>{v.fecha_pago||"—"}</td>
+            <td style={{padding:"5px 6px",textAlign:"center"}}><button onClick={()=>mostrarImagen(v,"comprobante")} title="Ver/enviar comprobante" style={{background:"#059669",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:4,color:"#fff",fontSize:11,fontWeight:600}}><Send size={11}/>Enviar</button></td>
+          </tr>);})}</tbody>
+        </table></div>
+      )}
+    </div>}
+
+    {/* Modal cobrar a una sección */}
+    {modal==="bulk"&&<Modal title="👥 Cobrar graduación a una sección" onClose={()=>setModal(null)} onSave={crearBulk} wide>
+      <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:10,fontSize:12,color:"#6D28D9",marginBottom:14}}>
+        Cobra los mismos conceptos de graduación (certificado + entrega) a varios alumnos de la sección de una vez. Quedan pendientes; luego confirmás el pago de cada uno.
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}>
+        <div>
+          <div style={{marginBottom:12}}><label style={label}>Sección *</label>
+            <select value={bulk.seccion_id} onChange={e=>{const sc=data.secciones.find(s=>s.id===e.target.value);setBulk({...bulk,seccion_id:e.target.value,conceptos:[],alumnos:[],dia_vencimiento:String(sc?.dia_vencimiento||28)});}} style={{...input,cursor:"pointer"}}>
+              <option value="">Seleccionar</option>
+              {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+          </div>
+          <div style={{marginBottom:12}}><label style={label}>Conceptos a cobrar *</label>
+            {selectorConceptos(bulk.seccion_id,bulk.conceptos,(cid)=>{const arr=bulk.conceptos.includes(cid)?bulk.conceptos.filter(x=>x!==cid):[...bulk.conceptos,cid];setBulk({...bulk,conceptos:arr});})}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div><label style={label}>Mes</label><select value={bulk.mes_correspondiente} onChange={e=>setBulk({...bulk,mes_correspondiente:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
+            <div><label style={label}>Vencimiento</label><select value={bulk.dia_vencimiento} onChange={e=>setBulk({...bulk,dia_vencimiento:e.target.value})} style={{...input,cursor:"pointer"}}>{Array.from({length:31},(_,i)=>i+1).map(d=><option key={d} value={String(d)}>Día {d}</option>)}</select></div>
+          </div>
+        </div>
+        <div>
+          {bulk.seccion_id&&(()=>{
+            const als=data.alumnos.filter(a=>a.seccion_id===bulk.seccion_id&&a.estado==="activo");
+            if(als.length===0)return<div style={{background:"#F8FAFC",borderRadius:8,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}}>No hay alumnos activos en esta sección</div>;
+            const todosSel=bulk.alumnos.length===als.length;
+            const tot=armarDetalle(bulk.conceptos).precio;
+            return(<div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <label style={{...label,margin:0}}>Alumnos ({bulk.alumnos.length}/{als.length})</label>
+                <button onClick={()=>setBulk({...bulk,alumnos:todosSel?[]:als.map(a=>a.id)})} style={{...btnO,padding:"4px 10px",fontSize:11}}>{todosSel?"Ninguno":"Todos"}</button>
+              </div>
+              <div style={{maxHeight:200,overflowY:"auto",border:"1px solid #E2E8F0",borderRadius:8,padding:6}}>
+                {als.map(a=>{const sel=bulk.alumnos.includes(a.id);return(
+                  <div key={a.id} onClick={()=>{const arr=sel?bulk.alumnos.filter(x=>x!==a.id):[...bulk.alumnos,a.id];setBulk({...bulk,alumnos:arr});}} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:6,cursor:"pointer",background:sel?"#F5F3FF":"transparent"}}>
+                    <div style={{width:18,height:18,borderRadius:4,border:sel?"none":"2px solid #D1D5DB",background:sel?"#7C3AED":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{sel&&<Check size={12} color="#fff"/>}</div>
+                    <span style={{fontSize:13}}>{a.nombre}</span>
+                  </div>);})}
+              </div>
+              {bulk.conceptos.length>0&&bulk.alumnos.length>0&&<div style={{marginTop:10,padding:10,background:"#ECFDF5",border:"1px solid #BBF7D0",borderRadius:8,fontSize:13}}>
+                <div style={{fontWeight:700,color:"#166534"}}>{bulk.alumnos.length} cobros × L {tot.toLocaleString()}</div>
+                <div style={{color:"#059669"}}>Total: <strong>L {(tot*bulk.alumnos.length).toLocaleString()}</strong></div>
+              </div>}
+            </div>);
+          })()}
+          {!bulk.seccion_id&&<div style={{background:"#F8FAFC",borderRadius:8,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}}>Selecciona una sección</div>}
+        </div>
+      </div>
+    </Modal>}
+
+    {/* Modal registrar individual */}
+    {modal==="new"&&<Modal title="🎓 Registrar graduación" onClose={()=>setModal(null)} onSave={guardar} wide>
+      <div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}>
+        <div>
+          <div style={{marginBottom:12}}><label style={label}>Sección *</label>
+            <select value={form.seccion_id} onChange={e=>{const sc=data.secciones.find(s=>s.id===e.target.value);setForm({...form,seccion_id:e.target.value,alumno_id:"",conceptos:[],dia_vencimiento:String(sc?.dia_vencimiento||28)});}} style={{...input,cursor:"pointer"}}>
+              <option value="">Seleccionar</option>
+              {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+          </div>
+          <div style={{marginBottom:12}}><label style={label}>Alumno *</label>
+            <select value={form.alumno_id} onChange={e=>setForm({...form,alumno_id:e.target.value})} style={{...input,cursor:"pointer"}} disabled={!form.seccion_id}>
+              <option value="">{form.seccion_id?"Seleccionar":"Elige sección primero"}</option>
+              {alumnosSeccion.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
+            </select>
+          </div>
+          <div style={{marginBottom:12}}><label style={label}>Conceptos a cobrar *</label>
+            {selectorConceptos(form.seccion_id,form.conceptos,(cid)=>{const arr=form.conceptos.includes(cid)?form.conceptos.filter(x=>x!==cid):[...form.conceptos,cid];setForm({...form,conceptos:arr});})}
+          </div>
+        </div>
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div style={{marginBottom:12}}><label style={label}>Mes</label><select value={form.mes_correspondiente} onChange={e=>setForm({...form,mes_correspondiente:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
+            {!form.pagar_ya&&<div style={{marginBottom:12}}><label style={label}>Vencimiento</label><select value={form.dia_vencimiento} onChange={e=>setForm({...form,dia_vencimiento:e.target.value})} style={{...input,cursor:"pointer"}}>{Array.from({length:31},(_,i)=>i+1).map(d=><option key={d} value={String(d)}>Día {d}</option>)}</select></div>}
+          </div>
+          <div onClick={()=>setForm({...form,pagar_ya:!form.pagar_ya})} style={{padding:"10px 12px",borderRadius:8,cursor:"pointer",border:form.pagar_ya?"2px solid #059669":"1px solid #D1D5DB",background:form.pagar_ya?"#ECFDF5":"#fff",display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <div style={{width:20,height:20,borderRadius:5,border:form.pagar_ya?"none":"2px solid #D1D5DB",background:form.pagar_ya?"#059669":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{form.pagar_ya&&<Check size={14} color="#fff"/>}</div>
+            <div><div style={{fontSize:13,fontWeight:700,color:form.pagar_ya?"#059669":"#475569"}}>Ya está pagado</div><div style={{fontSize:11,color:"#94A3B8"}}>{form.pagar_ya?"Se genera el comprobante de una vez":"Se crea como cobro pendiente"}</div></div>
+          </div>
+          {form.pagar_ya&&<div style={{marginBottom:12}}><label style={label}>Tipo de pago</label><select value={form.tipo_pago} onChange={e=>setForm({...form,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div>}
+          {form.conceptos.length>0&&(()=>{const r=armarDetalle(form.conceptos);return(
+            <div style={{background:"#ECFDF5",border:"1px solid #BBF7D0",borderRadius:8,padding:12,fontSize:13}}>
+              <div style={{color:"#166534",fontWeight:700,marginBottom:6}}>Resumen</div>
+              {r.detalle.map((d,i)=><div key={i} style={{display:"flex",justifyContent:"space-between"}}><span>{d.nombre}</span><span>L {d.precio_venta.toLocaleString()}</span></div>)}
+              <div style={{borderTop:"1px solid #BBF7D0",marginTop:6,paddingTop:6,display:"flex",justifyContent:"space-between",fontWeight:700}}><span>Total a cobrar:</span><span>L {r.precio.toLocaleString()}</span></div>
+              <div style={{color:"#059669",display:"flex",justifyContent:"space-between"}}><span>Tu ganancia:</span><strong>L {r.ganancia.toLocaleString()}</strong></div>
+            </div>);})()}
+        </div>
+      </div>
+    </Modal>}
+
+    {/* Modal confirmar pago */}
+    {compForm&&<Modal title="✅ Confirmar pago de graduación" onClose={()=>setCompForm(null)} onSave={()=>confirmarPago(compForm.venta,compForm.tipo_pago)}>
+      {(()=>{const v=compForm.venta;const al=data.alumnos.find(a=>a.id===v.alumno_id);const det=Array.isArray(v.detalle)?v.detalle:[];return(
+        <div style={{background:"#F0FDF4",borderRadius:8,padding:12,marginBottom:12,fontSize:13,border:"1px solid #BBF7D0"}}>
+          <div style={{fontWeight:700,color:"#166534",marginBottom:4}}>✓ {v.numero}</div>
+          <div><strong>Alumno:</strong> {al?.nombre}</div>
+          <div><strong>Conceptos:</strong> {det.map(d=>d.nombre).join(", ")}</div>
+          <div><strong>Total:</strong> L {Number(v.precio_venta).toLocaleString()}</div>
+        </div>);})()}
+      <div style={{marginBottom:12}}><label style={label}>Tipo de pago</label>
+        <select value={compForm.tipo_pago} onChange={e=>setCompForm({...compForm,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select>
+      </div>
+    </Modal>}
+
+    {imgPreview&&<ImgPreviewModal img={imgPreview} onClose={()=>setImgPreview(null)}/>}
+  </div>);
+}
+
 // ── REPORTES (resumen económico mensual completo) ──
 function ReportesPage({data}){
   const[mesSel,setMesSel]=useState(MESES[new Date().getMonth()]);
@@ -1644,6 +2042,14 @@ function ReportesPage({data}){
   const costoMateriales=ventasMes.reduce((s,v)=>s+Number(v.costo),0);
   const gananciaMateriales=ventasMes.reduce((s,v)=>s+Number(v.ganancia),0);
 
+  // Graduación de ese mes. Solo las PAGADAS entran como ingreso.
+  const gradMes=data.cobros_graduacion.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pagado");
+  const gradPendMes=data.cobros_graduacion.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pendiente");
+  const pendGraduacion=gradPendMes.reduce((s,v)=>s+Number(v.precio_venta),0);
+  const ingGraduacion=gradMes.reduce((s,v)=>s+Number(v.precio_venta),0);
+  const costoGraduacion=gradMes.reduce((s,v)=>s+Number(v.costo),0);
+  const gananciaGraduacion=gradMes.reduce((s,v)=>s+Number(v.ganancia),0);
+
   // Gastos del mes
   const gastosMes=data.gastos.filter(g=>g.mes_correspondiente===mesSel);
   const totSalarios=gastosMes.filter(g=>g.tipo==="salario").reduce((s,g)=>s+Number(g.monto),0);
@@ -1651,10 +2057,10 @@ function ReportesPage({data}){
   const totOtros=gastosMes.filter(g=>g.tipo==="otro").reduce((s,g)=>s+Number(g.monto),0);
   const totGastos=totSalarios+totRenta+totOtros;
 
-  // Ingreso total = mensualidades + venta de materiales (precio completo)
-  const ingresoTotal=ingMensualidades+ingMateriales;
-  // Resultado neto = ingresos - costo de materiales - gastos
-  const resultado=ingMensualidades+gananciaMateriales-totGastos;
+  // Ingreso total = mensualidades + venta de materiales + graduación (precio completo)
+  const ingresoTotal=ingMensualidades+ingMateriales+ingGraduacion;
+  // Resultado neto = ingresos - costo de materiales/graduación - gastos
+  const resultado=ingMensualidades+gananciaMateriales+gananciaGraduacion-totGastos;
 
   const fila=(label,valor,color="#1E293B",bold=false)=>(
     <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #F1F5F9"}}>
@@ -1672,7 +2078,7 @@ function ReportesPage({data}){
 
     {/* Tarjetas resumen */}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:16}}>
-      <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ingreso total</div><div style={{fontSize:22,fontWeight:800,color:"#059669"}}>L {ingresoTotal.toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>mensualidades + materiales</div></div>
+      <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ingreso total</div><div style={{fontSize:22,fontWeight:800,color:"#059669"}}>L {ingresoTotal.toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>mensualidades + materiales + graduación</div></div>
       <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Gastos</div><div style={{fontSize:22,fontWeight:800,color:"#DC2626"}}>L {totGastos.toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>salarios + renta + otros</div></div>
       <div style={{...card,borderLeft:`3px solid ${resultado>=0?"#059669":"#DC2626"}`,margin:0}}><div style={{fontSize:12,color:"#64748B"}}>{resultado>=0?"Ganancia neta":"Pérdida neta"}</div><div style={{fontSize:22,fontWeight:800,color:resultado>=0?"#059669":"#DC2626"}}>L {Math.abs(resultado).toLocaleString()}</div></div>
     </div>
@@ -1684,6 +2090,8 @@ function ReportesPage({data}){
         {fila("Mensualidades cobradas",ingMensualidades,"#059669")}
         {fila("Venta de materiales (pagados)",ingMateriales,"#D97706")}
         {pendMateriales>0&&fila("Materiales por cobrar (pendiente)",pendMateriales,"#94A3B8")}
+        {fila("Graduación cobrada (pagados)",ingGraduacion,"#7C3AED")}
+        {pendGraduacion>0&&fila("Graduación por cobrar (pendiente)",pendGraduacion,"#94A3B8")}
         <div style={{marginTop:6,paddingTop:6}}>{fila("Total ingresos",ingresoTotal,"#059669",true)}</div>
         <div style={{marginTop:14,fontSize:12,color:"#64748B"}}>
           <div style={{fontWeight:700,marginBottom:4}}>Materiales cobrados este mes:</div>
@@ -1700,10 +2108,12 @@ function ReportesPage({data}){
         {fila("Renta",totRenta,"#DC2626")}
         {fila("Otros gastos",totOtros,"#DC2626")}
         {fila("Costo de materiales vendidos",costoMateriales,"#DC2626")}
+        {costoGraduacion>0&&fila("Costo de graduación",costoGraduacion,"#DC2626")}
         <div style={{marginTop:14,padding:12,background:resultado>=0?"#ECFDF5":"#FEF2F2",borderRadius:8}}>
           <div style={{fontSize:12,color:"#64748B",marginBottom:6}}>Cálculo del resultado:</div>
           <div style={{fontSize:12,color:"#475569"}}>Mensualidades: L {ingMensualidades.toLocaleString()}</div>
           <div style={{fontSize:12,color:"#475569"}}>+ Ganancia materiales: L {gananciaMateriales.toLocaleString()}</div>
+          {gananciaGraduacion>0&&<div style={{fontSize:12,color:"#475569"}}>+ Ganancia graduación: L {gananciaGraduacion.toLocaleString()}</div>}
           <div style={{fontSize:12,color:"#475569"}}>− Gastos: L {totGastos.toLocaleString()}</div>
           <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid #D1D5DB",fontSize:16,fontWeight:800,color:resultado>=0?"#059669":"#DC2626"}}>
             = L {resultado.toLocaleString()} {resultado>=0?"✓":""}
