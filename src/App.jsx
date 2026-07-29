@@ -183,6 +183,7 @@ const generarImgMaterial = (v, al, padre, sec, tipo) => {
   c.fillStyle='#334155'; c.font='13px Segoe UI,sans-serif';
   c.fillText(`Mes: ${v.mes_correspondiente||'—'}`,350,204);
   if(esPago){c.fillText(`Fecha pago: ${v.fecha_pago||v.fecha_venta||'—'}`,350,224);c.fillText(`Tipo pago: ${v.tipo_pago||'—'}`,350,244);}
+  else{c.fillText(`Límite: ${Math.min(Math.max(Number(v.dia_vencimiento)||28,1),31)} de ${v.mes_correspondiente||''}`,350,224);}
   c.beginPath(); c.moveTo(40,288); c.lineTo(560,288); c.stroke();
   c.fillStyle='#F1F5F9'; c.fillRect(40,298,520,32);
   c.fillStyle='#475569'; c.font='bold 12px Segoe UI,sans-serif';
@@ -393,9 +394,30 @@ function Dashboard({data,setPage}){
 // ── SECCIONES ──
 function SeccionesPage({data,loadData,showToast,sucursalActiva}){
   const[modal,setModal]=useState(null);const[form,setForm]=useState({nombre:"",horario:"",descripcion:"",mensualidad:""});
+  const[moverModal,setMoverModal]=useState(null); // sección a mover
+  const[destino,setDestino]=useState("");
   const seccionesSuc=data.secciones.filter(s=>s.sucursal_id===sucursalActiva);
   const nombreSuc=data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||"";
   const open=(s=null)=>{setForm(s?{nombre:s.nombre,horario:s.horario||"",descripcion:s.descripcion||"",mensualidad:s.mensualidad||""}:{nombre:"",horario:"",descripcion:"",mensualidad:""});setModal(s?.id||"new");};
+
+  const abrirMover=(s)=>{setDestino("");setMoverModal(s);};
+  const moverSeccion=async()=>{
+    if(!destino){showToast("Elige la sucursal destino","error");return;}
+    try{
+      // Mover la sección a la nueva sucursal. Alumnos y facturas van con ella
+      // porque están ligados a la sección. Las ventas de material y gastos
+      // guardan su propia sucursal, así que también los actualizamos.
+      await db.update("secciones",moverModal.id,{sucursal_id:destino});
+      // Actualizar la sucursal de las ventas de material de esa sección
+      const ventasSec=data.ventas_material.filter(v=>v.seccion_id===moverModal.id);
+      for(const v of ventasSec){ await db.update("ventas_material",v.id,{sucursal_id:destino}); }
+      await loadData();
+      const nom=data.sucursales.find(s=>s.id===destino)?.nombre||"";
+      setMoverModal(null);
+      showToast(`✓ "${moverModal.nombre}" movida a ${nom}`);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+
   const sv=async()=>{
     if(!form.nombre)return;
     if(!sucursalActiva){showToast("Primero crea una sucursal en Configuración","error");return;}
@@ -414,10 +436,29 @@ function SeccionesPage({data,loadData,showToast,sucursalActiva}){
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}><p style={{fontSize:13,color:"#64748B",margin:0}}>{seccionesSuc.length} {seccionesSuc.length===1?"sección":"secciones"} en <strong>{nombreSuc}</strong></p><button onClick={()=>open()} style={btn()}><Plus size={15}/>Nueva sección</button></div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
-      {seccionesSuc.map(s=>{const ac=data.alumnos.filter(a=>a.seccion_id===s.id&&a.estado==="activo").length;return(<div key={s.id} style={card}><div style={{display:"flex",justifyContent:"space-between",alignItems:"start"}}><div><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:0}}>{s.nombre}</h3>{s.horario&&<p style={{fontSize:12,color:"#64748B",margin:"4px 0 0"}}>{s.horario}</p>}</div><div style={{display:"flex",gap:4}}><button onClick={()=>open(s)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>del(s.id)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Trash2 size={15} color="#EF4444"/></button></div></div><div style={{marginTop:12,display:"flex",gap:12}}><span style={{...badge("#2563EB"),display:"flex",alignItems:"center",gap:4}}><Users size={12}/>{ac}</span><span style={{...badge("#059669"),display:"flex",alignItems:"center",gap:4}}><DollarSign size={12}/>L {(Number(s.mensualidad)||0).toLocaleString()}</span></div>{s.descripcion&&<p style={{fontSize:12,color:"#94A3B8",margin:"10px 0 0"}}>{s.descripcion}</p>}</div>);})}
+      {seccionesSuc.map(s=>{const ac=data.alumnos.filter(a=>a.seccion_id===s.id&&a.estado==="activo").length;return(<div key={s.id} style={card}><div style={{display:"flex",justifyContent:"space-between",alignItems:"start"}}><div><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:0}}>{s.nombre}</h3>{s.horario&&<p style={{fontSize:12,color:"#64748B",margin:"4px 0 0"}}>{s.horario}</p>}</div><div style={{display:"flex",gap:4}}><button onClick={()=>abrirMover(s)} title="Mover a otra sucursal" style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Send size={15} color="#7C3AED"/></button><button onClick={()=>open(s)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>del(s.id)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Trash2 size={15} color="#EF4444"/></button></div></div><div style={{marginTop:12,display:"flex",gap:12}}><span style={{...badge("#2563EB"),display:"flex",alignItems:"center",gap:4}}><Users size={12}/>{ac}</span><span style={{...badge("#059669"),display:"flex",alignItems:"center",gap:4}}><DollarSign size={12}/>L {(Number(s.mensualidad)||0).toLocaleString()}</span></div>{s.descripcion&&<p style={{fontSize:12,color:"#94A3B8",margin:"10px 0 0"}}>{s.descripcion}</p>}</div>);})}
       {seccionesSuc.length===0&&<div style={{...card,gridColumn:"1/-1"}}><p style={{fontSize:13,color:"#94A3B8",textAlign:"center"}}>No hay secciones en {nombreSuc}. Crea la primera con el botón de arriba.</p></div>}
     </div>
     {modal&&<Modal title={modal==="new"?"Nueva sección":"Editar sección"} onClose={()=>setModal(null)} onSave={sv}><Field label="Nombre" value={form.nombre} onChange={v=>setForm({...form,nombre:v})} placeholder="Ej: Grupo A"/><Field label="Horario" value={form.horario} onChange={v=>setForm({...form,horario:v})} placeholder="Lun-Mié 3-4 PM"/><Field label="Mensualidad (L)" value={form.mensualidad} onChange={v=>setForm({...form,mensualidad:v})} type="number"/><Field label="Descripción" value={form.descripcion} onChange={v=>setForm({...form,descripcion:v})} multiline/></Modal>}
+
+    {/* Modal mover sección a otra sucursal */}
+    {moverModal&&<Modal title="↗️ Mover sección a otra sucursal" onClose={()=>setMoverModal(null)} onSave={moverSeccion}>
+      <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:12,fontSize:13,marginBottom:14}}>
+        <div style={{color:"#6D28D9",fontWeight:700,marginBottom:4}}>📚 {moverModal.nombre}</div>
+        <div style={{fontSize:12,color:"#7C3AED"}}>Se mueve con todo: sus alumnos, cobros, comprobantes y ventas de material. Toda su facturación pasa a la nueva sucursal.</div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={label}>Mover a la sucursal:</label>
+        <select value={destino} onChange={e=>setDestino(e.target.value)} style={{...input,cursor:"pointer"}}>
+          <option value="">Seleccionar sucursal destino</option>
+          {data.sucursales.filter(s=>s.id!==sucursalActiva&&s.activa!==false).map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+        </select>
+        {data.sucursales.filter(s=>s.id!==sucursalActiva).length===0&&<div style={{fontSize:11,color:"#DC2626",marginTop:4}}>No hay otras sucursales. Crea una en Configuración primero.</div>}
+      </div>
+      <div style={{background:"#FEF3C7",borderRadius:8,padding:10,fontSize:12,color:"#92400E"}}>
+        Después de mover, esta sección desaparecerá de <strong>{nombreSuc}</strong> y aparecerá en la sucursal destino. Cambia el selector de arriba para verla allá.
+      </div>
+    </Modal>}
   </div>);
 }
 
@@ -1321,10 +1362,10 @@ function MaterialesPage({data,loadData,showToast,sucursalActiva}){
   const[tab,setTab]=useState("cobros");
   const[modal,setModal]=useState(null);
   const[imgPreview,setImgPreview]=useState(null);
-  const[form,setForm]=useState({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],notas:"",pagar_ya:false});
+  const[form,setForm]=useState({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],dia_vencimiento:"28",notas:"",pagar_ya:false});
   const[filtroSec,setFiltroSec]=useState("");
   const[compForm,setCompForm]=useState(null); // venta pendiente que se está cobrando
-  const[bulkMat,setBulkMat]=useState({seccion_id:"",material_id:"",mes_correspondiente:MESES[new Date().getMonth()],alumnos:[]});
+  const[bulkMat,setBulkMat]=useState({seccion_id:"",material_id:"",mes_correspondiente:MESES[new Date().getMonth()],dia_vencimiento:"28",alumnos:[]});
 
   const matsSeccion=form.seccion_id?data.materiales.filter(m=>m.seccion_id===form.seccion_id&&m.activo!==false):[];
   const alumnosSeccion=form.seccion_id?data.alumnos.filter(a=>a.seccion_id===form.seccion_id&&a.estado==="activo"):[];
@@ -1338,7 +1379,7 @@ function MaterialesPage({data,loadData,showToast,sucursalActiva}){
     setImgPreview({dataUrl,phone:padre?.telefono||"",destinatario:padre?.nombre||al?.nombre||"",numero:v.numero});
   };
 
-  const abrir=()=>{setForm({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],notas:"",pagar_ya:false});setModal("new");};
+  const abrir=()=>{setForm({seccion_id:"",material_id:"",alumno_id:"",cantidad:"1",tipo_pago:"efectivo",mes_correspondiente:MESES[new Date().getMonth()],dia_vencimiento:"28",notas:"",pagar_ya:false});setModal("new");};
 
   // Crear cobros de un material para VARIOS alumnos de una sección a la vez.
   // Se crean como cobros pendientes (luego se confirma el pago de cada uno).
@@ -1351,7 +1392,7 @@ function MaterialesPage({data,loadData,showToast,sucursalActiva}){
       let n=data.ventas_material.length;
       const nuevas=bulkMat.alumnos.map(aid=>{
         n++;
-        return {id:uid(),numero:`MT-${String(n).padStart(4,"0")}`,material_id:mat.id,alumno_id:aid,seccion_id:bulkMat.seccion_id,sucursal_id:sucursalActiva,nombre_material:mat.nombre,precio_venta:pv,costo:co,ganancia:pv-co,cantidad:1,fecha_venta:new Date().toISOString().split("T")[0],mes_correspondiente:bulkMat.mes_correspondiente,estado:"pendiente",fecha_pago:null,tipo_pago:"efectivo",notas:""};
+        return {id:uid(),numero:`MT-${String(n).padStart(4,"0")}`,material_id:mat.id,alumno_id:aid,seccion_id:bulkMat.seccion_id,sucursal_id:sucursalActiva,nombre_material:mat.nombre,precio_venta:pv,costo:co,ganancia:pv-co,cantidad:1,fecha_venta:new Date().toISOString().split("T")[0],mes_correspondiente:bulkMat.mes_correspondiente,dia_vencimiento:Math.min(Math.max(parseInt(bulkMat.dia_vencimiento)||28,1),31),estado:"pendiente",fecha_pago:null,tipo_pago:"efectivo",notas:""};
       });
       await db.insertMany("ventas_material",nuevas);
       await loadData();setModal(null);
@@ -1369,7 +1410,7 @@ function MaterialesPage({data,loadData,showToast,sucursalActiva}){
       const pv=Number(mat.precio_venta), co=Number(mat.costo);
       const num=`MT-${String(data.ventas_material.length+1).padStart(4,"0")}`;
       const hoy=new Date().toISOString().split("T")[0];
-      const venta={id:uid(),numero:num,material_id:mat.id,alumno_id:form.alumno_id,seccion_id:form.seccion_id,sucursal_id:sucursalActiva,nombre_material:mat.nombre,precio_venta:pv*cant,costo:co*cant,ganancia:(pv-co)*cant,cantidad:cant,fecha_venta:hoy,mes_correspondiente:form.mes_correspondiente,estado:form.pagar_ya?"pagado":"pendiente",fecha_pago:form.pagar_ya?hoy:null,tipo_pago:form.tipo_pago,notas:form.notas};
+      const venta={id:uid(),numero:num,material_id:mat.id,alumno_id:form.alumno_id,seccion_id:form.seccion_id,sucursal_id:sucursalActiva,nombre_material:mat.nombre,precio_venta:pv*cant,costo:co*cant,ganancia:(pv-co)*cant,cantidad:cant,fecha_venta:hoy,mes_correspondiente:form.mes_correspondiente,dia_vencimiento:Math.min(Math.max(parseInt(form.dia_vencimiento)||28,1),31),estado:form.pagar_ya?"pagado":"pendiente",fecha_pago:form.pagar_ya?hoy:null,tipo_pago:form.tipo_pago,notas:form.notas};
       await db.insert("ventas_material",venta);
       await loadData();setModal(null);
       if(form.pagar_ya){setTimeout(()=>mostrarImagen(venta,"comprobante"),300);showToast(`✓ ${num} pagado — comprobante listo`);}
@@ -1406,7 +1447,7 @@ function MaterialesPage({data,loadData,showToast,sucursalActiva}){
         {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
       </select>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <button onClick={()=>{setBulkMat({seccion_id:"",material_id:"",mes_correspondiente:MESES[new Date().getMonth()],alumnos:[]});setModal("bulkmat");}} style={btn("#7C3AED")}><Users size={15}/>Cobrar a una sección</button>
+        <button onClick={()=>{setBulkMat({seccion_id:"",material_id:"",mes_correspondiente:MESES[new Date().getMonth()],dia_vencimiento:"28",alumnos:[]});setModal("bulkmat");}} style={btn("#7C3AED")}><Users size={15}/>Cobrar a una sección</button>
         <button onClick={abrir} style={btn("#D97706")}><Plus size={15}/>Registrar material</button>
       </div>
     </div>
@@ -1472,7 +1513,7 @@ function MaterialesPage({data,loadData,showToast,sucursalActiva}){
       <div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}>
         <div>
           <div style={{marginBottom:12}}><label style={label}>Sección *</label>
-            <select value={bulkMat.seccion_id} onChange={e=>setBulkMat({...bulkMat,seccion_id:e.target.value,material_id:"",alumnos:[]})} style={{...input,cursor:"pointer"}}>
+            <select value={bulkMat.seccion_id} onChange={e=>{const sc=data.secciones.find(s=>s.id===e.target.value);setBulkMat({...bulkMat,seccion_id:e.target.value,material_id:"",alumnos:[],dia_vencimiento:String(sc?.dia_vencimiento||28)});}} style={{...input,cursor:"pointer"}}>
               <option value="">Seleccionar</option>
               {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
             </select>
@@ -1486,6 +1527,9 @@ function MaterialesPage({data,loadData,showToast,sucursalActiva}){
           </div>
           <div style={{marginBottom:12}}><label style={label}>Mes</label>
             <select value={bulkMat.mes_correspondiente} onChange={e=>setBulkMat({...bulkMat,mes_correspondiente:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select>
+          </div>
+          <div style={{marginBottom:12}}><label style={label}>Día de vencimiento del cobro</label>
+            <select value={bulkMat.dia_vencimiento} onChange={e=>setBulkMat({...bulkMat,dia_vencimiento:e.target.value})} style={{...input,cursor:"pointer"}}>{Array.from({length:31},(_,i)=>i+1).map(d=><option key={d} value={String(d)}>Día {d}</option>)}</select>
           </div>
         </div>
         <div>
@@ -1521,7 +1565,7 @@ function MaterialesPage({data,loadData,showToast,sucursalActiva}){
       <div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}>
         <div>
           <div style={{marginBottom:12}}><label style={label}>Sección *</label>
-            <select value={form.seccion_id} onChange={e=>setForm({...form,seccion_id:e.target.value,material_id:"",alumno_id:""})} style={{...input,cursor:"pointer"}}>
+            <select value={form.seccion_id} onChange={e=>{const sc=data.secciones.find(s=>s.id===e.target.value);setForm({...form,seccion_id:e.target.value,material_id:"",alumno_id:"",dia_vencimiento:String(sc?.dia_vencimiento||28)});}} style={{...input,cursor:"pointer"}}>
               <option value="">Seleccionar</option>
               {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
             </select>
@@ -1545,7 +1589,10 @@ function MaterialesPage({data,loadData,showToast,sucursalActiva}){
             <Field label="Cantidad" value={form.cantidad} onChange={v=>setForm({...form,cantidad:v})} type="number"/>
             <div style={{marginBottom:12}}><label style={label}>Mes</label><select value={form.mes_correspondiente} onChange={e=>setForm({...form,mes_correspondiente:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
           </div>
-          {/* Interruptor: pagar ya o dejar pendiente */}
+          {!form.pagar_ya&&<div style={{marginBottom:12}}><label style={label}>Día de vencimiento del cobro</label>
+            <select value={form.dia_vencimiento} onChange={e=>setForm({...form,dia_vencimiento:e.target.value})} style={{...input,cursor:"pointer"}}>{Array.from({length:31},(_,i)=>i+1).map(d=><option key={d} value={String(d)}>Día {d}</option>)}</select>
+            <div style={{fontSize:11,color:"#94A3B8",marginTop:4}}>Fecha límite que aparece en la factura de cobro.</div>
+          </div>}
           <div onClick={()=>setForm({...form,pagar_ya:!form.pagar_ya})} style={{padding:"10px 12px",borderRadius:8,cursor:"pointer",border:form.pagar_ya?"2px solid #059669":"1px solid #D1D5DB",background:form.pagar_ya?"#ECFDF5":"#fff",display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
             <div style={{width:20,height:20,borderRadius:5,border:form.pagar_ya?"none":"2px solid #D1D5DB",background:form.pagar_ya?"#059669":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{form.pagar_ya&&<Check size={14} color="#fff"/>}</div>
             <div><div style={{fontSize:13,fontWeight:700,color:form.pagar_ya?"#059669":"#475569"}}>Ya está pagado</div><div style={{fontSize:11,color:"#94A3B8"}}>{form.pagar_ya?"Se genera el comprobante de una vez":"Se crea como cobro pendiente"}</div></div>
