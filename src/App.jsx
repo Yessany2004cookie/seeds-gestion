@@ -8,6 +8,16 @@ import {
 } from "lucide-react";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+// Devuelve el nombre del mes (ej "Julio") a partir de una fecha "AAAA-MM-DD".
+// Se usa para contar ingresos por la FECHA REAL en que entró el dinero.
+const mesDeFecha = (fecha) => {
+  if(!fecha) return null;
+  const m = parseInt(String(fecha).split("-")[1]); // "2026-07-29" -> 7
+  return (m>=1 && m<=12) ? MESES[m-1] : null;
+};
+// Mes en que cuenta un ingreso: la fecha real de pago; si por algún motivo
+// no hay fecha_pago (datos viejos), usa el mes asignado como respaldo.
+const mesIngreso = (reg) => mesDeFecha(reg.fecha_pago) || reg.mes_correspondiente || null;
 const TIPOS_PAGO = [{value:"efectivo",label:"Efectivo"},{value:"transferencia",label:"Transferencia"},{value:"tarjeta",label:"Tarjeta"},{value:"deposito",label:"Depósito"}];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -447,11 +457,11 @@ function Dashboard({data,setPage}){
   const ts=data.secciones.filter(s=>s.activa!==false).length;
   const pend=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
   const mes=MESES[new Date().getMonth()];
-  const ingMens=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&f.mes_correspondiente===mes).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
-  const ventMat=(data.ventas_material||[]).filter(v=>v.mes_correspondiente===mes&&v.estado==="pagado");
+  const ingMens=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&mesIngreso(f)===mes).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+  const ventMat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
   const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
-  const gradPag=(data.cobros_graduacion||[]).filter(v=>v.mes_correspondiente===mes&&v.estado==="pagado");
+  const gradPag=(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
   const ingGrad=gradPag.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganGrad=gradPag.reduce((s,v)=>s+Number(v.ganancia),0);
   const ing=ingMens+ingMat+ingGrad;
@@ -1127,7 +1137,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
 
   const eliminarGasto=async(id)=>{if(!confirm("¿Eliminar gasto?"))return;try{await db.remove("gastos",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
-  const ingresosMes=(mes)=>data.facturas.filter(f=>f.tipo_factura==="comprobante"&&f.mes_correspondiente===mes).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+  const ingresosMes=(mes)=>data.facturas.filter(f=>f.tipo_factura==="comprobante"&&mesIngreso(f)===mes).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
   const gastosMes=(mes)=>data.gastos.filter(g=>g.mes_correspondiente===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
   const salariosMes=(mes)=>data.gastos.filter(g=>g.tipo==="salario"&&g.mes_correspondiente===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
   const rentaMes=(mes)=>data.gastos.filter(g=>g.tipo==="renta"&&g.mes_correspondiente===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
@@ -2029,28 +2039,28 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 function ReportesPage({data,showToast}){
   const[mesSel,setMesSel]=useState(MESES[new Date().getMonth()]);
 
-  // Ingresos por mensualidades (comprobantes de cobro pagados ese mes)
-  const compsMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&f.mes_correspondiente===mesSel);
+  // Ingresos por mensualidades: cuentan en el mes en que ENTRÓ el pago (fecha_pago real)
+  const compsMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&mesIngreso(f)===mesSel);
   const ingMensualidades=compsMes.reduce((s,f)=>s+Number(f.monto_total||0),0);
 
-  // Ventas de materiales de ese mes
-  // Ventas de materiales de ese mes. Solo las PAGADAS entran como ingreso.
-  const ventasMes=data.ventas_material.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pagado");
+  // Materiales: solo PAGADOS, contados por la fecha real de pago.
+  const ventasMes=data.ventas_material.filter(v=>v.estado==="pagado"&&mesIngreso(v)===mesSel);
+  // Pendientes: aún no hay ingreso; se muestran aparte por su mes asignado.
   const ventasPendMes=data.ventas_material.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pendiente");
   const pendMateriales=ventasPendMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ingMateriales=ventasMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const costoMateriales=ventasMes.reduce((s,v)=>s+Number(v.costo),0);
   const gananciaMateriales=ventasMes.reduce((s,v)=>s+Number(v.ganancia),0);
 
-  // Graduación de ese mes. Solo las PAGADAS entran como ingreso.
-  const gradMes=data.cobros_graduacion.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pagado");
+  // Graduación: solo PAGADAS, contadas por la fecha real de pago.
+  const gradMes=data.cobros_graduacion.filter(v=>v.estado==="pagado"&&mesIngreso(v)===mesSel);
   const gradPendMes=data.cobros_graduacion.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pendiente");
   const pendGraduacion=gradPendMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ingGraduacion=gradMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const costoGraduacion=gradMes.reduce((s,v)=>s+Number(v.costo),0);
   const gananciaGraduacion=gradMes.reduce((s,v)=>s+Number(v.ganancia),0);
 
-  // Gastos del mes
+  // Gastos: por el mes asignado (los salarios se asignan al mes que corresponden)
   const gastosMes=data.gastos.filter(g=>g.mes_correspondiente===mesSel);
   const totSalarios=gastosMes.filter(g=>g.tipo==="salario").reduce((s,g)=>s+Number(g.monto),0);
   const totRenta=gastosMes.filter(g=>g.tipo==="renta").reduce((s,g)=>s+Number(g.monto),0);
