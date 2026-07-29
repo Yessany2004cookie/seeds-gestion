@@ -2026,7 +2026,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 }
 
 // ── REPORTES (resumen económico mensual completo) ──
-function ReportesPage({data}){
+function ReportesPage({data,showToast}){
   const[mesSel,setMesSel]=useState(MESES[new Date().getMonth()]);
 
   // Ingresos por mensualidades (comprobantes de cobro pagados ese mes)
@@ -2068,12 +2068,100 @@ function ReportesPage({data}){
       <span style={{fontSize:13,fontWeight:bold?800:600,color}}>L {valor.toLocaleString()}</span>
     </div>);
 
+  // Descargar el reporte como PDF (vía diálogo de impresión del navegador)
+  const descargarPDF=()=>{
+    const L=(n)=>`L ${Number(n).toLocaleString()}`;
+    const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
+    const filaHTML=(label,valor,color="#1E293B",bold=false)=>`<tr><td style="padding:7px 0;border-bottom:1px solid #eee;color:#475569;${bold?"font-weight:700":""}">${label}</td><td style="padding:7px 0;border-bottom:1px solid #eee;text-align:right;font-weight:${bold?"800":"600"};color:${color}">${L(valor)}</td></tr>`;
+    const listaMat=ventasMes.length?ventasMes.map(v=>`<tr><td style="padding:3px 0;color:#475569">${v.nombre_material} ×${v.cantidad}</td><td style="padding:3px 0;text-align:right">${L(v.precio_venta)}</td></tr>`).join(""):`<tr><td style="color:#94a3b8;padding:3px 0">Sin materiales cobrados este mes</td></tr>`;
+    const listaGrad=gradMes.length?gradMes.map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const det=Array.isArray(v.detalle)?v.detalle:[];return `<tr><td style="padding:3px 0;color:#475569">${al?.nombre||"—"} (${det.map(d=>d.nombre).join(" + ")})</td><td style="padding:3px 0;text-align:right">${L(v.precio_venta)}</td></tr>`;}).join(""):`<tr><td style="color:#94a3b8;padding:3px 0">Sin graduaciones cobradas este mes</td></tr>`;
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte ${mesSel}</title>
+      <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
+        body{padding:32px;color:#1E293B}
+        .head{text-align:center;border-bottom:3px solid #7C3AED;padding-bottom:14px;margin-bottom:20px}
+        .head h1{font-size:22px;color:#5B21B6}
+        .head p{font-size:12px;color:#64748B;margin-top:3px}
+        .cards{display:flex;gap:12px;margin-bottom:22px}
+        .card{flex:1;border:1px solid #E2E8F0;border-radius:8px;padding:12px}
+        .card .lbl{font-size:11px;color:#64748B}
+        .card .val{font-size:20px;font-weight:800;margin-top:2px}
+        h2{font-size:14px;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #eee}
+        table{width:100%;border-collapse:collapse;font-size:13px}
+        .cols{display:flex;gap:24px}
+        .col{flex:1}
+        .box{background:#F8FAFC;border-radius:8px;padding:12px;margin-top:14px;font-size:12px;color:#475569}
+        .foot{margin-top:28px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #eee;padding-top:12px}
+        @media print{body{padding:0}}
+      </style></head><body>
+      <div class="head">
+        <h1>Seeds English School</h1>
+        <p>Jesús de Otoro, Intibucá, Honduras</p>
+        <p style="margin-top:8px;font-size:15px;font-weight:700;color:#1E293B">📊 Reporte económico — ${mesSel}</p>
+        <p>Generado el ${hoy}</p>
+      </div>
+      <div class="cards">
+        <div class="card"><div class="lbl">Ingreso total</div><div class="val" style="color:#059669">${L(ingresoTotal)}</div></div>
+        <div class="card"><div class="lbl">Gastos</div><div class="val" style="color:#DC2626">${L(totGastos)}</div></div>
+        <div class="card"><div class="lbl">${resultado>=0?"Ganancia neta":"Pérdida neta"}</div><div class="val" style="color:${resultado>=0?"#059669":"#DC2626"}">${L(Math.abs(resultado))}</div></div>
+      </div>
+      <div class="cols">
+        <div class="col">
+          <h2 style="color:#059669">💰 Ingresos</h2>
+          <table>
+            ${filaHTML("Mensualidades cobradas",ingMensualidades,"#059669")}
+            ${filaHTML("Venta de materiales (pagados)",ingMateriales,"#D97706")}
+            ${pendMateriales>0?filaHTML("Materiales por cobrar (pendiente)",pendMateriales,"#94a3b8"):""}
+            ${filaHTML("Graduación cobrada (pagados)",ingGraduacion,"#7C3AED")}
+            ${pendGraduacion>0?filaHTML("Graduación por cobrar (pendiente)",pendGraduacion,"#94a3b8"):""}
+            ${filaHTML("Total ingresos",ingresoTotal,"#059669",true)}
+          </table>
+        </div>
+        <div class="col">
+          <h2 style="color:#DC2626">📉 Gastos y resultado</h2>
+          <table>
+            ${filaHTML("Salarios a maestros",totSalarios,"#DC2626")}
+            ${filaHTML("Renta",totRenta,"#DC2626")}
+            ${filaHTML("Otros gastos",totOtros,"#DC2626")}
+            ${filaHTML("Costo de materiales vendidos",costoMateriales,"#DC2626")}
+            ${costoGraduacion>0?filaHTML("Costo de graduación",costoGraduacion,"#DC2626"):""}
+          </table>
+          <div class="box">
+            <div style="margin-bottom:6px"><strong>Cálculo del resultado:</strong></div>
+            Mensualidades: ${L(ingMensualidades)}<br>
+            + Ganancia materiales: ${L(gananciaMateriales)}<br>
+            ${gananciaGraduacion>0?`+ Ganancia graduación: ${L(gananciaGraduacion)}<br>`:""}
+            − Gastos: ${L(totGastos)}<br>
+            <div style="margin-top:6px;padding-top:6px;border-top:1px solid #ccc;font-size:15px;font-weight:800;color:${resultado>=0?"#059669":"#DC2626"}">= ${L(resultado)} ${resultado>=0?"✓":""}</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px">
+        <h2>📦 Materiales cobrados este mes</h2>
+        <table>${listaMat}</table>
+      </div>
+      <div style="margin-top:20px">
+        <h2>🎓 Graduaciones cobradas este mes</h2>
+        <table>${listaGrad}</table>
+      </div>
+      <div class="foot">Seeds English School 🌱 — Reporte generado automáticamente</div>
+      </body></html>`;
+    const w=window.open("","_blank");
+    if(!w){showToast&&showToast("Permite las ventanas emergentes para descargar el PDF","error");return;}
+    w.document.write(html);
+    w.document.close();
+    setTimeout(()=>{w.focus();w.print();},400);
+  };
+
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
       <h3 style={{fontSize:16,fontWeight:700,color:"#1E293B",margin:0}}>📊 Reporte económico — {mesSel}</h3>
-      <select value={mesSel} onChange={e=>setMesSel(e.target.value)} style={{...input,width:180,cursor:"pointer"}}>
-        {MESES.map(m=><option key={m} value={m}>{m}</option>)}
-      </select>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <select value={mesSel} onChange={e=>setMesSel(e.target.value)} style={{...input,width:160,cursor:"pointer"}}>
+          {MESES.map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+        <button onClick={descargarPDF} style={btn("#DC2626")}><Download size={15}/>Descargar PDF</button>
+      </div>
     </div>
 
     {/* Tarjetas resumen */}
