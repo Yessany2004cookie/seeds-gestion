@@ -408,7 +408,7 @@ export default function App() {
       {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:40}}/>}
       <aside style={{position:"fixed",left:sidebarOpen?0:-260,top:0,bottom:0,width:250,background:"#1E293B",color:"#fff",zIndex:50,transition:"left 0.2s",display:"flex",flexDirection:"column",...(window.innerWidth>768?{position:"relative",left:0}:{})}}>
         <div style={{padding:"20px 16px",borderBottom:"1px solid #334155",display:"flex",alignItems:"center",gap:10}}>
-          <img src={LOGO_SEEDS} alt="Seeds" style={{width:38,height:38,objectFit:"contain",borderRadius:6}}/>
+          <img src={LOGO_SEEDS} alt="Seeds" style={{width:48,height:48,objectFit:"contain",borderRadius:6}}/>
           <div><div style={{fontWeight:700,fontSize:15,color:"#F97316"}}>Seeds English</div><div style={{fontSize:11,color:"#94A3B8"}}>Sistema de Gestión</div></div>
         </div>
         <nav style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
@@ -463,7 +463,7 @@ function LoginPage({showToast,toast}){
   return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1E293B,#0F172A)",padding:20,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <div style={{background:"#fff",borderRadius:16,padding:"40px 36px",width:"100%",maxWidth:380,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
-        <div style={{textAlign:"center",marginBottom:28}}><img src={LOGO_SEEDS} alt="Seeds English School" style={{width:130,height:130,objectFit:"contain",marginBottom:8}}/><h1 style={{fontSize:22,fontWeight:800,color:"#1E293B",margin:0}}>Seeds English School</h1><p style={{fontSize:13,color:"#64748B",margin:"6px 0 0"}}>Sistema de Gestión Escolar</p></div>
+        <div style={{textAlign:"center",marginBottom:28}}><img src={LOGO_SEEDS} alt="Seeds English School" style={{width:190,height:190,objectFit:"contain",marginBottom:4}}/><h1 style={{fontSize:22,fontWeight:800,color:"#1E293B",margin:0}}>Seeds English School</h1><p style={{fontSize:13,color:"#64748B",margin:"6px 0 0"}}>Sistema de Gestión Escolar</p></div>
         <div style={{marginBottom:16}}><label style={label}>Correo electrónico</label><div style={{position:"relative"}}><Mail size={16} style={{position:"absolute",left:10,top:11,color:"#94A3B8"}}/><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@correo.com" type="email" style={{...input,paddingLeft:34}} onKeyDown={e=>e.key==="Enter"&&go()}/></div></div>
         <div style={{marginBottom:20}}><label style={label}>Contraseña</label><div style={{position:"relative"}}><LogIn size={16} style={{position:"absolute",left:10,top:11,color:"#94A3B8"}}/><input value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" type={show?"text":"password"} style={{...input,paddingLeft:34}} onKeyDown={e=>e.key==="Enter"&&go()}/><button onClick={()=>setShow(!show)} style={{position:"absolute",right:8,top:7,background:"none",border:"none",cursor:"pointer",color:"#94A3B8"}}><Eye size={16}/></button></div></div>
         {error&&<div style={{padding:"8px 12px",background:"#FEF2F2",color:"#DC2626",borderRadius:6,fontSize:12,marginBottom:14,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={14}/>{error}</div>}
@@ -997,7 +997,8 @@ function HistorialPage({data,loadData,showToast}){
       <style>
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
         body{padding:32px;color:#1E293B}
-        .head{text-align:center;border-bottom:3px solid #F97316;padding-bottom:14px;margin-bottom:18px}
+        .head{display:flex;align-items:center;gap:20px;border-bottom:3px solid #F97316;padding-bottom:14px;margin-bottom:18px}
+        .head .htxt{text-align:left}
         .head h1{font-size:22px;color:#C2410C}
         .head p{font-size:12px;color:#64748B;margin-top:3px}
         .info{background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:12px 14px;margin-bottom:18px;font-size:13px}
@@ -1013,11 +1014,13 @@ function HistorialPage({data,loadData,showToast}){
         @media print{body{padding:0}}
       </style></head><body>
       <div class="head">
-        <img src="${LOGO_SEEDS}" alt="Seeds" style="width:90px;height:90px;object-fit:contain;margin-bottom:6px"/>
-        <h1>Seeds English School</h1>
-        <p>Jesús de Otoro, Intibucá, Honduras</p>
-        <p style="margin-top:8px;font-size:16px;font-weight:700;color:#1E293B">Estado de cuenta ${anio}</p>
-        <p>Generado el ${hoy}</p>
+        <img src="${LOGO_SEEDS}" alt="Seeds" style="width:120px;height:120px;object-fit:contain;flex-shrink:0"/>
+        <div class="htxt">
+          <h1>Seeds English School</h1>
+          <p>Jesús de Otoro, Intibucá, Honduras</p>
+          <p style="margin-top:8px;font-size:16px;font-weight:700;color:#1E293B">Estado de cuenta ${anio}</p>
+          <p>Generado el ${hoy}</p>
+        </div>
       </div>
       <div class="info">
         <div><b>Alumno:</b> ${alumno.nombre}</div>
@@ -2241,7 +2244,8 @@ function ReportesPage({data,showToast}){
       <style>
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
         body{padding:32px;color:#1E293B}
-        .head{text-align:center;border-bottom:3px solid #7C3AED;padding-bottom:14px;margin-bottom:20px}
+        .head{display:flex;align-items:center;gap:20px;border-bottom:3px solid #7C3AED;padding-bottom:14px;margin-bottom:20px}
+        .head .htxt{text-align:left}
         .head h1{font-size:22px;color:#5B21B6}
         .head p{font-size:12px;color:#64748B;margin-top:3px}
         .cards{display:flex;gap:12px;margin-bottom:22px}
@@ -2257,11 +2261,13 @@ function ReportesPage({data,showToast}){
         @media print{body{padding:0}}
       </style></head><body>
       <div class="head">
-        <img src="${LOGO_SEEDS}" alt="Seeds" style="width:90px;height:90px;object-fit:contain;margin-bottom:6px"/>
-        <h1>Seeds English School</h1>
-        <p>Jesús de Otoro, Intibucá, Honduras</p>
-        <p style="margin-top:8px;font-size:15px;font-weight:700;color:#1E293B">📊 Reporte económico — ${mesSel}</p>
-        <p>Generado el ${hoy}</p>
+        <img src="${LOGO_SEEDS}" alt="Seeds" style="width:120px;height:120px;object-fit:contain;flex-shrink:0"/>
+        <div class="htxt">
+          <h1>Seeds English School</h1>
+          <p>Jesús de Otoro, Intibucá, Honduras</p>
+          <p style="margin-top:8px;font-size:15px;font-weight:700;color:#1E293B">📊 Reporte económico — ${mesSel}</p>
+          <p>Generado el ${hoy}</p>
+        </div>
       </div>
       <div class="cards">
         <div class="card"><div class="lbl">Ingreso total</div><div class="val" style="color:#059669">${L(ingresoTotal)}</div></div>
