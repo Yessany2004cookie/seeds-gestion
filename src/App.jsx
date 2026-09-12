@@ -72,6 +72,8 @@ const calcMora = (f, secciones=[], alumnos=[]) => {
   // Ubicar la sección del alumno de esta factura
   const al = alumnos.find(a => a.id === f.alumno_id);
   const sec = al ? secciones.find(s => s.id === al.seccion_id) : null;
+  // Si este alumno está exento de mora, no se le cobra recargo aunque la sección la tenga
+  if (al && al.mora_exenta === true) return 0;
   // Si la sección no tiene mora activa o el % es 0, no hay recargo
   if (!sec || sec.mora_activa !== true || !Number(sec.mora_porcentaje)) return 0;
   const hoy = new Date();
@@ -572,8 +574,8 @@ function MaestrosPage({data,loadData,showToast}){
 // ── MATRÍCULA ──
 function AlumnosPage({data,loadData,showToast}){
   const[modal,setModal]=useState(null);const[search,setSearch]=useState("");const[filterSec,setFilterSec]=useState("");
-  const[form,setForm]=useState({nombre:"",telefono:"",email:"",padre_nombre:"",padre_telefono:"",padre_email:"",seccion_id:"",padre_id:"",monto_personalizado:"",beca:false});
-  const open=(al=null)=>{if(al){const p=data.padres.find(p=>p.id===al.padre_id)||{};setForm({nombre:al.nombre,telefono:al.telefono||"",email:al.email||"",padre_nombre:p.nombre||"",padre_telefono:p.telefono||"",padre_email:p.email||"",seccion_id:al.seccion_id||"",padre_id:al.padre_id||"",monto_personalizado:al.monto_personalizado||"",beca:al.beca===true});}else{setForm({nombre:"",telefono:"",email:"",padre_nombre:"",padre_telefono:"",padre_email:"",seccion_id:"",padre_id:"",monto_personalizado:"",beca:false});}setModal(al?.id||"new");};
+  const[form,setForm]=useState({nombre:"",telefono:"",email:"",padre_nombre:"",padre_telefono:"",padre_email:"",seccion_id:"",padre_id:"",monto_personalizado:"",beca:false,mora_exenta:false});
+  const open=(al=null)=>{if(al){const p=data.padres.find(p=>p.id===al.padre_id)||{};setForm({nombre:al.nombre,telefono:al.telefono||"",email:al.email||"",padre_nombre:p.nombre||"",padre_telefono:p.telefono||"",padre_email:p.email||"",seccion_id:al.seccion_id||"",padre_id:al.padre_id||"",monto_personalizado:al.monto_personalizado||"",beca:al.beca===true,mora_exenta:al.mora_exenta===true});}else{setForm({nombre:"",telefono:"",email:"",padre_nombre:"",padre_telefono:"",padre_email:"",seccion_id:"",padre_id:"",monto_personalizado:"",beca:false,mora_exenta:false});}setModal(al?.id||"new");};
   const sv=async()=>{
     if(!form.nombre||!form.padre_nombre){showToast("Nombre del alumno y padre requeridos","error");return;}
     try{
@@ -581,7 +583,7 @@ function AlumnosPage({data,loadData,showToast}){
       const padreRow={nombre:form.padre_nombre,telefono:form.padre_telefono,email:form.padre_email};
       if(padreId){await db.update("padres",padreId,padreRow);}
       else{padreId=uid();await db.insert("padres",{id:padreId,...padreRow});}
-      const alRow={nombre:form.nombre,telefono:form.telefono,email:form.email,padre_id:padreId,seccion_id:form.seccion_id||null,monto_personalizado:form.beca?0:(parseFloat(form.monto_personalizado)||0),beca:form.beca===true};
+      const alRow={nombre:form.nombre,telefono:form.telefono,email:form.email,padre_id:padreId,seccion_id:form.seccion_id||null,monto_personalizado:form.beca?0:(parseFloat(form.monto_personalizado)||0),beca:form.beca===true,mora_exenta:form.mora_exenta===true};
       if(modal==="new"){await db.insert("alumnos",{id:uid(),...alRow,estado:"activo",fecha_ingreso:new Date().toISOString().split("T")[0]});showToast("Alumno matriculado");}
       else{await db.update("alumnos",modal,alRow);showToast("Actualizado");}
       await loadData();setModal(null);
@@ -608,6 +610,16 @@ function AlumnosPage({data,loadData,showToast}){
               </div>
             </div>
 
+            {/* Exención de mora por alumno */}
+            {!form.beca&&<div onClick={()=>setForm({...form,mora_exenta:!form.mora_exenta})} style={{marginBottom:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",border:form.mora_exenta?"2px solid #D97706":"1px solid #D1D5DB",background:form.mora_exenta?"#FFFBEB":"#fff",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:20,height:20,borderRadius:5,border:form.mora_exenta?"none":"2px solid #D1D5DB",background:form.mora_exenta?"#D97706":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                {form.mora_exenta&&<Check size={14} color="#fff"/>}
+              </div>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:form.mora_exenta?"#B45309":"#475569"}}>⏰ Sin recargo por atraso</div>
+                <div style={{fontSize:11,color:"#94A3B8"}}>{form.mora_exenta?"A este alumno NO se le cobra mora, aunque la sección la tenga":"Se le aplica la mora de la sección (si está activa)"}</div>
+              </div>
+            </div>}
             {!form.beca&&<div style={{marginBottom:12}}><label style={label}>Monto mensual</label>{form.seccion_id&&<div style={{fontSize:11,color:"#64748B",marginBottom:4}}>Precio del grupo: L {Number(data.secciones.find(s=>s.id===form.seccion_id)?.mensualidad||0).toLocaleString()}</div>}<input type="number" value={form.monto_personalizado} onChange={e=>setForm({...form,monto_personalizado:e.target.value})} placeholder="Dejar vacío = precio del grupo" style={input}/><div style={{fontSize:11,color:"#94A3B8",marginTop:3}}>Llenar solo si tiene descuento o precio especial.</div></div>}
             {form.beca&&<div style={{marginBottom:12,padding:"10px 12px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,fontSize:12,color:"#5B21B6"}}>Este alumno queda excluido de la generación de cobros por sección y de los recordatorios de pago.</div>}</div><div><h4 style={{fontSize:13,fontWeight:700,color:"#2563EB",margin:"0 0 12px",display:"flex",alignItems:"center",gap:6}}><Users size={15}/>Padre/Encargado</h4><Field label="Nombre *" value={form.padre_nombre} onChange={v=>setForm({...form,padre_nombre:v})}/><Field label="Teléfono" value={form.padre_telefono} onChange={v=>setForm({...form,padre_telefono:v})}/><Field label="Email" value={form.padre_email} onChange={v=>setForm({...form,padre_email:v})} type="email"/></div></div></Modal>}
   </div>);
@@ -924,6 +936,82 @@ function HistorialPage({data,loadData,showToast}){
     setImgPreview({dataUrl,phone:p?.telefono||"",destinatario:p?.nombre||al?.nombre||"",numero:f.numero_factura});
   };
 
+  // Estado de cuenta anual (los 12 meses) para enviar al padre — PDF vía impresión
+  const estadoCuentaPDF=()=>{
+    if(!alumno){showToast("Selecciona un alumno","error");return;}
+    const anio=new Date().getFullYear();
+    const L=(n)=>`L ${Number(n).toLocaleString()}`;
+    const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
+    const mensual=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
+    const becado=alumno.beca===true;
+    // Recorremos los 12 meses
+    let totalPagado=0, totalFaltante=0, totalMora=0;
+    const filas=MESES.map(mes=>{
+      const comp=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&f.tipo_factura==="comprobante");
+      const cobro=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
+      if(becado){
+        return `<tr><td>${mes}</td><td style="text-align:center;color:#7C3AED">🎓 Becado</td><td style="text-align:right">—</td><td style="text-align:right">—</td></tr>`;
+      }
+      if(comp){
+        totalPagado+=Number(comp.monto_total)||mensual;
+        return `<tr><td>${mes}</td><td style="text-align:center;color:#059669;font-weight:700">✓ Pagado</td><td style="text-align:right">${comp.fecha_pago||"—"}</td><td style="text-align:right">${L(comp.monto_total||mensual)}</td></tr>`;
+      }
+      // No pagado: calcular mora si corresponde (usa la factura de cobro si existe, o simula una)
+      const facturaBase=cobro||{alumno_id:alumno.id,mes_correspondiente:mes,monto_total:mensual,fecha_emision:`${anio}-01-01`,estado:"pendiente",tipo_factura:"cobro"};
+      const mora=calcMora(facturaBase,data.secciones,data.alumnos);
+      totalFaltante+=mensual; totalMora+=mora;
+      const moraTxt=mora>0?`<span style="color:#DC2626"> + ${L(mora)} mora</span>`:"";
+      return `<tr><td>${mes}</td><td style="text-align:center;color:#DC2626;font-weight:700">Pendiente</td><td style="text-align:right">—</td><td style="text-align:right">${L(mensual)}${moraTxt}</td></tr>`;
+    }).join("");
+    const totalDeuda=totalFaltante+totalMora;
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Estado de cuenta ${alumno.nombre} ${anio}</title>
+      <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
+        body{padding:32px;color:#1E293B}
+        .head{text-align:center;border-bottom:3px solid #F97316;padding-bottom:14px;margin-bottom:18px}
+        .head h1{font-size:22px;color:#C2410C}
+        .head p{font-size:12px;color:#64748B;margin-top:3px}
+        .info{background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:12px 14px;margin-bottom:18px;font-size:13px}
+        .info b{color:#9A3412}
+        table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:18px}
+        th{background:#F1F5F9;text-align:left;padding:8px 10px;font-size:12px;color:#475569}
+        td{padding:7px 10px;border-bottom:1px solid #F1F5F9}
+        .tot{display:flex;gap:12px;flex-wrap:wrap}
+        .box{flex:1;min-width:150px;border-radius:8px;padding:12px;text-align:center}
+        .box .l{font-size:11px;opacity:.85}
+        .box .v{font-size:20px;font-weight:800;margin-top:2px}
+        .foot{margin-top:26px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #eee;padding-top:12px}
+        @media print{body{padding:0}}
+      </style></head><body>
+      <div class="head">
+        <h1>Seeds English School</h1>
+        <p>Jesús de Otoro, Intibucá, Honduras</p>
+        <p style="margin-top:8px;font-size:16px;font-weight:700;color:#1E293B">Estado de cuenta ${anio}</p>
+        <p>Generado el ${hoy}</p>
+      </div>
+      <div class="info">
+        <div><b>Alumno:</b> ${alumno.nombre}</div>
+        <div><b>Padre/Encargado:</b> ${padre?.nombre||"—"} &nbsp;·&nbsp; <b>Tel:</b> ${padre?.telefono||"—"}</div>
+        <div><b>Sección:</b> ${sec?.nombre||"—"} &nbsp;·&nbsp; <b>Mensualidad:</b> ${becado?"Becado":L(mensual)}</div>
+      </div>
+      <table>
+        <thead><tr><th>Mes</th><th style="text-align:center">Estado</th><th style="text-align:right">Fecha de pago</th><th style="text-align:right">Monto</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+      <div class="tot">
+        <div class="box" style="background:#ECFDF5;color:#166534"><div class="l">Total pagado</div><div class="v">${L(totalPagado)}</div></div>
+        ${totalMora>0?`<div class="box" style="background:#FEF2F2;color:#991B1B"><div class="l">Mora por atraso</div><div class="v">${L(totalMora)}</div></div>`:""}
+        <div class="box" style="background:#FFF7ED;color:#9A3412"><div class="l">Total pendiente${totalMora>0?" (con mora)":""}</div><div class="v">${L(totalDeuda)}</div></div>
+      </div>
+      ${totalMora>0?`<p style="font-size:11px;color:#94a3b8;margin-top:10px">* El total pendiente incluye la mora por los meses atrasados.</p>`:""}
+      <div class="foot">Seeds English School 🌱 — Estado de cuenta generado automáticamente</div>
+      </body></html>`;
+    const w=window.open("","_blank");
+    if(!w){showToast("Permite las ventanas emergentes para descargar el PDF","error");return;}
+    w.document.write(html); w.document.close();
+    setTimeout(()=>{w.focus();w.print();},400);
+  };
+
   // Abrir modal para marcar un mes como pagado desde el historial
   const abrirPago=(mes,cobroExistente)=>{
     setPagoForm({fecha_pago:new Date().toISOString().split("T")[0],tipo_pago:cobroExistente?.tipo_pago||"efectivo"});
@@ -989,6 +1077,7 @@ function HistorialPage({data,loadData,showToast}){
             ? <div style={{fontSize:18,fontWeight:800,color:"#7C3AED"}}>🎓 Becado</div>
             : <><div style={{fontSize:20,fontWeight:800,color:"#F97316"}}>L {monto.toLocaleString()}</div>
                 {Number(alumno.monto_personalizado)>0&&<div style={{fontSize:11,color:"#7C3AED"}}>Precio especial ✎</div>}</>}
+          <button onClick={estadoCuentaPDF} style={{...btn("#DC2626"),marginTop:8,fontSize:12,padding:"7px 12px"}}><Download size={14}/>Estado de cuenta (PDF)</button>
         </div>
       </div>
     </div>}
