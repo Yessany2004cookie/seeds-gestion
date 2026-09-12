@@ -367,18 +367,20 @@ const generarImgEstadoCuenta = (alumno, padre, sec, anio, filas, totales) => {
     y+=filaH;
   });
   y+=14;
-  const boxW=182, gap=12; let bx=24;
+  // Solo se muestra lo que el padre debe (deuda), no el total pagado
+  const hayMora = totales.mora>0;
+  const boxW=hayMora?282:360, gap=16;
+  let bx=hayMora?(620-(boxW*2+gap))/2:(620-boxW)/2;
   const box=(label,val,bg,fg)=>{
-    c.fillStyle=bg; cajaRedonda(c,bx,y,boxW,52,8); c.fill();
-    c.fillStyle=fg; c.textAlign='center'; c.font='11px Segoe UI,sans-serif';
-    c.fillText(label,bx+boxW/2,y+20);
-    c.font='bold 18px Segoe UI,sans-serif'; c.fillText(val,bx+boxW/2,y+42);
+    c.fillStyle=bg; cajaRedonda(c,bx,y,boxW,56,8); c.fill();
+    c.fillStyle=fg; c.textAlign='center'; c.font='12px Segoe UI,sans-serif';
+    c.fillText(label,bx+boxW/2,y+22);
+    c.font='bold 20px Segoe UI,sans-serif'; c.fillText(val,bx+boxW/2,y+46);
     bx+=boxW+gap;
   };
-  box('Total pagado',L(totales.pagado),'#ECFDF5','#166534');
-  if(totales.mora>0) box('Mora por atraso',L(totales.mora),'#FEF2F2','#991B1B');
-  box(totales.mora>0?'Total pendiente (con mora)':'Total pendiente',L(totales.deuda),'#FFF7ED','#9A3412');
-  y+=52+18;
+  if(hayMora) box('Mora por atraso',L(totales.mora),'#FEF2F2','#991B1B');
+  box(hayMora?'Total pendiente (con mora)':'Total pendiente',L(totales.deuda),'#FFF7ED','#9A3412');
+  y+=56+18;
   const fechaGen=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
   c.fillStyle='#64748B'; c.font='11px Segoe UI,sans-serif'; c.textAlign='center';
   c.fillText('Generado el '+fechaGen,310,y);
@@ -1076,8 +1078,9 @@ function HistorialPage({data,loadData,showToast}){
         return {mes,estadoTxt:"Pagado",estadoColor:"#059669",fecha:comp.fecha_pago||"-",montoTxt:Lx(comp.monto_total||mensual),montoColor:"#1E293B"};
       }
       // Por defecto: al dia (saldado) - cuenta como pagado
+      // Por defecto: saldado. Para el padre se muestra como "Pagado" (al dia = pagado)
       totalPagado+=mensual;
-      return {mes,estadoTxt:"Al dia",estadoColor:"#10B981",fecha:"-",montoTxt:Lx(mensual),montoColor:"#94A3B8"};
+      return {mes,estadoTxt:"Pagado",estadoColor:"#059669",fecha:"-",montoTxt:Lx(mensual),montoColor:"#1E293B"};
     });
     return {anio,mensual,becado,filasData,totales:{mensual,pagado:totalPagado,faltante:totalFaltante,mora:totalMora,deuda:totalFaltante+totalMora}};
   };
@@ -1147,7 +1150,6 @@ function HistorialPage({data,loadData,showToast}){
         <tbody>${filas}</tbody>
       </table>
       <div class="tot">
-        <div class="box" style="background:#ECFDF5;color:#166534"><div class="l">Total pagado</div><div class="v">${L(totalPagado)}</div></div>
         ${totalMora>0?`<div class="box" style="background:#FEF2F2;color:#991B1B"><div class="l">Mora por atraso</div><div class="v">${L(totalMora)}</div></div>`:""}
         <div class="box" style="background:#FFF7ED;color:#9A3412"><div class="l">Total pendiente${totalMora>0?" (con mora)":""}</div><div class="v">${L(totalDeuda)}</div></div>
       </div>
