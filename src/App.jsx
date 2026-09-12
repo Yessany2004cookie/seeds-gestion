@@ -22,6 +22,16 @@ const mesIngreso = (reg) => mesDeFecha(reg.fecha_pago) || reg.mes_correspondient
 const TIPOS_PAGO = [{value:"efectivo",label:"Efectivo"},{value:"transferencia",label:"Transferencia"},{value:"tarjeta",label:"Tarjeta"},{value:"deposito",label:"Depósito"}];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
+// Dia del mes en que se "carga" el cobro (fijo para todos).
+// Antes de ese dia, el mes se muestra como "No cargado aun".
+const DIA_CARGA = 20;
+// Devuelve true si el mes (indice 0-11) del anio ya paso su dia de carga.
+const mesCargado = (mesIdx, anio) => {
+  const hoy = new Date();
+  const fechaCarga = new Date(anio, mesIdx, DIA_CARGA);
+  return hoy >= fechaCarga;
+};
+
 // ── Helpers de sucursal ──
 // IDs de las secciones que pertenecen a la sucursal activa.
 const seccionesDeSucursal = (data, sucId) => new Set(data.secciones.filter(s=>s.sucursal_id===sucId).map(s=>s.id));
@@ -1040,16 +1050,19 @@ function HistorialPage({data,loadData,showToast}){
     const anio=anioSel;
     const mensual=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
     const becado=alumno.beca===true;
-    const anioAct=new Date().getFullYear();
     let totalPagado=0, totalFaltante=0, totalMora=0;
     const Lx=(n)=>`L ${Number(n).toLocaleString()}`;
     const filasData=MESES.map(mes=>{
       const comp=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&anioDe(f)===anio&&f.tipo_factura==="comprobante");
       const cobro=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&anioDe(f)===anio&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
       const pendiente = cobro && cobro.estado!=="pagada";
-      const esFut = anio>anioAct || (anio===anioAct && MESES.indexOf(mes)>new Date().getMonth());
+      const esFut = !mesCargado(MESES.indexOf(mes), anio);
       if(becado){
         return {mes,estadoTxt:"Becado",estadoColor:"#7C3AED",fecha:"-",montoTxt:"-",montoColor:"#94A3B8"};
+      }
+      if(esFut){
+        // El mes todavia no se ha cargado (antes del dia 20) - no cuenta
+        return {mes,estadoTxt:"No cargado aun",estadoColor:"#A78BFA",fecha:"-",montoTxt:"-",montoColor:"#CBD5E1"};
       }
       if(pendiente){
         // Solo los meses marcados como pendientes cuentan como deuda
@@ -1062,11 +1075,9 @@ function HistorialPage({data,loadData,showToast}){
         totalPagado+=Number(comp.monto_total)||mensual;
         return {mes,estadoTxt:"Pagado",estadoColor:"#059669",fecha:comp.fecha_pago||"-",montoTxt:Lx(comp.monto_total||mensual),montoColor:"#1E293B"};
       }
-      if(esFut){
-        return {mes,estadoTxt:"No cargado aun",estadoColor:"#A78BFA",fecha:"-",montoTxt:"-",montoColor:"#CBD5E1"};
-      }
-      // Por defecto: al dia (saldado)
-      return {mes,estadoTxt:"Al dia",estadoColor:"#10B981",fecha:"-",montoTxt:"-",montoColor:"#94A3B8"};
+      // Por defecto: al dia (saldado) - cuenta como pagado
+      totalPagado+=mensual;
+      return {mes,estadoTxt:"Al dia",estadoColor:"#10B981",fecha:"-",montoTxt:Lx(mensual),montoColor:"#94A3B8"};
     });
     return {anio,mensual,becado,filasData,totales:{mensual,pagado:totalPagado,faltante:totalFaltante,mora:totalMora,deuda:totalFaltante+totalMora}};
   };
@@ -1263,7 +1274,9 @@ function HistorialPage({data,loadData,showToast}){
           </tr></thead>
           <tbody>
             {tablaMensual.map(({mes,cobro,comp})=>{
-              const esFuturo = anioSel>anioActual || (anioSel===anioActual && MESES.indexOf(mes)>new Date().getMonth());
+              // "No cargado aun" = el mes todavia no llego a su dia de carga (dia 20)
+              const noCargado = !mesCargado(MESES.indexOf(mes), anioSel);
+              const esFuturo = noCargado;
               const pendiente = cobro && cobro.estado!=="pagada";
               // mora del mes pendiente
               const mora = pendiente ? calcMora(cobro,data.secciones,data.alumnos) : 0;
@@ -1309,7 +1322,7 @@ function HistorialPage({data,loadData,showToast}){
       <div style={{marginTop:14,display:"flex",gap:12,flexWrap:"wrap",fontSize:12}}>
         <span style={badge("#059669")}>Pagados: {tablaMensual.filter(t=>t.comp).length}</span>
         <span style={badge("#DC2626")}>Pendientes: {tablaMensual.filter(t=>t.cobro&&t.cobro.estado!=="pagada"&&!t.comp).length}</span>
-        <span style={badge("#10B981")}>Al día: {tablaMensual.filter(t=>!t.comp&&!(t.cobro&&t.cobro.estado!=="pagada")&&!(anioSel>anioActual||(anioSel===anioActual&&MESES.indexOf(t.mes)>new Date().getMonth()))).length}</span>
+        <span style={badge("#10B981")}>Al día: {tablaMensual.filter(t=>!t.comp&&!(t.cobro&&t.cobro.estado!=="pagada")&&mesCargado(MESES.indexOf(t.mes),anioSel)).length}</span>
       </div>
     </div>}
     {!selAl&&<div style={card}><h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 8px"}}>Selecciona un alumno</h3><p style={{fontSize:13,color:"#94A3B8"}}>Filtra por sección y selecciona el alumno para ver su control de pagos del año. Por defecto los meses están al día; solo marcá los pendientes.</p></div>}
