@@ -407,9 +407,11 @@ export default function App() {
     <div style={{display:"flex",height:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#F1F5F9"}}>
       {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:40}}/>}
       <aside style={{position:"fixed",left:sidebarOpen?0:-260,top:0,bottom:0,width:250,background:"#1E293B",color:"#fff",zIndex:50,transition:"left 0.2s",display:"flex",flexDirection:"column",...(window.innerWidth>768?{position:"relative",left:0}:{})}}>
-        <div style={{padding:"20px 16px",borderBottom:"1px solid #334155",display:"flex",alignItems:"center",gap:10}}>
-          <img src={LOGO_SEEDS} alt="Seeds" style={{width:48,height:48,objectFit:"contain",borderRadius:6}}/>
-          <div><div style={{fontWeight:700,fontSize:15,color:"#F97316"}}>Seeds English</div><div style={{fontSize:11,color:"#94A3B8"}}>Sistema de Gestión</div></div>
+        <div style={{padding:"20px 16px",borderBottom:"1px solid #334155",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+          <div style={{background:"#fff",borderRadius:12,padding:8,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <img src={LOGO_SEEDS} alt="Seeds" style={{width:110,height:110,objectFit:"contain"}}/>
+          </div>
+          <div style={{textAlign:"center"}}><div style={{fontWeight:700,fontSize:16,color:"#F97316"}}>Seeds English</div><div style={{fontSize:11,color:"#94A3B8"}}>Sistema de Gestión</div></div>
         </div>
         <nav style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
           {NAV.map(n=>{const Icon=n.icon;const a=page===n.id;return(
