@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
+import { LOGO_SEEDS } from "./logo";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
   Plus, Trash2, Edit, Search, Calendar, X, Eye,
@@ -101,6 +102,19 @@ const db = {
   async upsertMany(table,rows){ const {error}=await supabase.from(table).upsert(rows); if(error)throw error; },
 };
 
+// ── Logo precargado para dibujarlo en las facturas ──
+const logoImg = typeof Image !== "undefined" ? new Image() : null;
+if (logoImg) { logoImg.src = LOGO_SEEDS; }
+// Respaldo de roundRect por si el navegador no lo soporta
+const cajaRedonda = (c,x,y,w,h,r) => {
+  if (c.roundRect) { c.beginPath(); c.roundRect(x,y,w,h,r); return; }
+  c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath();
+};
+// Dibuja el logo en la esquina superior izquierda del canvas (si ya cargó)
+const dibujarLogo = (c, x=18, y=16, size=58) => {
+  try { if (logoImg && logoImg.complete && logoImg.naturalWidth) c.drawImage(logoImg, x, y, size, size); } catch(e){}
+};
+
 // ── Imagen de factura (Canvas) ──
 const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
   const esPago = tipo === "comprobante";
@@ -108,6 +122,9 @@ const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
   const c = cv.getContext('2d');
   c.fillStyle='#fff'; c.fillRect(0,0,600,720);
   c.fillStyle=esPago?'#059669':'#1E293B'; c.fillRect(0,0,600,90);
+  // Logo sobre fondo blanco redondeado en la esquina
+  c.save(); c.fillStyle='#fff'; cajaRedonda(c,14,12,66,66,10); c.fill(); c.restore();
+  dibujarLogo(c, 18, 16, 58);
   c.fillStyle=esPago?'#fff':'#F97316'; c.font='bold 24px Segoe UI,system-ui,sans-serif';
   c.textAlign='center'; c.fillText('Seeds English School',300,38);
   c.fillStyle=esPago?'#D1FAE5':'#94A3B8'; c.font='12px Segoe UI,sans-serif';
@@ -170,6 +187,8 @@ const generarImgMaterial = (v, al, padre, sec, tipo) => {
   const c = cv.getContext('2d');
   c.fillStyle='#fff'; c.fillRect(0,0,600,560);
   c.fillStyle=esPago?'#059669':'#D97706'; c.fillRect(0,0,600,84);
+  c.save(); c.fillStyle='#fff'; cajaRedonda(c,12,10,64,64,10); c.fill(); c.restore();
+  dibujarLogo(c, 16, 14, 56);
   c.fillStyle='#fff'; c.font='bold 22px Segoe UI,sans-serif'; c.textAlign='center';
   c.fillText('Seeds English School',300,34);
   c.fillStyle=esPago?'#D1FAE5':'#FEF3C7'; c.font='12px Segoe UI,sans-serif';
@@ -234,6 +253,8 @@ const generarImgGraduacion = (v, al, padre, sec, tipo) => {
   c.fillStyle='#fff'; c.fillRect(0,0,600,H);
   // Encabezado morado (graduación)
   c.fillStyle=esPago?'#059669':'#7C3AED'; c.fillRect(0,0,600,84);
+  c.save(); c.fillStyle='#fff'; cajaRedonda(c,12,10,64,64,10); c.fill(); c.restore();
+  dibujarLogo(c, 16, 14, 56);
   c.fillStyle='#fff'; c.font='bold 22px Segoe UI,sans-serif'; c.textAlign='center';
   c.fillText('Seeds English School',300,34);
   c.fillStyle=esPago?'#D1FAE5':'#EDE9FE'; c.font='12px Segoe UI,sans-serif';
@@ -333,7 +354,7 @@ export default function App() {
 
   const logout = async () => { await supabase.auth.signOut(); setSession(null); };
 
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC"}}><div style={{textAlign:"center"}}><div style={{fontSize:40,marginBottom:12}}>🌱</div><p style={{color:"#64748B"}}>Cargando Seeds...</p></div></div>;
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC"}}><div style={{textAlign:"center"}}><img src={LOGO_SEEDS} alt="Seeds" style={{width:80,height:80,objectFit:"contain",marginBottom:12}}/><p style={{color:"#64748B"}}>Cargando Seeds...</p></div></div>;
   if (!session) return <LoginPage showToast={showToast} toast={toast} />;
 
   const NAV = [
@@ -387,7 +408,7 @@ export default function App() {
       {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:40}}/>}
       <aside style={{position:"fixed",left:sidebarOpen?0:-260,top:0,bottom:0,width:250,background:"#1E293B",color:"#fff",zIndex:50,transition:"left 0.2s",display:"flex",flexDirection:"column",...(window.innerWidth>768?{position:"relative",left:0}:{})}}>
         <div style={{padding:"20px 16px",borderBottom:"1px solid #334155",display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:28}}>🌱</span>
+          <img src={LOGO_SEEDS} alt="Seeds" style={{width:38,height:38,objectFit:"contain",borderRadius:6}}/>
           <div><div style={{fontWeight:700,fontSize:15,color:"#F97316"}}>Seeds English</div><div style={{fontSize:11,color:"#94A3B8"}}>Sistema de Gestión</div></div>
         </div>
         <nav style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
@@ -442,7 +463,7 @@ function LoginPage({showToast,toast}){
   return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1E293B,#0F172A)",padding:20,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <div style={{background:"#fff",borderRadius:16,padding:"40px 36px",width:"100%",maxWidth:380,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
-        <div style={{textAlign:"center",marginBottom:28}}><div style={{fontSize:48,marginBottom:8}}>🌱</div><h1 style={{fontSize:22,fontWeight:800,color:"#1E293B",margin:0}}>Seeds English School</h1><p style={{fontSize:13,color:"#64748B",margin:"6px 0 0"}}>Sistema de Gestión Escolar</p></div>
+        <div style={{textAlign:"center",marginBottom:28}}><img src={LOGO_SEEDS} alt="Seeds English School" style={{width:130,height:130,objectFit:"contain",marginBottom:8}}/><h1 style={{fontSize:22,fontWeight:800,color:"#1E293B",margin:0}}>Seeds English School</h1><p style={{fontSize:13,color:"#64748B",margin:"6px 0 0"}}>Sistema de Gestión Escolar</p></div>
         <div style={{marginBottom:16}}><label style={label}>Correo electrónico</label><div style={{position:"relative"}}><Mail size={16} style={{position:"absolute",left:10,top:11,color:"#94A3B8"}}/><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@correo.com" type="email" style={{...input,paddingLeft:34}} onKeyDown={e=>e.key==="Enter"&&go()}/></div></div>
         <div style={{marginBottom:20}}><label style={label}>Contraseña</label><div style={{position:"relative"}}><LogIn size={16} style={{position:"absolute",left:10,top:11,color:"#94A3B8"}}/><input value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" type={show?"text":"password"} style={{...input,paddingLeft:34}} onKeyDown={e=>e.key==="Enter"&&go()}/><button onClick={()=>setShow(!show)} style={{position:"absolute",right:8,top:7,background:"none",border:"none",cursor:"pointer",color:"#94A3B8"}}><Eye size={16}/></button></div></div>
         {error&&<div style={{padding:"8px 12px",background:"#FEF2F2",color:"#DC2626",borderRadius:6,fontSize:12,marginBottom:14,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={14}/>{error}</div>}
@@ -919,6 +940,7 @@ function InvoiceView({invoice,data,onClose,onImagen}){
 // ── HISTORIAL ──
 function HistorialPage({data,loadData,showToast}){
   const[selSec,setSelSec]=useState("");const[selAl,setSelAl]=useState("");
+  const[anioSel,setAnioSel]=useState(new Date().getFullYear());
   const[imgPreview,setImgPreview]=useState(null);
   const[pagoModal,setPagoModal]=useState(null); // {mes, cobroExistente}
   const[pagoForm,setPagoForm]=useState({fecha_pago:new Date().toISOString().split("T")[0],tipo_pago:"efectivo"});
@@ -926,6 +948,13 @@ function HistorialPage({data,loadData,showToast}){
   const alumno=selAl?data.alumnos.find(a=>a.id===selAl):null;
   const padre=alumno?data.padres.find(p=>p.id===alumno.padre_id):null;
   const sec=alumno?data.secciones.find(s=>s.id===alumno.seccion_id):null;
+
+  // Año de una factura: usa anio_correspondiente; si no existe (datos viejos), el de fecha_emision
+  const anioDe=(f)=> Number(f.anio_correspondiente) || parseInt(String(f.fecha_emision||"").split("-")[0]) || null;
+  // Lista de años disponibles: desde 2024 hasta el año actual + 1 (para adelantar)
+  const anioActual=new Date().getFullYear();
+  const aniosDisponibles=[];
+  for(let y=2024; y<=anioActual+1; y++) aniosDisponibles.push(y);
 
   const verImagen = (f, tipo) => {
     const al=data.alumnos.find(a=>a.id===f.alumno_id);
@@ -939,7 +968,7 @@ function HistorialPage({data,loadData,showToast}){
   // Estado de cuenta anual (los 12 meses) para enviar al padre — PDF vía impresión
   const estadoCuentaPDF=()=>{
     if(!alumno){showToast("Selecciona un alumno","error");return;}
-    const anio=new Date().getFullYear();
+    const anio=anioSel;
     const L=(n)=>`L ${Number(n).toLocaleString()}`;
     const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
     const mensual=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
@@ -947,8 +976,8 @@ function HistorialPage({data,loadData,showToast}){
     // Recorremos los 12 meses
     let totalPagado=0, totalFaltante=0, totalMora=0;
     const filas=MESES.map(mes=>{
-      const comp=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&f.tipo_factura==="comprobante");
-      const cobro=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
+      const comp=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&anioDe(f)===anio&&f.tipo_factura==="comprobante");
+      const cobro=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&anioDe(f)===anio&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
       if(becado){
         return `<tr><td>${mes}</td><td style="text-align:center;color:#7C3AED">🎓 Becado</td><td style="text-align:right">—</td><td style="text-align:right">—</td></tr>`;
       }
@@ -984,6 +1013,7 @@ function HistorialPage({data,loadData,showToast}){
         @media print{body{padding:0}}
       </style></head><body>
       <div class="head">
+        <img src="${LOGO_SEEDS}" alt="Seeds" style="width:90px;height:90px;object-fit:contain;margin-bottom:6px"/>
         <h1>Seeds English School</h1>
         <p>Jesús de Otoro, Intibucá, Honduras</p>
         <p style="margin-top:8px;font-size:16px;font-weight:700;color:#1E293B">Estado de cuenta ${anio}</p>
@@ -1032,11 +1062,11 @@ function HistorialPage({data,loadData,showToast}){
       }else{
         // crear el cobro (ya pagado)
         n++; cobroId=uid();
-        nuevas.push({id:cobroId,numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,monto_total:monto,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:null});
+        nuevas.push({id:cobroId,numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,anio_correspondiente:anioSel,monto_total:monto,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:null});
       }
       // crear el comprobante
       n++;
-      const comp={id:uid(),numero_factura:`CP-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"comprobante",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,monto_total:monto,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:cobroId};
+      const comp={id:uid(),numero_factura:`CP-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"comprobante",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,anio_correspondiente:anioSel,monto_total:monto,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:cobroId};
       nuevas.push(comp);
       await db.insertMany("facturas",nuevas);
       if(cobroExistente&&cobroExistente.estado!=="pagada"){await db.update("facturas",cobroExistente.id,{estado:"pagada",fecha_pago:pagoForm.fecha_pago});}
@@ -1046,9 +1076,33 @@ function HistorialPage({data,loadData,showToast}){
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
+  // Marcar un mes como PENDIENTE (crea un cobro pendiente para gestionar la deuda)
+  const marcarPendiente=async(mes)=>{
+    if(!alumno)return;
+    try{
+      const monto=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
+      const n=data.facturas.length+1;
+      const cobro={id:uid(),numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:`${anioSel}-${String(MESES.indexOf(mes)+1).padStart(2,"0")}-01`,fecha_pago:null,mes_correspondiente:mes,anio_correspondiente:anioSel,monto_total:monto,abono:0,saldo:monto,tipo_pago:"efectivo",estado:"pendiente",notas:"",cobro_id:null};
+      await db.insert("facturas",cobro);
+      await loadData();
+      showToast(`${mes} ${anioSel} marcado como pendiente`);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+
+  // Deshacer: quitar el pago/cobro de un mes (borra comprobante y cobro de ese mes)
+  const quitarRegistro=async(mes,cobro,comp)=>{
+    if(!confirm(`¿Quitar el registro de ${mes} ${anioSel}? Se borrará el cobro y el comprobante de ese mes para este alumno.`))return;
+    try{
+      if(comp) await db.remove("facturas",comp.id);
+      if(cobro) await db.remove("facturas",cobro.id);
+      await loadData();
+      showToast(`Registro de ${mes} eliminado`,"error");
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+
   const tablaMensual = selAl ? MESES.map(mes => {
-    const cobro = data.facturas.find(f=>f.alumno_id===selAl&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
-    const comp = data.facturas.find(f=>f.alumno_id===selAl&&f.mes_correspondiente===mes&&f.tipo_factura==="comprobante");
+    const cobro = data.facturas.find(f=>f.alumno_id===selAl&&f.mes_correspondiente===mes&&anioDe(f)===anioSel&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
+    const comp = data.facturas.find(f=>f.alumno_id===selAl&&f.mes_correspondiente===mes&&anioDe(f)===anioSel&&f.tipo_factura==="comprobante");
     return { mes, cobro, comp };
   }) : [];
 
@@ -1063,6 +1117,9 @@ function HistorialPage({data,loadData,showToast}){
       <select value={selAl} onChange={e=>setSelAl(e.target.value)} style={{...input,width:250,cursor:"pointer"}}>
         <option value="">Seleccionar alumno</option>
         {als.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
+      </select>
+      <select value={anioSel} onChange={e=>setAnioSel(parseInt(e.target.value))} style={{...input,width:120,cursor:"pointer"}}>
+        {aniosDisponibles.map(y=><option key={y} value={y}>Año {y}</option>)}
       </select>
     </div>
     {alumno&&<div style={{...card,borderLeft:"4px solid #F97316"}}>
@@ -1082,7 +1139,7 @@ function HistorialPage({data,loadData,showToast}){
       </div>
     </div>}
     {selAl&&<div style={card}>
-      <h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 14px",display:"flex",alignItems:"center",gap:6}}><Calendar size={16}/>Control de pagos — {new Date().getFullYear()}</h3>
+      <h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 14px",display:"flex",alignItems:"center",gap:6}}><Calendar size={16}/>Control de pagos — {anioSel}</h3>
       <div style={{overflowX:"auto"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>
@@ -1092,21 +1149,27 @@ function HistorialPage({data,loadData,showToast}){
           </tr></thead>
           <tbody>
             {tablaMensual.map(({mes,cobro,comp})=>{
-              const esFuturo=MESES.indexOf(mes)>new Date().getMonth();
+              const esFuturo = anioSel>anioActual || (anioSel===anioActual && MESES.indexOf(mes)>new Date().getMonth());
               return(<tr key={mes} style={{borderBottom:"1px solid #F1F5F9",background:esFuturo?"#FAFAFF":"transparent"}}>
                 <td style={{padding:"8px 10px",fontWeight:700,color:esFuturo?"#7C3AED":"#1E293B"}}>{mes.slice(0,3)}{esFuturo?<span style={{fontSize:9,fontWeight:600,color:"#A78BFA",display:"block"}}>adelantado</span>:""}</td>
                 <td style={{padding:"8px 10px"}}>
                   {cobro?(<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                     <span style={badge(cobro.estado==="pagada"?"#059669":cobro.estado==="pendiente"?"#DC2626":"#D97706")}>{cobro.numero_factura} · {cobro.estado}</span>
                     <span style={{fontSize:11,color:"#475569"}}>L {Number(cobro.monto_total).toLocaleString()}</span>
-                    <button onClick={()=>verImagen(cobro,"cobro")} style={{background:"#2563EB",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}}><Send size={10} color="#fff"/></button>
-                  </div>):(<span style={{color:"#94A3B8",fontSize:11}}>Sin cobro</span>)}
+                    <button onClick={()=>verImagen(cobro,"cobro")} title="Ver cobro" style={{background:"#2563EB",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}}><Send size={10} color="#fff"/></button>
+                    <button onClick={()=>quitarRegistro(mes,cobro,comp)} title="Quitar registro de este mes" style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={12} color="#DC2626"/></button>
+                  </div>):(
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{color:"#94A3B8",fontSize:11}}>Sin cobro</span>
+                      <button onClick={()=>marcarPendiente(mes)} title="Marcar como pendiente (deuda)" style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",padding:"3px 8px",borderRadius:5,color:"#DC2626",fontSize:11,fontWeight:600}}>Marcar pendiente</button>
+                    </div>
+                  )}
                 </td>
                 <td style={{padding:"8px 10px"}}>
                   {comp?(<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                     <span style={badge("#059669")}>{comp.numero_factura} · ✓ Pagado</span>
                     <span style={{fontSize:11,color:"#475569"}}>{comp.fecha_pago} · {comp.tipo_pago}</span>
-                    <button onClick={()=>verImagen(comp,"comprobante")} style={{background:"#059669",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}}><Send size={10} color="#fff"/></button>
+                    <button onClick={()=>verImagen(comp,"comprobante")} title="Ver comprobante" style={{background:"#059669",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}}><Send size={10} color="#fff"/></button>
                   </div>):(
                     <button onClick={()=>abrirPago(mes,cobro)} style={{background:esFuturo?"#7C3AED":"#059669",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}><Check size={12}/>Marcar pagado</button>
                   )}
@@ -2194,6 +2257,7 @@ function ReportesPage({data,showToast}){
         @media print{body{padding:0}}
       </style></head><body>
       <div class="head">
+        <img src="${LOGO_SEEDS}" alt="Seeds" style="width:90px;height:90px;object-fit:contain;margin-bottom:6px"/>
         <h1>Seeds English School</h1>
         <p>Jesús de Otoro, Intibucá, Honduras</p>
         <p style="margin-top:8px;font-size:15px;font-weight:700;color:#1E293B">📊 Reporte económico — ${mesSel}</p>
