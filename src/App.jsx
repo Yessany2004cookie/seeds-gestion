@@ -311,6 +311,73 @@ const generarImgGraduacion = (v, al, padre, sec, tipo) => {
   c.strokeStyle='#E2E8F0'; c.lineWidth=2; c.strokeRect(1,1,598,H-2);
   return cv.toDataURL('image/png');
 };
+
+// ── Imagen del ESTADO DE CUENTA anual (para WhatsApp) ──
+const generarImgEstadoCuenta = (alumno, padre, sec, anio, filas, totales) => {
+  const L=(n)=>`L ${Number(n).toLocaleString()}`;
+  const filaH = 30, headerH = 250, footerH = 150;
+  const H = headerH + filas.length*filaH + footerH;
+  const cv = document.createElement('canvas'); cv.width=620; cv.height=H;
+  const c = cv.getContext('2d');
+  c.fillStyle='#fff'; c.fillRect(0,0,620,H);
+  c.fillStyle='#F97316'; c.fillRect(0,0,620,92);
+  c.save(); c.fillStyle='#fff'; cajaRedonda(c,14,12,68,68,10); c.fill(); c.restore();
+  dibujarLogo(c, 18, 16, 60);
+  c.fillStyle='#fff'; c.font='bold 22px Segoe UI,sans-serif'; c.textAlign='center';
+  c.fillText('Seeds English School',335,34);
+  c.fillStyle='#FFE7D1'; c.font='12px Segoe UI,sans-serif';
+  c.fillText('Jesus de Otoro, Intibuca, Honduras',335,55);
+  c.fillStyle='#fff'; c.font='bold 15px Segoe UI,sans-serif';
+  c.fillText(`Estado de cuenta ${anio}`,335,78);
+  let y=118;
+  c.textAlign='left'; c.fillStyle='#1E293B'; c.font='bold 14px Segoe UI,sans-serif';
+  c.fillText(alumno.nombre||'-',24,y); y+=20;
+  c.font='12px Segoe UI,sans-serif'; c.fillStyle='#475569';
+  c.fillText(`Padre/Encargado: ${padre?.nombre||'-'}   -   Tel: ${padre?.telefono||'-'}`,24,y); y+=18;
+  c.fillText(`Seccion: ${sec?.nombre||'-'}   -   Mensualidad: ${alumno.beca?'Becado':L(totales.mensual)}`,24,y); y+=22;
+  c.fillStyle='#F1F5F9'; c.fillRect(24,y,572,28);
+  c.fillStyle='#475569'; c.font='bold 12px Segoe UI,sans-serif';
+  c.fillText('Mes',34,y+18);
+  c.textAlign='center'; c.fillText('Estado',250,y+18);
+  c.textAlign='center'; c.fillText('Fecha pago',380,y+18);
+  c.textAlign='right'; c.fillText('Monto',586,y+18);
+  y+=28;
+  c.font='13px Segoe UI,sans-serif';
+  filas.forEach((f,i)=>{
+    if(i%2===1){c.fillStyle='#FAFAFA';c.fillRect(24,y,572,filaH);}
+    c.textAlign='left'; c.fillStyle='#1E293B'; c.fillText(f.mes,34,y+20);
+    c.textAlign='center';
+    c.fillStyle=f.estadoColor; c.font='bold 12px Segoe UI,sans-serif';
+    c.fillText(f.estadoTxt,250,y+20);
+    c.font='12px Segoe UI,sans-serif'; c.fillStyle='#475569';
+    c.fillText(f.fecha||'-',380,y+20);
+    c.textAlign='right'; c.fillStyle=f.montoColor||'#1E293B'; c.font='13px Segoe UI,sans-serif';
+    c.fillText(f.montoTxt,586,y+20);
+    c.strokeStyle='#F1F5F9'; c.beginPath(); c.moveTo(24,y+filaH); c.lineTo(596,y+filaH); c.stroke();
+    y+=filaH;
+  });
+  y+=14;
+  const boxW=182, gap=12; let bx=24;
+  const box=(label,val,bg,fg)=>{
+    c.fillStyle=bg; cajaRedonda(c,bx,y,boxW,52,8); c.fill();
+    c.fillStyle=fg; c.textAlign='center'; c.font='11px Segoe UI,sans-serif';
+    c.fillText(label,bx+boxW/2,y+20);
+    c.font='bold 18px Segoe UI,sans-serif'; c.fillText(val,bx+boxW/2,y+42);
+    bx+=boxW+gap;
+  };
+  box('Total pagado',L(totales.pagado),'#ECFDF5','#166534');
+  if(totales.mora>0) box('Mora por atraso',L(totales.mora),'#FEF2F2','#991B1B');
+  box(totales.mora>0?'Total pendiente (con mora)':'Total pendiente',L(totales.deuda),'#FFF7ED','#9A3412');
+  y+=52+18;
+  const fechaGen=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
+  c.fillStyle='#64748B'; c.font='11px Segoe UI,sans-serif'; c.textAlign='center';
+  c.fillText('Generado el '+fechaGen,310,y);
+  y+=16; c.fillStyle='#94A3B8';
+  c.fillText('Seeds English School - Area Administrativa',310,y);
+  c.strokeStyle='#E2E8F0'; c.lineWidth=2; c.strokeRect(1,1,618,H-2);
+  return cv.toDataURL('image/png');
+};
+
 // ══════════════════════════
 export default function App() {
   const [session, setSession] = useState(null);
@@ -968,37 +1035,61 @@ function HistorialPage({data,loadData,showToast}){
   };
 
   // Estado de cuenta anual (los 12 meses) para enviar al padre — PDF vía impresión
+  // Calcula los datos del estado de cuenta (compartido por PDF e imagen)
+  const calcularEstadoCuenta=()=>{
+    const anio=anioSel;
+    const mensual=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
+    const becado=alumno.beca===true;
+    let totalPagado=0, totalFaltante=0, totalMora=0;
+    const Lx=(n)=>`L ${Number(n).toLocaleString()}`;
+    const filasData=MESES.map(mes=>{
+      const comp=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&anioDe(f)===anio&&f.tipo_factura==="comprobante");
+      const cobro=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&anioDe(f)===anio&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
+      if(becado){
+        return {mes,estadoTxt:"Becado",estadoColor:"#7C3AED",fecha:"-",montoTxt:"-",montoColor:"#94A3B8"};
+      }
+      if(comp){
+        totalPagado+=Number(comp.monto_total)||mensual;
+        return {mes,estadoTxt:"Pagado",estadoColor:"#059669",fecha:comp.fecha_pago||"-",montoTxt:Lx(comp.monto_total||mensual),montoColor:"#1E293B"};
+      }
+      const facturaBase=cobro||{alumno_id:alumno.id,mes_correspondiente:mes,monto_total:mensual,fecha_emision:`${anio}-01-01`,estado:"pendiente",tipo_factura:"cobro"};
+      const mora=calcMora(facturaBase,data.secciones,data.alumnos);
+      totalFaltante+=mensual; totalMora+=mora;
+      return {mes,estadoTxt:"Pendiente",estadoColor:"#DC2626",fecha:"-",montoTxt:mora>0?`${Lx(mensual)} + ${Lx(mora)} mora`:Lx(mensual),montoColor:"#DC2626",mora};
+    });
+    return {anio,mensual,becado,filasData,totales:{mensual,pagado:totalPagado,faltante:totalFaltante,mora:totalMora,deuda:totalFaltante+totalMora}};
+  };
+
+  // Generar y mostrar la IMAGEN del estado de cuenta (para WhatsApp)
+  const estadoCuentaImagen=()=>{
+    if(!alumno){showToast("Selecciona un alumno","error");return;}
+    const r=calcularEstadoCuenta();
+    const dataUrl=generarImgEstadoCuenta(alumno,padre,sec,r.anio,r.filasData,r.totales);
+    setImgPreview({dataUrl,phone:padre?.telefono||"",destinatario:padre?.nombre||alumno?.nombre||"",numero:"Estado "+r.anio});
+  };
+
   const estadoCuentaPDF=()=>{
     if(!alumno){showToast("Selecciona un alumno","error");return;}
     const anio=anioSel;
     const L=(n)=>`L ${Number(n).toLocaleString()}`;
     const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
-    const mensual=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
-    const becado=alumno.beca===true;
-    // Recorremos los 12 meses
-    let totalPagado=0, totalFaltante=0, totalMora=0;
-    const filas=MESES.map(mes=>{
-      const comp=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&anioDe(f)===anio&&f.tipo_factura==="comprobante");
-      const cobro=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&anioDe(f)===anio&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
-      if(becado){
-        return `<tr><td>${mes}</td><td style="text-align:center;color:#7C3AED">🎓 Becado</td><td style="text-align:right">—</td><td style="text-align:right">—</td></tr>`;
+    const r=calcularEstadoCuenta();
+    const mensual=r.mensual, becado=r.becado;
+    const totalPagado=r.totales.pagado, totalMora=r.totales.mora, totalDeuda=r.totales.deuda;
+    const filas=r.filasData.map(f=>{
+      let montoHtml=f.montoTxt;
+      if(f.montoTxt.indexOf("mora")>=0){
+        const partes=f.montoTxt.split(" + ");
+        montoHtml=partes[0]+' <span style="color:#DC2626">+ '+(partes[1]||"")+'</span>';
       }
-      if(comp){
-        totalPagado+=Number(comp.monto_total)||mensual;
-        return `<tr><td>${mes}</td><td style="text-align:center;color:#059669;font-weight:700">✓ Pagado</td><td style="text-align:right">${comp.fecha_pago||"—"}</td><td style="text-align:right">${L(comp.monto_total||mensual)}</td></tr>`;
-      }
-      // No pagado: calcular mora si corresponde (usa la factura de cobro si existe, o simula una)
-      const facturaBase=cobro||{alumno_id:alumno.id,mes_correspondiente:mes,monto_total:mensual,fecha_emision:`${anio}-01-01`,estado:"pendiente",tipo_factura:"cobro"};
-      const mora=calcMora(facturaBase,data.secciones,data.alumnos);
-      totalFaltante+=mensual; totalMora+=mora;
-      const moraTxt=mora>0?`<span style="color:#DC2626"> + ${L(mora)} mora</span>`:"";
-      return `<tr><td>${mes}</td><td style="text-align:center;color:#DC2626;font-weight:700">Pendiente</td><td style="text-align:right">—</td><td style="text-align:right">${L(mensual)}${moraTxt}</td></tr>`;
+      const marca=f.estadoTxt==="Pagado"?"&#10003; ":"";
+      return `<tr><td>${f.mes}</td><td style="text-align:center;color:${f.estadoColor};font-weight:700">${marca}${f.estadoTxt}</td><td style="text-align:right">${f.fecha}</td><td style="text-align:right">${montoHtml}</td></tr>`;
     }).join("");
-    const totalDeuda=totalFaltante+totalMora;
     const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Estado de cuenta ${alumno.nombre} ${anio}</title>
       <style>
+        @page { size: letter portrait; margin: 15mm; }
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
-        body{padding:32px;color:#1E293B}
+        body{padding:0;color:#1E293B}
         .head{display:flex;align-items:center;gap:20px;border-bottom:3px solid #F97316;padding-bottom:14px;margin-bottom:18px}
         .head .htxt{text-align:left}
         .head h1{font-size:22px;color:#C2410C}
@@ -1039,7 +1130,7 @@ function HistorialPage({data,loadData,showToast}){
         <div class="box" style="background:#FFF7ED;color:#9A3412"><div class="l">Total pendiente${totalMora>0?" (con mora)":""}</div><div class="v">${L(totalDeuda)}</div></div>
       </div>
       ${totalMora>0?`<p style="font-size:11px;color:#94a3b8;margin-top:10px">* El total pendiente incluye la mora por los meses atrasados.</p>`:""}
-      <div class="foot">Seeds English School 🌱 — Estado de cuenta generado automáticamente</div>
+      <div class="foot">Seeds English School — Área Administrativa</div>
       </body></html>`;
     const w=window.open("","_blank");
     if(!w){showToast("Permite las ventanas emergentes para descargar el PDF","error");return;}
@@ -1139,7 +1230,10 @@ function HistorialPage({data,loadData,showToast}){
             ? <div style={{fontSize:18,fontWeight:800,color:"#7C3AED"}}>🎓 Becado</div>
             : <><div style={{fontSize:20,fontWeight:800,color:"#F97316"}}>L {monto.toLocaleString()}</div>
                 {Number(alumno.monto_personalizado)>0&&<div style={{fontSize:11,color:"#7C3AED"}}>Precio especial ✎</div>}</>}
-          <button onClick={estadoCuentaPDF} style={{...btn("#DC2626"),marginTop:8,fontSize:12,padding:"7px 12px"}}><Download size={14}/>Estado de cuenta (PDF)</button>
+          <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+            <button onClick={estadoCuentaImagen} style={{...btn("#25D366"),fontSize:12,padding:"7px 12px"}}><Phone size={14}/>Enviar por WhatsApp</button>
+            <button onClick={estadoCuentaPDF} style={{...btn("#DC2626"),fontSize:12,padding:"7px 12px"}}><Download size={14}/>PDF</button>
+          </div>
         </div>
       </div>
     </div>}
@@ -2244,8 +2338,9 @@ function ReportesPage({data,showToast}){
     const listaGrad=gradMes.length?gradMes.map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const det=Array.isArray(v.detalle)?v.detalle:[];return `<tr><td style="padding:3px 0;color:#475569">${al?.nombre||"—"} (${det.map(d=>d.nombre).join(" + ")})</td><td style="padding:3px 0;text-align:right">${L(v.precio_venta)}</td></tr>`;}).join(""):`<tr><td style="color:#94a3b8;padding:3px 0">Sin graduaciones cobradas este mes</td></tr>`;
     const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte ${mesSel}</title>
       <style>
+        @page { size: letter portrait; margin: 15mm; }
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
-        body{padding:32px;color:#1E293B}
+        body{padding:0;color:#1E293B}
         .head{display:flex;align-items:center;gap:20px;border-bottom:3px solid #7C3AED;padding-bottom:14px;margin-bottom:20px}
         .head .htxt{text-align:left}
         .head h1{font-size:22px;color:#5B21B6}
@@ -2315,7 +2410,7 @@ function ReportesPage({data,showToast}){
         <h2>🎓 Graduaciones cobradas este mes</h2>
         <table>${listaGrad}</table>
       </div>
-      <div class="foot">Seeds English School 🌱 — Reporte generado automáticamente</div>
+      <div class="foot">Seeds English School — Área Administrativa</div>
       </body></html>`;
     const w=window.open("","_blank");
     if(!w){showToast&&showToast("Permite las ventanas emergentes para descargar el PDF","error");return;}
