@@ -1040,22 +1040,33 @@ function HistorialPage({data,loadData,showToast}){
     const anio=anioSel;
     const mensual=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
     const becado=alumno.beca===true;
+    const anioAct=new Date().getFullYear();
     let totalPagado=0, totalFaltante=0, totalMora=0;
     const Lx=(n)=>`L ${Number(n).toLocaleString()}`;
     const filasData=MESES.map(mes=>{
       const comp=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&anioDe(f)===anio&&f.tipo_factura==="comprobante");
       const cobro=data.facturas.find(f=>f.alumno_id===alumno.id&&f.mes_correspondiente===mes&&anioDe(f)===anio&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
+      const pendiente = cobro && cobro.estado!=="pagada";
+      const esFut = anio>anioAct || (anio===anioAct && MESES.indexOf(mes)>new Date().getMonth());
       if(becado){
         return {mes,estadoTxt:"Becado",estadoColor:"#7C3AED",fecha:"-",montoTxt:"-",montoColor:"#94A3B8"};
       }
+      if(pendiente){
+        // Solo los meses marcados como pendientes cuentan como deuda
+        const mora=calcMora(cobro,data.secciones,data.alumnos);
+        totalFaltante+=Number(cobro.monto_total)||mensual; totalMora+=mora;
+        return {mes,estadoTxt:"Pendiente",estadoColor:"#DC2626",fecha:"-",montoTxt:mora>0?`${Lx(cobro.monto_total||mensual)} + ${Lx(mora)} mora`:Lx(cobro.monto_total||mensual),montoColor:"#DC2626",mora};
+      }
       if(comp){
+        // Pago real registrado
         totalPagado+=Number(comp.monto_total)||mensual;
         return {mes,estadoTxt:"Pagado",estadoColor:"#059669",fecha:comp.fecha_pago||"-",montoTxt:Lx(comp.monto_total||mensual),montoColor:"#1E293B"};
       }
-      const facturaBase=cobro||{alumno_id:alumno.id,mes_correspondiente:mes,monto_total:mensual,fecha_emision:`${anio}-01-01`,estado:"pendiente",tipo_factura:"cobro"};
-      const mora=calcMora(facturaBase,data.secciones,data.alumnos);
-      totalFaltante+=mensual; totalMora+=mora;
-      return {mes,estadoTxt:"Pendiente",estadoColor:"#DC2626",fecha:"-",montoTxt:mora>0?`${Lx(mensual)} + ${Lx(mora)} mora`:Lx(mensual),montoColor:"#DC2626",mora};
+      if(esFut){
+        return {mes,estadoTxt:"No cargado aun",estadoColor:"#A78BFA",fecha:"-",montoTxt:"-",montoColor:"#CBD5E1"};
+      }
+      // Por defecto: al dia (saldado)
+      return {mes,estadoTxt:"Al dia",estadoColor:"#10B981",fecha:"-",montoTxt:"-",montoColor:"#94A3B8"};
     });
     return {anio,mensual,becado,filasData,totales:{mensual,pagado:totalPagado,faltante:totalFaltante,mora:totalMora,deuda:totalFaltante+totalMora}};
   };
@@ -1185,14 +1196,14 @@ function HistorialPage({data,loadData,showToast}){
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
-  // Deshacer: quitar el pago/cobro de un mes (borra comprobante y cobro de ese mes)
+  // Marcar un mes pendiente como "al día" (quita el cobro pendiente de ese mes)
   const quitarRegistro=async(mes,cobro,comp)=>{
-    if(!confirm(`¿Quitar el registro de ${mes} ${anioSel}? Se borrará el cobro y el comprobante de ese mes para este alumno.`))return;
+    if(!confirm(`¿Marcar ${mes} ${anioSel} como al día? Se quitará el pendiente de ese mes.`))return;
     try{
       if(comp) await db.remove("facturas",comp.id);
       if(cobro) await db.remove("facturas",cobro.id);
       await loadData();
-      showToast(`Registro de ${mes} eliminado`,"error");
+      showToast(`${mes} marcado como al día`);
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
@@ -1239,51 +1250,69 @@ function HistorialPage({data,loadData,showToast}){
     </div>}
     {selAl&&<div style={card}>
       <h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 14px",display:"flex",alignItems:"center",gap:6}}><Calendar size={16}/>Control de pagos — {anioSel}</h3>
+      <div style={{background:"#F0F9FF",border:"1px solid #BAE6FD",borderRadius:8,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#075985"}}>
+        Por defecto cada mes está <strong>al día</strong>. Solo marcá los meses que el alumno debe. Marcar aquí NO afecta tus reportes de ganancias — es solo control de deudas. Los pagos reales se registran en <strong>Facturas</strong>.
+      </div>
       <div style={{overflowX:"auto"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>
-            <th style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:700,width:80}}>Mes</th>
-            <th style={{textAlign:"left",padding:"8px 10px",color:"#2563EB",fontWeight:700}}>📄 Cobro</th>
-            <th style={{textAlign:"left",padding:"8px 10px",color:"#059669",fontWeight:700}}>✅ Comprobante</th>
+            <th style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:700,width:90}}>Mes</th>
+            <th style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:700}}>Estado</th>
+            <th style={{textAlign:"right",padding:"8px 10px",color:"#64748B",fontWeight:700}}>Monto</th>
+            <th style={{textAlign:"center",padding:"8px 10px",color:"#64748B",fontWeight:700,width:180}}>Acción</th>
           </tr></thead>
           <tbody>
             {tablaMensual.map(({mes,cobro,comp})=>{
               const esFuturo = anioSel>anioActual || (anioSel===anioActual && MESES.indexOf(mes)>new Date().getMonth());
+              const pendiente = cobro && cobro.estado!=="pagada";
+              // mora del mes pendiente
+              const mora = pendiente ? calcMora(cobro,data.secciones,data.alumnos) : 0;
+              // Estado a mostrar
+              let estadoBadge, montoTxt, accion;
+              if(comp){
+                // Pago real (registrado desde Facturas) — cuenta en reportes
+                estadoBadge = <span style={badge("#059669")}>Pagado</span>;
+                montoTxt = <span style={{fontWeight:600}}>L {Number(comp.monto_total).toLocaleString()}</span>;
+                accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center"}}>
+                  <span style={{fontSize:10,color:"#94A3B8"}}>{comp.fecha_pago}</span>
+                  <button onClick={()=>verImagen(comp,"comprobante")} title="Ver comprobante" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 7px",borderRadius:4}}><Send size={11} color="#fff"/></button>
+                </div>;
+              } else if(pendiente){
+                // Pendiente (debe)
+                estadoBadge = <span style={badge("#DC2626")}>Pendiente</span>;
+                montoTxt = <span style={{fontWeight:700,color:"#DC2626"}}>L {Number(cobro.monto_total).toLocaleString()}{mora>0?<span style={{fontSize:10}}> +L {mora.toLocaleString()} mora</span>:""}</span>;
+                accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center"}}>
+                  <button onClick={()=>verImagen(cobro,"cobro")} title="Enviar cobro" style={{background:"#25D366",border:"none",cursor:"pointer",padding:"3px 7px",borderRadius:4}}><Phone size={11} color="#fff"/></button>
+                  <button onClick={()=>quitarRegistro(mes,cobro,comp)} title="Marcar al día (quitar pendiente)" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Al día</button>
+                </div>;
+              } else if(esFuturo){
+                // Mes futuro no cargado aún
+                estadoBadge = <span style={{fontSize:11,color:"#A78BFA",fontWeight:600}}>No cargado aún</span>;
+                montoTxt = <span style={{color:"#CBD5E1"}}>—</span>;
+                accion = <span style={{fontSize:10,color:"#CBD5E1"}}>—</span>;
+              } else {
+                // Al día por defecto (saldado, sin registro, no cuenta en reportes)
+                estadoBadge = <span style={badge("#10B981")}>Al día</span>;
+                montoTxt = <span style={{color:"#CBD5E1"}}>—</span>;
+                accion = <button onClick={()=>marcarPendiente(mes)} title="Marcar como pendiente (deuda)" style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",padding:"4px 10px",borderRadius:5,color:"#DC2626",fontSize:11,fontWeight:600}}>Marcar pendiente</button>;
+              }
               return(<tr key={mes} style={{borderBottom:"1px solid #F1F5F9",background:esFuturo?"#FAFAFF":"transparent"}}>
-                <td style={{padding:"8px 10px",fontWeight:700,color:esFuturo?"#7C3AED":"#1E293B"}}>{mes.slice(0,3)}{esFuturo?<span style={{fontSize:9,fontWeight:600,color:"#A78BFA",display:"block"}}>adelantado</span>:""}</td>
-                <td style={{padding:"8px 10px"}}>
-                  {cobro?(<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                    <span style={badge(cobro.estado==="pagada"?"#059669":cobro.estado==="pendiente"?"#DC2626":"#D97706")}>{cobro.numero_factura} · {cobro.estado}</span>
-                    <span style={{fontSize:11,color:"#475569"}}>L {Number(cobro.monto_total).toLocaleString()}</span>
-                    <button onClick={()=>verImagen(cobro,"cobro")} title="Ver cobro" style={{background:"#2563EB",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}}><Send size={10} color="#fff"/></button>
-                    <button onClick={()=>quitarRegistro(mes,cobro,comp)} title="Quitar registro de este mes" style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={12} color="#DC2626"/></button>
-                  </div>):(
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{color:"#94A3B8",fontSize:11}}>Sin cobro</span>
-                      <button onClick={()=>marcarPendiente(mes)} title="Marcar como pendiente (deuda)" style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",padding:"3px 8px",borderRadius:5,color:"#DC2626",fontSize:11,fontWeight:600}}>Marcar pendiente</button>
-                    </div>
-                  )}
-                </td>
-                <td style={{padding:"8px 10px"}}>
-                  {comp?(<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                    <span style={badge("#059669")}>{comp.numero_factura} · ✓ Pagado</span>
-                    <span style={{fontSize:11,color:"#475569"}}>{comp.fecha_pago} · {comp.tipo_pago}</span>
-                    <button onClick={()=>verImagen(comp,"comprobante")} title="Ver comprobante" style={{background:"#059669",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}}><Send size={10} color="#fff"/></button>
-                  </div>):(
-                    <button onClick={()=>abrirPago(mes,cobro)} style={{background:esFuturo?"#7C3AED":"#059669",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}><Check size={12}/>Marcar pagado</button>
-                  )}
-                </td>
+                <td style={{padding:"8px 10px",fontWeight:700,color:esFuturo?"#7C3AED":"#1E293B"}}>{mes}</td>
+                <td style={{padding:"8px 10px"}}>{estadoBadge}</td>
+                <td style={{padding:"8px 10px",textAlign:"right"}}>{montoTxt}</td>
+                <td style={{padding:"8px 10px",textAlign:"center"}}>{accion}</td>
               </tr>);
             })}
           </tbody>
         </table>
       </div>
       <div style={{marginTop:14,display:"flex",gap:12,flexWrap:"wrap",fontSize:12}}>
-        <span style={badge("#059669")}>✓ Pagados: {tablaMensual.filter(t=>t.cobro?.estado==="pagada").length}</span>
-        <span style={badge("#DC2626")}>⏳ Pendientes: {tablaMensual.filter(t=>t.cobro&&t.cobro.estado==="pendiente").length}</span>
+        <span style={badge("#059669")}>Pagados: {tablaMensual.filter(t=>t.comp).length}</span>
+        <span style={badge("#DC2626")}>Pendientes: {tablaMensual.filter(t=>t.cobro&&t.cobro.estado!=="pagada"&&!t.comp).length}</span>
+        <span style={badge("#10B981")}>Al día: {tablaMensual.filter(t=>!t.comp&&!(t.cobro&&t.cobro.estado!=="pagada")&&!(anioSel>anioActual||(anioSel===anioActual&&MESES.indexOf(t.mes)>new Date().getMonth()))).length}</span>
       </div>
     </div>}
-    {!selAl&&<div style={card}><h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 8px"}}>Selecciona un alumno</h3><p style={{fontSize:13,color:"#94A3B8"}}>Filtra por sección y selecciona el alumno para ver su tabla de cobros y comprobantes mes por mes. Puedes marcar cualquier mes como pagado con un solo clic.</p></div>}
+    {!selAl&&<div style={card}><h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 8px"}}>Selecciona un alumno</h3><p style={{fontSize:13,color:"#94A3B8"}}>Filtra por sección y selecciona el alumno para ver su control de pagos del año. Por defecto los meses están al día; solo marcá los pendientes.</p></div>}
 
     {/* Modal marcar pagado desde historial */}
     {pagoModal&&alumno&&<Modal title={`✅ Registrar pago — ${pagoModal.mes}`} onClose={()=>setPagoModal(null)} onSave={marcarPagado}>
