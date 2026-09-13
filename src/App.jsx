@@ -1311,7 +1311,7 @@ function HistorialPage({data,loadData,showToast}){
                 montoTxt = <span style={{fontWeight:700,color:"#DC2626"}}>L {Number(cobro.monto_total).toLocaleString()}{mora>0?<span style={{fontSize:10}}> +L {mora.toLocaleString()} mora</span>:""}</span>;
                 accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center"}}>
                   <button onClick={()=>verImagen(cobro,"cobro")} title="Enviar cobro" style={{background:"#25D366",border:"none",cursor:"pointer",padding:"3px 7px",borderRadius:4}}><Phone size={11} color="#fff"/></button>
-                  <button onClick={()=>quitarRegistro(mes,cobro,comp)} title="Marcar al día (quitar pendiente)" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Al día</button>
+                  <button onClick={()=>quitarRegistro(mes,cobro,comp)} title="Marcar como pagado (quitar pendiente)" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Pagado</button>
                 </div>;
               } else if(esFuturo){
                 // Mes futuro no cargado aún
@@ -1319,8 +1319,8 @@ function HistorialPage({data,loadData,showToast}){
                 montoTxt = <span style={{color:"#CBD5E1"}}>—</span>;
                 accion = <span style={{fontSize:10,color:"#CBD5E1"}}>—</span>;
               } else {
-                // Al día por defecto (saldado, sin registro, no cuenta en reportes)
-                estadoBadge = <span style={badge("#10B981")}>Al día</span>;
+                // Saldado por defecto - se muestra como "Pagado" (no cuenta en reportes)
+                estadoBadge = <span style={badge("#059669")}>Pagado</span>;
                 montoTxt = <span style={{color:"#CBD5E1"}}>—</span>;
                 accion = <button onClick={()=>marcarPendiente(mes)} title="Marcar como pendiente (deuda)" style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",padding:"4px 10px",borderRadius:5,color:"#DC2626",fontSize:11,fontWeight:600}}>Marcar pendiente</button>;
               }
@@ -1335,9 +1335,8 @@ function HistorialPage({data,loadData,showToast}){
         </table>
       </div>
       <div style={{marginTop:14,display:"flex",gap:12,flexWrap:"wrap",fontSize:12}}>
-        <span style={badge("#059669")}>Pagados: {tablaMensual.filter(t=>t.comp).length}</span>
+        <span style={badge("#059669")}>Pagados: {tablaMensual.filter(t=>t.comp || (!(t.cobro&&t.cobro.estado!=="pagada")&&mesCargado(MESES.indexOf(t.mes),anioSel))).length}</span>
         <span style={badge("#DC2626")}>Pendientes: {tablaMensual.filter(t=>t.cobro&&t.cobro.estado!=="pagada"&&!t.comp).length}</span>
-        <span style={badge("#10B981")}>Al día: {tablaMensual.filter(t=>!t.comp&&!(t.cobro&&t.cobro.estado!=="pagada")&&mesCargado(MESES.indexOf(t.mes),anioSel)).length}</span>
       </div>
     </div>}
     {!selAl&&<div style={card}><h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 8px"}}>Selecciona un alumno</h3><p style={{fontSize:13,color:"#94A3B8"}}>Filtra por sección y selecciona el alumno para ver su control de pagos del año. Por defecto los meses están al día; solo marcá los pendientes.</p></div>}
