@@ -122,7 +122,16 @@ const cajaRedonda = (c,x,y,w,h,r) => {
 };
 // Dibuja el logo en la esquina superior izquierda del canvas (si ya cargó)
 const dibujarLogo = (c, x=18, y=16, size=58) => {
-  try { if (logoImg && logoImg.complete && logoImg.naturalWidth) c.drawImage(logoImg, x, y, size, size); } catch(e){}
+  try {
+    if (logoImg && logoImg.complete && logoImg.naturalWidth) {
+      // Mantener la proporcion real del logo, centrado dentro del cuadro "size"
+      const nw = logoImg.naturalWidth, nh = logoImg.naturalHeight;
+      const escala = Math.min(size/nw, size/nh);
+      const w = nw*escala, h = nh*escala;
+      const dx = x + (size-w)/2, dy = y + (size-h)/2;
+      c.drawImage(logoImg, dx, dy, w, h);
+    }
+  } catch(e){}
 };
 
 // ── Imagen de factura (Canvas) ──
@@ -325,23 +334,27 @@ const generarImgGraduacion = (v, al, padre, sec, tipo) => {
 // ── Imagen del ESTADO DE CUENTA anual (para WhatsApp) ──
 const generarImgEstadoCuenta = (alumno, padre, sec, anio, filas, totales) => {
   const L=(n)=>`L ${Number(n).toLocaleString()}`;
-  const filaH = 30, headerH = 250, footerH = 150;
+  const filaH = 30, headerH = 270, footerH = 150;
   const H = headerH + filas.length*filaH + footerH;
   const cv = document.createElement('canvas'); cv.width=620; cv.height=H;
   const c = cv.getContext('2d');
   c.fillStyle='#fff'; c.fillRect(0,0,620,H);
-  c.fillStyle='#F97316'; c.fillRect(0,0,620,92);
-  c.save(); c.fillStyle='#fff'; cajaRedonda(c,14,12,68,68,10); c.fill(); c.restore();
-  dibujarLogo(c, 18, 16, 60);
-  c.fillStyle='#fff'; c.font='bold 22px Segoe UI,sans-serif'; c.textAlign='center';
-  c.fillText('Seeds English School',335,34);
-  c.fillStyle='#FFE7D1'; c.font='12px Segoe UI,sans-serif';
-  c.fillText('Jesus de Otoro, Intibuca, Honduras',335,55);
-  c.fillStyle='#fff'; c.font='bold 15px Segoe UI,sans-serif';
-  c.fillText(`Estado de cuenta ${anio}`,335,78);
-  let y=118;
-  c.textAlign='left'; c.fillStyle='#1E293B'; c.font='bold 14px Segoe UI,sans-serif';
-  c.fillText(alumno.nombre||'-',24,y); y+=20;
+  // Encabezado naranja mas alto
+  c.fillStyle='#F97316'; c.fillRect(0,0,620,120);
+  // Tarjeta blanca para el logo (cuadrada, con buen tamano)
+  c.save(); c.fillStyle='#fff'; cajaRedonda(c,24,18,84,84,14); c.fill(); c.restore();
+  dibujarLogo(c, 32, 26, 68);
+  // Texto del encabezado a la derecha del logo
+  c.textAlign='left';
+  c.fillStyle='#fff'; c.font='bold 26px Segoe UI,sans-serif';
+  c.fillText('Seeds English School',124,50);
+  c.fillStyle='#FFE7D1'; c.font='13px Segoe UI,sans-serif';
+  c.fillText('Jesus de Otoro, Intibuca, Honduras',124,72);
+  c.fillStyle='#fff'; c.font='bold 16px Segoe UI,sans-serif';
+  c.fillText(`Estado de cuenta ${anio}`,124,96);
+  let y=150;
+  c.textAlign='left'; c.fillStyle='#1E293B'; c.font='bold 15px Segoe UI,sans-serif';
+  c.fillText(alumno.nombre||'-',24,y); y+=22;
   c.font='12px Segoe UI,sans-serif'; c.fillStyle='#475569';
   c.fillText(`Padre/Encargado: ${padre?.nombre||'-'}   -   Tel: ${padre?.telefono||'-'}`,24,y); y+=18;
   c.fillText(`Seccion: ${sec?.nombre||'-'}   -   Mensualidad: ${alumno.beca?'Becado':L(totales.mensual)}`,24,y); y+=22;
@@ -1132,7 +1145,7 @@ function HistorialPage({data,loadData,showToast}){
         @media print{body{padding:0}}
       </style></head><body>
       <div class="head">
-        <img src="${LOGO_SEEDS}" alt="Seeds" style="width:120px;height:120px;object-fit:contain;flex-shrink:0"/>
+        <div style="width:110px;height:110px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:14px;padding:6px"><img src="${LOGO_SEEDS}" alt="Seeds" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
         <div class="htxt">
           <h1>Seeds English School</h1>
           <p>Jesús de Otoro, Intibucá, Honduras</p>
@@ -2402,7 +2415,7 @@ function ReportesPage({data,showToast}){
         @media print{body{padding:0}}
       </style></head><body>
       <div class="head">
-        <img src="${LOGO_SEEDS}" alt="Seeds" style="width:120px;height:120px;object-fit:contain;flex-shrink:0"/>
+        <div style="width:110px;height:110px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:14px;padding:6px"><img src="${LOGO_SEEDS}" alt="Seeds" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
         <div class="htxt">
           <h1>Seeds English School</h1>
           <p>Jesús de Otoro, Intibucá, Honduras</p>
