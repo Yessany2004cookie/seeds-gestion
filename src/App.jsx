@@ -464,6 +464,8 @@ export default function App() {
   const secIds = new Set(data.secciones.filter(s=>s.sucursal_id===sucursalActiva).map(s=>s.id));
   const alumnosSuc = data.alumnos.filter(a=>secIds.has(a.seccion_id));
   const alumnoIds = new Set(alumnosSuc.map(a=>a.id));
+  // La primera sucursal (o Sede Central) tambien recoge los gastos sin sucursal asignada
+  const esPrimeraSuc = data.sucursales.length>0 && (sucursalActiva===data.sucursales[0].id || sucursalActiva==="suc_central");
   const dataSuc = {
     ...data,
     secciones: data.secciones.filter(s=>s.sucursal_id===sucursalActiva),
@@ -473,7 +475,7 @@ export default function App() {
     ventas_material: data.ventas_material.filter(v=>secIds.has(v.seccion_id)||alumnoIds.has(v.alumno_id)),
     conceptos_graduacion: data.conceptos_graduacion.filter(cg=>secIds.has(cg.seccion_id)),
     cobros_graduacion: data.cobros_graduacion.filter(cg=>secIds.has(cg.seccion_id)||alumnoIds.has(cg.alumno_id)),
-    gastos: data.gastos.filter(g=>g.sucursal_id===sucursalActiva),
+    gastos: data.gastos.filter(g=>g.sucursal_id===sucursalActiva || (esPrimeraSuc && !g.sucursal_id)),
     // padres y maestros quedan completos (se comparten entre sucursales)
   };
   const propsSuc = { data: dataSuc, loadData, showToast, sucursalActiva };
