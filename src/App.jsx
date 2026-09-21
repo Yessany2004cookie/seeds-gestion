@@ -1311,9 +1311,10 @@ function HistorialPage({data,loadData,showToast}){
                 // Pendiente (debe)
                 estadoBadge = <span style={badge("#DC2626")}>Pendiente</span>;
                 montoTxt = <span style={{fontWeight:700,color:"#DC2626"}}>L {Number(cobro.monto_total).toLocaleString()}{mora>0?<span style={{fontSize:10}}> +L {mora.toLocaleString()} mora</span>:""}</span>;
-                accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center"}}>
-                  <button onClick={()=>verImagen(cobro,"cobro")} title="Enviar cobro" style={{background:"#25D366",border:"none",cursor:"pointer",padding:"3px 7px",borderRadius:4}}><Phone size={11} color="#fff"/></button>
-                  <button onClick={()=>quitarRegistro(mes,cobro,comp)} title="Marcar como pagado (quitar pendiente)" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Pagado</button>
+                accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
+                  <button onClick={()=>verImagen(cobro,"cobro")} title="Enviar cobro por WhatsApp" style={{background:"#25D366",border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:4}}><Phone size={11} color="#fff"/></button>
+                  <button onClick={()=>abrirPago(mes,cobro)} title="Registrar pago recibido (entra a caja hoy, suma al mes actual)" style={{background:"#2563EB",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Registrar pago</button>
+                  <button onClick={()=>quitarRegistro(mes,cobro,comp)} title="Quitar el pendiente sin registrar ingreso (ya estaba saldado)" style={{background:"#F1F5F9",border:"1px solid #CBD5E1",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#475569",fontSize:11,fontWeight:600}}>Sin cobro</button>
                 </div>;
               } else if(esFuturo){
                 // Mes futuro no cargado aún
@@ -1324,7 +1325,10 @@ function HistorialPage({data,loadData,showToast}){
                 // Saldado por defecto - se muestra como "Pagado" (no cuenta en reportes)
                 estadoBadge = <span style={badge("#059669")}>Pagado</span>;
                 montoTxt = <span style={{color:"#CBD5E1"}}>—</span>;
-                accion = <button onClick={()=>marcarPendiente(mes)} title="Marcar como pendiente (deuda)" style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",padding:"4px 10px",borderRadius:5,color:"#DC2626",fontSize:11,fontWeight:600}}>Marcar pendiente</button>;
+                accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
+                  <button onClick={()=>abrirPago(mes,cobro)} title="Registrar pago recibido (entra a caja hoy, suma al mes actual)" style={{background:"#2563EB",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Registrar pago</button>
+                  <button onClick={()=>marcarPendiente(mes)} title="Marcar como pendiente (deuda)" style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#DC2626",fontSize:11,fontWeight:600}}>Marcar pendiente</button>
+                </div>;
               }
               return(<tr key={mes} style={{borderBottom:"1px solid #F1F5F9",background:esFuturo?"#FAFAFF":"transparent"}}>
                 <td style={{padding:"8px 10px",fontWeight:700,color:esFuturo?"#7C3AED":"#1E293B"}}>{mes}</td>
@@ -1343,20 +1347,19 @@ function HistorialPage({data,loadData,showToast}){
     </div>}
     {!selAl&&<div style={card}><h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 8px"}}>Selecciona un alumno</h3><p style={{fontSize:13,color:"#94A3B8"}}>Filtra por sección y selecciona el alumno para ver su control de pagos del año. Por defecto los meses están al día; solo marcá los pendientes.</p></div>}
 
-    {/* Modal marcar pagado desde historial */}
-    {pagoModal&&alumno&&<Modal title={`✅ Registrar pago — ${pagoModal.mes}`} onClose={()=>setPagoModal(null)} onSave={marcarPagado}>
-      <div style={{background:"#F0FDF4",borderRadius:8,padding:12,marginBottom:14,fontSize:13,border:"1px solid #BBF7D0"}}>
+    {/* Modal registrar pago recibido desde historial */}
+    {pagoModal&&alumno&&<Modal title={`💵 Registrar pago recibido — ${pagoModal.mes} ${anioSel}`} onClose={()=>setPagoModal(null)} onSave={marcarPagado}>
+      <div style={{background:"#EFF6FF",borderRadius:8,padding:12,marginBottom:14,fontSize:13,border:"1px solid #BFDBFE"}}>
         <div><strong>Alumno:</strong> {alumno.nombre}</div>
-        <div><strong>Mes:</strong> {pagoModal.mes}</div>
+        <div><strong>Corresponde a:</strong> {pagoModal.mes} {anioSel}</div>
         <div><strong>Monto:</strong> L {monto.toLocaleString()}</div>
-        {pagoModal.cobroExistente
-          ? <div style={{color:"#059669",fontSize:12,marginTop:4}}>Ya tenía cobro creado ({pagoModal.cobroExistente.numero_factura}). Se marcará pagado.</div>
-          : <div style={{color:"#6D28D9",fontSize:12,marginTop:4}}>Se creará el cobro y el comprobante en un solo paso.</div>}
+        <div style={{color:"#1D4ED8",fontSize:12,marginTop:6,fontWeight:600}}>Este pago entra a caja y suma a tus ingresos del mes de la fecha de pago. Genera comprobante para el padre.</div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <div><label style={label}>Fecha de pago</label><input type="date" value={pagoForm.fecha_pago} onChange={e=>setPagoForm({...pagoForm,fecha_pago:e.target.value})} style={input}/></div>
+        <div><label style={label}>Fecha en que entró el pago</label><input type="date" value={pagoForm.fecha_pago} onChange={e=>setPagoForm({...pagoForm,fecha_pago:e.target.value})} style={input}/></div>
         <div><label style={label}>Tipo de pago</label><select value={pagoForm.tipo_pago} onChange={e=>setPagoForm({...pagoForm,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
       </div>
+      <div style={{fontSize:11,color:"#94A3B8",marginTop:8}}>Por defecto es hoy. Cambiala solo si el pago entró otro día.</div>
     </Modal>}
 
     {imgPreview&&<ImgPreviewModal img={imgPreview} onClose={()=>setImgPreview(null)}/>}
