@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
@@ -19,6 +20,9 @@ const mesDeFecha = (fecha) => {
 // Mes en que cuenta un ingreso: la fecha real de pago; si por algún motivo
 // no hay fecha_pago (datos viejos), usa el mes asignado como respaldo.
 const mesIngreso = (reg) => mesDeFecha(reg.fecha_pago) || reg.mes_correspondiente || null;
+// Mes en que cuenta un GASTO: la fecha real en que se pago (campo fecha);
+// si no hay fecha, usa el mes asignado como respaldo.
+const mesGasto = (g) => mesDeFecha(g.fecha) || g.mes_correspondiente || null;
 const TIPOS_PAGO = [{value:"efectivo",label:"Efectivo"},{value:"transferencia",label:"Transferencia"},{value:"tarjeta",label:"Tarjeta"},{value:"deposito",label:"Depósito"}];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -584,7 +588,7 @@ function Dashboard({data,setPage}){
   const ingGrad=gradPag.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganGrad=gradPag.reduce((s,v)=>s+Number(v.ganancia),0);
   const ing=ingMens+ingMat+ingGrad;
-  const gastos=data.gastos.filter(g=>g.mes_correspondiente===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
+  const gastos=data.gastos.filter(g=>mesGasto(g)===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
   const ganancia=ingMens+ganMat+ganGrad-gastos;
   const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString()}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastos.toLocaleString()}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString()}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
   return(<div>
@@ -1317,10 +1321,10 @@ function HistorialPage({data,loadData,showToast}){
                   <button onClick={()=>quitarRegistro(mes,cobro,comp)} title="Quitar el pendiente sin registrar ingreso (ya estaba saldado)" style={{background:"#F1F5F9",border:"1px solid #CBD5E1",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#475569",fontSize:11,fontWeight:600}}>Sin cobro</button>
                 </div>;
               } else if(esFuturo){
-                // Mes futuro no cargado aún
+                // Mes futuro no cargado aún - se puede pagar adelantado
                 estadoBadge = <span style={{fontSize:11,color:"#A78BFA",fontWeight:600}}>No cargado aún</span>;
                 montoTxt = <span style={{color:"#CBD5E1"}}>—</span>;
-                accion = <span style={{fontSize:10,color:"#CBD5E1"}}>—</span>;
+                accion = <button onClick={()=>abrirPago(mes,cobro)} title="Registrar pago adelantado (entra a caja hoy, suma al mes actual)" style={{background:"#7C3AED",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Pagar adelantado</button>;
               } else {
                 // Saldado por defecto - se muestra como "Pagado" (no cuenta en reportes)
                 estadoBadge = <span style={badge("#059669")}>Pagado</span>;
@@ -1450,9 +1454,9 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const eliminarGasto=async(id)=>{if(!confirm("¿Eliminar gasto?"))return;try{await db.remove("gastos",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
   const ingresosMes=(mes)=>data.facturas.filter(f=>f.tipo_factura==="comprobante"&&mesIngreso(f)===mes).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
-  const gastosMes=(mes)=>data.gastos.filter(g=>g.mes_correspondiente===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
-  const salariosMes=(mes)=>data.gastos.filter(g=>g.tipo==="salario"&&g.mes_correspondiente===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
-  const rentaMes=(mes)=>data.gastos.filter(g=>g.tipo==="renta"&&g.mes_correspondiente===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
+  const gastosMes=(mes)=>data.gastos.filter(g=>mesGasto(g)===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
+  const salariosMes=(mes)=>data.gastos.filter(g=>g.tipo==="salario"&&mesGasto(g)===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
+  const rentaMes=(mes)=>data.gastos.filter(g=>g.tipo==="renta"&&mesGasto(g)===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
   const tBtn=(a)=>({padding:"10px 18px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #F97316":"3px solid transparent",background:"transparent",color:a?"#F97316":"#64748B"});
 
   return(<div>
@@ -1511,7 +1515,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
           <button onClick={()=>openGasto("otro")} style={btn("#64748B")}><Plus size={15}/>Otro gasto</button>
         </div>
       </div>
-      <div style={card}>{data.gastos.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay gastos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Tipo","Descripción","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{[...data.gastos].reverse().map(g=>{const tc={salario:"#059669",renta:"#7C3AED",otro:"#64748B"};const tl={salario:"Salario",renta:"Renta",otro:"Otro"};return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px"}}>{g.fecha}</td><td style={{padding:"6px 8px"}}><span style={badge(tc[g.tipo]||"#64748B")}>{tl[g.tipo]||g.tipo}</span></td><td style={{padding:"6px 8px"}}>{g.descripcion}</td><td style={{padding:"6px 8px"}}>{g.mes_correspondiente}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td><td style={{padding:"6px 8px"}}><button onClick={()=>eliminarGasto(g.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td></tr>);})}</tbody></table></div>)}</div>
+      <div style={card}>{data.gastos.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay gastos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Tipo","Descripción","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{[...data.gastos].reverse().map(g=>{const tc={salario:"#059669",renta:"#7C3AED",otro:"#64748B"};const tl={salario:"Salario",renta:"Renta",otro:"Otro"};return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px"}}>{g.fecha}</td><td style={{padding:"6px 8px"}}><span style={badge(tc[g.tipo]||"#64748B")}>{tl[g.tipo]||g.tipo}</span></td><td style={{padding:"6px 8px"}}>{g.descripcion}</td><td style={{padding:"6px 8px"}}>{mesGasto(g)||g.mes_correspondiente}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td><td style={{padding:"6px 8px"}}><button onClick={()=>eliminarGasto(g.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td></tr>);})}</tbody></table></div>)}</div>
     </div>}
 
     {modal==="gasto"&&<Modal title={form.tipo==="salario"?"💰 Pagar maestro":form.tipo==="renta"?"🏠 Registrar renta":"📋 Registrar gasto"} onClose={()=>setModal(null)} onSave={saveGasto}>
@@ -2373,7 +2377,7 @@ function ReportesPage({data,showToast}){
   const gananciaGraduacion=gradMes.reduce((s,v)=>s+Number(v.ganancia),0);
 
   // Gastos: por el mes asignado (los salarios se asignan al mes que corresponden)
-  const gastosMes=data.gastos.filter(g=>g.mes_correspondiente===mesSel);
+  const gastosMes=data.gastos.filter(g=>mesGasto(g)===mesSel);
   const totSalarios=gastosMes.filter(g=>g.tipo==="salario").reduce((s,g)=>s+Number(g.monto),0);
   const totRenta=gastosMes.filter(g=>g.tipo==="renta").reduce((s,g)=>s+Number(g.monto),0);
   const totOtros=gastosMes.filter(g=>g.tipo==="otro").reduce((s,g)=>s+Number(g.monto),0);
