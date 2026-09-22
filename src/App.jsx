@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
@@ -1239,6 +1238,21 @@ function HistorialPage({data,loadData,showToast}){
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
+  // Revocar (borrar) un pago registrado por error - con DOBLE confirmacion
+  const revocarPago=async(mes,cobro,comp)=>{
+    const monto=comp?Number(comp.monto_total):0;
+    // Primera confirmacion
+    if(!confirm(`⚠️ ¿Revocar el pago de ${mes} ${anioSel} (L ${monto.toLocaleString()})?\n\nEl mes volverá a quedar sin pago y el ingreso se quitará de los reportes.`))return;
+    // Segunda confirmacion
+    if(!confirm(`Esta acción NO se puede deshacer.\n\n¿Confirmás que querés BORRAR el pago de ${mes} ${anioSel}?`))return;
+    try{
+      if(comp) await db.remove("facturas",comp.id);
+      if(cobro) await db.remove("facturas",cobro.id);
+      await loadData();
+      showToast(`Pago de ${mes} revocado`,"error");
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+
   const tablaMensual = selAl ? MESES.map(mes => {
     const cobro = data.facturas.find(f=>f.alumno_id===selAl&&f.mes_correspondiente===mes&&anioDe(f)===anioSel&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
     const comp = data.facturas.find(f=>f.alumno_id===selAl&&f.mes_correspondiente===mes&&anioDe(f)===anioSel&&f.tipo_factura==="comprobante");
@@ -1310,6 +1324,7 @@ function HistorialPage({data,loadData,showToast}){
                 accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center"}}>
                   <span style={{fontSize:10,color:"#94A3B8"}}>{comp.fecha_pago}</span>
                   <button onClick={()=>verImagen(comp,"comprobante")} title="Ver comprobante" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 7px",borderRadius:4}}><Send size={11} color="#fff"/></button>
+                  <button onClick={()=>revocarPago(mes,cobro,comp)} title="Revocar este pago (borrarlo)" style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",padding:"3px 7px",borderRadius:4}}><Trash2 size={11} color="#DC2626"/></button>
                 </div>;
               } else if(pendiente){
                 // Pendiente (debe)
