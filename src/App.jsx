@@ -1500,6 +1500,17 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const gastosMes=(mes)=>data.gastos.filter(g=>mesGasto(g)===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
   const salariosMes=(mes)=>data.gastos.filter(g=>g.tipo==="salario"&&mesGasto(g)===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
   const rentaMes=(mes)=>data.gastos.filter(g=>g.tipo==="renta"&&mesGasto(g)===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
+  // Materiales y graduacion pagados del mes (por fecha de pago), igual que Dashboard/Reportes
+  const matMes=(mes)=>(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
+  const gradMesF=(mes)=>(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
+  const ingMatMes=(mes)=>matMes(mes).reduce((s,v)=>s+Number(v.precio_venta),0);
+  const ganMatMes=(mes)=>matMes(mes).reduce((s,v)=>s+Number(v.ganancia),0);
+  const ingGradMes=(mes)=>gradMesF(mes).reduce((s,v)=>s+Number(v.precio_venta),0);
+  const ganGradMes=(mes)=>gradMesF(mes).reduce((s,v)=>s+Number(v.ganancia),0);
+  // Ingreso total del mes (lo que entra a caja): mensualidades + materiales + graduacion
+  const ingresoTotalMes=(mes)=>ingresosMes(mes)+ingMatMes(mes)+ingGradMes(mes);
+  // Resultado del mes: mensualidades + ganancia de materiales/graduacion - gastos
+  const resultadoMes=(mes)=>ingresosMes(mes)+ganMatMes(mes)+ganGradMes(mes)-gastosMes(mes);
   const tBtn=(a)=>({padding:"10px 18px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #F97316":"3px solid transparent",background:"transparent",color:a?"#F97316":"#64748B"});
 
   return(<div>
@@ -1511,12 +1522,15 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
 
     {tab==="resumen"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:14}}>
       {MESES.slice(0,new Date().getMonth()+1).reverse().map(mes=>{
-        const ing=ingresosMes(mes);const gas=gastosMes(mes);const net=ing-gas;
+        const ing=ingresoTotalMes(mes);const gas=gastosMes(mes);const net=resultadoMes(mes);
         return(<div key={mes} style={{...card,borderLeft:`4px solid ${net>=0?"#059669":"#DC2626"}`}}>
           <div style={{fontSize:14,fontWeight:700,color:"#1E293B",marginBottom:8}}>{mes}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,fontSize:12}}>
             <div><span style={{color:"#64748B"}}>Ingresos:</span> <strong style={{color:"#059669"}}>L {ing.toLocaleString()}</strong></div>
             <div><span style={{color:"#64748B"}}>Gastos:</span> <strong style={{color:"#DC2626"}}>L {gas.toLocaleString()}</strong></div>
+            <div><span style={{color:"#64748B"}}>Mensualidades:</span> L {ingresosMes(mes).toLocaleString()}</div>
+            <div><span style={{color:"#64748B"}}>Materiales:</span> L {ingMatMes(mes).toLocaleString()}</div>
+            <div><span style={{color:"#64748B"}}>Graduación:</span> L {ingGradMes(mes).toLocaleString()}</div>
             <div><span style={{color:"#64748B"}}>Salarios:</span> L {salariosMes(mes).toLocaleString()}</div>
             <div><span style={{color:"#64748B"}}>Renta:</span> L {rentaMes(mes).toLocaleString()}</div>
           </div>
