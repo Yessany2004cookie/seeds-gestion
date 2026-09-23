@@ -19,9 +19,10 @@ const mesDeFecha = (fecha) => {
 // Mes en que cuenta un ingreso: la fecha real de pago; si por algún motivo
 // no hay fecha_pago (datos viejos), usa el mes asignado como respaldo.
 const mesIngreso = (reg) => mesDeFecha(reg.fecha_pago) || reg.mes_correspondiente || null;
-// Mes en que cuenta un GASTO: la fecha real en que se pago (campo fecha);
-// si no hay fecha, usa el mes asignado como respaldo.
-const mesGasto = (g) => mesDeFecha(g.fecha) || g.mes_correspondiente || null;
+// Mes en que cuenta un GASTO en los reportes: el "mes al que se resta"
+// (mes_deduccion) que elige el usuario; si no existe, el mes que corresponde,
+// y como ultimo respaldo la fecha real de pago.
+const mesGasto = (g) => g.mes_deduccion || g.mes_correspondiente || mesDeFecha(g.fecha) || null;
 const TIPOS_PAGO = [{value:"efectivo",label:"Efectivo"},{value:"transferencia",label:"Transferencia"},{value:"tarjeta",label:"Tarjeta"},{value:"deposito",label:"Depósito"}];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -1439,17 +1440,17 @@ function RecordatoriosPage({data,showToast}){
 function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const[tab,setTab]=useState("resumen");const[modal,setModal]=useState(null);
   const[imgPreview,setImgPreview]=useState(null);
-  const[form,setForm]=useState({tipo:"salario",maestro_id:"",descripcion:"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()]});
+  const[form,setForm]=useState({tipo:"salario",maestro_id:"",descripcion:"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()],mes_deduccion:MESES[new Date().getMonth()]});
   const mesActual=MESES[new Date().getMonth()];
 
-  const openGasto=(tipo="salario")=>{setForm({tipo,maestro_id:"",descripcion:tipo==="renta"?"Renta del local":"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:mesActual});setModal("gasto");};
+  const openGasto=(tipo="salario")=>{setForm({tipo,maestro_id:"",descripcion:tipo==="renta"?"Renta del local":"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:mesActual,mes_deduccion:mesActual});setModal("gasto");};
   const selMaestro=(mid)=>{const m=data.maestros.find(x=>x.id===mid);setForm({...form,maestro_id:mid,monto:String(m?.salario||""),descripcion:`Salario ${m?.nombre||""}`});};
 
   const saveGasto=async()=>{
     if(!form.monto||parseFloat(form.monto)<=0){showToast("Ingresa el monto","error");return;}
     if(form.tipo==="salario"&&!form.maestro_id){showToast("Selecciona un maestro","error");return;}
     try{
-      const gasto={id:uid(),tipo:form.tipo,maestro_id:form.maestro_id||null,descripcion:form.descripcion,monto:parseFloat(form.monto),fecha:form.fecha,mes_correspondiente:form.mes_correspondiente,sucursal_id:sucursalActiva};
+      const gasto={id:uid(),tipo:form.tipo,maestro_id:form.maestro_id||null,descripcion:form.descripcion,monto:parseFloat(form.monto),fecha:form.fecha,mes_correspondiente:form.mes_correspondiente,mes_deduccion:form.mes_deduccion||form.mes_correspondiente,sucursal_id:sucursalActiva};
       await db.insert("gastos",gasto);
       await loadData();setModal(null);
       if(form.tipo==="salario"){
@@ -1565,7 +1566,10 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
       {form.maestro_id&&form.tipo==="salario"&&(()=>{const m=data.maestros.find(x=>x.id===form.maestro_id);const pagos=data.gastos.filter(g=>g.tipo==="salario"&&g.maestro_id===m?.id).map(g=>g.mes_correspondiente);return(<div style={{background:"#F0FDF4",borderRadius:8,padding:10,marginBottom:12,fontSize:12,border:"1px solid #BBF7D0"}}><strong>{m?.nombre}</strong> — L {Number(m?.salario).toLocaleString()}<br/>Meses pagados: {pagos.length>0?pagos.join(", "):"Ninguno"}</div>);})()}
       <Field label="Descripción" value={form.descripcion} onChange={v=>setForm({...form,descripcion:v})}/>
       <Field label="Monto (L)" value={form.monto} onChange={v=>setForm({...form,monto:v})} type="number"/>
-      <div style={{marginBottom:12}}><label style={label}>Mes</label><select value={form.mes_correspondiente} onChange={e=>setForm({...form,mes_correspondiente:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div style={{marginBottom:12}}><label style={label}>Mes que corresponde</label><select value={form.mes_correspondiente} onChange={e=>setForm({...form,mes_correspondiente:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select><div style={{fontSize:10,color:"#94A3B8",marginTop:2}}>A qué mes pertenece (ej: salario de agosto)</div></div>
+        <div style={{marginBottom:12}}><label style={label}>Mes al que se resta</label><select value={form.mes_deduccion} onChange={e=>setForm({...form,mes_deduccion:e.target.value})} style={{...input,cursor:"pointer",borderColor:"#7C3AED"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select><div style={{fontSize:10,color:"#7C3AED",marginTop:2}}>En qué mes cuenta en tus gastos</div></div>
+      </div>
       <div style={{marginBottom:12}}><label style={label}>Fecha</label><input type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} style={input}/></div>
     </Modal>}
 
