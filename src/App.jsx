@@ -2260,6 +2260,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Pendiente de cobro</div><div style={{fontSize:20,fontWeight:800,color:"#DC2626"}}>L {totPend.toLocaleString()}</div></div>
       <div style={{...card,borderLeft:"3px solid #7C3AED",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Total cobrado</div><div style={{fontSize:20,fontWeight:800,color:"#7C3AED"}}>L {totVenta.toLocaleString()}</div></div>
       <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ganancia cobrada</div><div style={{fontSize:20,fontWeight:800,color:"#059669"}}>L {totGanancia.toLocaleString()}</div></div>
+      <div style={{...card,borderLeft:"3px solid #EA580C",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Total para uso del evento</div><div style={{fontSize:20,fontWeight:800,color:"#EA580C"}}>L {(totVenta-totGanancia).toLocaleString()}</div><div style={{fontSize:10,color:"#94A3B8"}}>costo de certificados/entrega</div></div>
     </div>
 
     <div style={{display:"flex",borderBottom:"1px solid #E2E8F0",marginBottom:16}}>
