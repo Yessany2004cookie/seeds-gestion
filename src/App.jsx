@@ -2770,13 +2770,13 @@ function ReportesPage({data,showToast}){
 
   // ── Gráfica de barras (SVG: se ve igual en pantalla y en el PDF) ──
   const barrasRep=[
-    {l:"Ingresos",v:ingresoTotal,c:["#34D399","#059669"]},
-    {l:"Egresos",v:totalEgresos,c:["#F87171","#B91C1C"]},
-    {l:"Planilla",v:totSalarios,c:["#FDBA74","#EA580C"]},
-    {l:"Renta",v:totRenta,c:["#C4B5FD","#7C3AED"]},
-    {l:"Otros gastos",v:totOtros,c:["#F9A8D4","#DB2777"]},
-    {l:"Por pagar",v:totPorPagar,c:["#FCA5A5","#DC2626"],rayas:true},
-    {l:"Por cobrar",v:totPorCobrar,c:["#FDE68A","#D97706"],rayas:true},
+    {l:"Ingresos",v:ingresoTotal,c:["#475569","#1E293B"]},
+    {l:"Egresos",v:totalEgresos,c:["#FB923C","#EA580C"]},
+    {l:"Planilla",v:totSalarios,c:["#FDBA74","#F97316"]},
+    {l:"Renta",v:totRenta,c:["#FDBA74","#F97316"]},
+    {l:"Otros gastos",v:totOtros,c:["#FDBA74","#F97316"]},
+    {l:"Por pagar",v:totPorPagar,c:["#FB923C","#EA580C"],rayas:true},
+    {l:"Por cobrar",v:totPorCobrar,c:["#94A3B8","#64748B"],rayas:true},
   ];
   const svgGrafica=(()=>{const W=760,H=300,top=46,base=250,n=barrasRep.length,slot=W/n,bw=Math.min(62,slot*0.56);const max=Math.max(...barrasRep.map(b=>b.v),1);
     const fmt=(v)=>`L ${(Math.round(v*100)/100).toLocaleString()}`;
@@ -2789,7 +2789,7 @@ function ReportesPage({data,showToast}){
       out+=`<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="7" fill="url(#gr${i})"/>`;
       if(b.rayas&&b.v>0)out+=`<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="7" fill="url(#rayas)"/>`;
       out+=`<text x="${cx}" y="${y-8}" text-anchor="middle" font-size="12" font-weight="700" fill="#1E293B">${fmt(b.v)}</text>`;
-      if(i>0&&ingresoTotal>0)out+=`<text x="${cx}" y="${y-24}" text-anchor="middle" font-size="11" font-weight="700" fill="${b.c[1]}">${(b.v/ingresoTotal*100).toFixed(1)}%</text>`;
+      if(i>0&&ingresoTotal>0)out+=`<text x="${cx}" y="${y-24}" text-anchor="middle" font-size="11" font-weight="700" fill="#64748B">${(b.v/ingresoTotal*100).toFixed(1)}%</text>`;
       out+=`<text x="${cx}" y="${base+20}" text-anchor="middle" font-size="12" font-weight="700" fill="#475569">${b.l}</text>`;});
     return out+`<text x="${W/2}" y="${H-4}" text-anchor="middle" font-size="10" fill="#94A3B8">Porcentajes sobre el ingreso total · barras con rayas = pendientes</text></svg>`;})();
 
@@ -2868,7 +2868,7 @@ function ReportesPage({data,showToast}){
     .edo td{padding:6px 8px;vertical-align:top}
     .edo .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
     .edo .pct{text-align:right;white-space:nowrap;color:#94A3B8;font-size:11px}
-    .edo .sec td{padding-top:16px;font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:#5B21B6;border-bottom:1px solid #DDD6FE}
+    .edo .sec td{padding-top:16px;font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:#EA580C;border-bottom:1px solid #FED7AA}
     .edo .cta td{border-bottom:1px solid #F1F5F9}
     .edo .cta td:first-child{padding-left:16px}
     .edo .det td{font-size:12px;color:#475569;padding-top:3px;padding-bottom:3px}
@@ -2877,9 +2877,9 @@ function ReportesPage({data,showToast}){
     .edo .nota{display:block;font-size:10.5px;color:#94A3B8;font-weight:400;text-transform:none;letter-spacing:0}
     .edo .tot td{font-weight:700;border-top:1px solid #1E293B}
     .edo .sub td{font-weight:800;background:#F1F5F9;border-top:1px solid #1E293B;border-bottom:1px solid #1E293B}
-    .edo .neta td{font-weight:800;font-size:15px;background:#ECFDF5;color:#047857;border-top:2px solid #1E293B;border-bottom:4px double #1E293B;padding-top:10px;padding-bottom:10px}
-    .edo .neta.perdida td{background:#FEF2F2;color:#B91C1C}
-    .edo .ok{color:#059669}
+    .edo .neta td{font-weight:800;font-size:15px;background:#F8FAFC;color:#0F172A;border-top:2px solid #1E293B;border-bottom:4px double #1E293B;padding-top:10px;padding-bottom:10px}
+    .edo .neta.perdida td{background:#FFF7ED;color:#0F172A}
+    .edo .ok{color:#475569}
     .edo .pend td{background:#FFF7ED;color:#9A3412;font-weight:600;border-top:1px dashed #FDBA74;border-bottom:1px dashed #FDBA74}
     .edo .pend td:first-child{padding-left:34px;border-left:3px solid #EA580C}
     .edo .pend .num{color:#C2410C}
@@ -2899,8 +2899,8 @@ function ReportesPage({data,showToast}){
         @page { size: letter portrait; margin: 14mm; }
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
         body{color:#1E293B}
-        .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #7C3AED;padding-bottom:12px;margin-bottom:16px}
-        .head h1{font-size:24px;color:#5B21B6}
+        .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #EA580C;padding-bottom:12px;margin-bottom:16px}
+        .head h1{font-size:24px;color:#0F172A}
         .head p{font-size:12px;color:#64748B;margin-top:2px}
         .cards{display:flex;gap:10px;margin-bottom:18px}
         .card{flex:1;border:1px solid #E2E8F0;border-radius:8px;padding:10px}
@@ -2921,10 +2921,10 @@ function ReportesPage({data,showToast}){
         </div>
       </div>
       <div class="cards">
-        <div class="card"><div class="lbl">Total ingresos</div><div class="val" style="color:#059669">${M(ingresoTotal)}</div></div>
-        <div class="card"><div class="lbl">Total egresos</div><div class="val" style="color:#DC2626">${M(totalEgresos)}</div></div>
-        <div class="card"><div class="lbl">${resultado>=0?"Utilidad neta":"Pérdida neta"}</div><div class="val" style="color:${resultado>=0?"#059669":"#DC2626"}">${M(Math.abs(resultado))}</div></div>
-        <div class="card"><div class="lbl">Margen neto</div><div class="val" style="color:${resultado>=0?"#2563EB":"#DC2626"}">${margen}</div></div>
+        <div class="card"><div class="lbl">Total ingresos</div><div class="val">${M(ingresoTotal)}</div></div>
+        <div class="card"><div class="lbl">Total egresos</div><div class="val">${M(totalEgresos)}</div></div>
+        <div class="card" style="border-color:#EA580C"><div class="lbl">${resultado>=0?"Utilidad neta":"Pérdida neta"}</div><div class="val" style="color:#EA580C">${resultado>=0?M(resultado):`(${M(Math.abs(resultado))})`}</div></div>
+        <div class="card"><div class="lbl">Margen neto</div><div class="val">${margen}</div></div>
       </div>
       ${estadoHTML}
       <div class="firmas"><div>Elaborado por</div><div>Revisado / Aprobado</div></div>
@@ -2989,7 +2989,7 @@ function ReportesPage({data,showToast}){
           {MESES.map(m=><option key={m} value={m}>{m}</option>)}
         </select>
         <select value={anioSel} onChange={e=>setAnioSel(Number(e.target.value))} style={{...input,width:100,cursor:"pointer"}}>{[ANIO_ACTUAL,ANIO_ACTUAL-1,ANIO_ACTUAL-2].map(y=><option key={y} value={y}>{y}</option>)}</select>
-        <button onClick={descargarPDF} disabled={generando} style={{...btn("#DC2626"),opacity:generando?.7:1,cursor:generando?"wait":"pointer"}}><Download size={15}/>{generando?"Generando PDF…":"Descargar PDF"}</button>
+        <button onClick={descargarPDF} disabled={generando} style={{...btn("#EA580C"),opacity:generando?.7:1,cursor:generando?"wait":"pointer"}}><Download size={15}/>{generando?"Generando PDF…":"Descargar PDF"}</button>
         <button onClick={imprimir} style={btnO}><FileText size={15}/>Imprimir</button>
       </div>
     </div>
@@ -2997,29 +2997,29 @@ function ReportesPage({data,showToast}){
     {/* Elegir qué egresos desglosar */}
     <div style={{...card,padding:"12px 16px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
       <span style={{fontSize:12,fontWeight:700,color:"#475569",marginRight:4}}>Desglosar egresos:</span>
-      {egresos.map(e=>{const on=desglose.includes(e.k);return(<button key={e.k} onClick={()=>toggleDesglose(e.k)} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:"pointer",border:`1px solid ${on?"#DC2626":"#D1D5DB"}`,background:on?"#FEF2F2":"#fff",color:on?"#DC2626":"#64748B"}}>{on?<Check size={12}/>:<Plus size={12}/>}{e.k==="salarios"?"Planilla":e.label.replace(" vendidos","")}</button>);})}
+      {egresos.map(e=>{const on=desglose.includes(e.k);return(<button key={e.k} onClick={()=>toggleDesglose(e.k)} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:"pointer",border:`1px solid ${on?"#EA580C":"#D1D5DB"}`,background:on?"#FFF7ED":"#fff",color:on?"#EA580C":"#64748B"}}>{on?<Check size={12}/>:<Plus size={12}/>}{e.k==="salarios"?"Planilla":e.label.replace(" vendidos","")}</button>);})}
       <span style={{flex:1}}/>
-      <button onClick={()=>{const n=desglose.length===egresos.length?[]:egresos.map(e=>e.k);setDesglose(n);try{localStorage.setItem("seeds_desglose",JSON.stringify(n));}catch(e){}}} style={{background:"none",border:"none",color:"#2563EB",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{desglose.length===egresos.length?"Ninguno":"Todos"}</button>
+      <button onClick={()=>{const n=desglose.length===egresos.length?[]:egresos.map(e=>e.k);setDesglose(n);try{localStorage.setItem("seeds_desglose",JSON.stringify(n));}catch(e){}}} style={{background:"none",border:"none",color:"#EA580C",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{desglose.length===egresos.length?"Ninguno":"Todos"}</button>
     </div>
 
     {/* Resumen */}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:16}}>
-      {tarjeta("Total ingresos",M(ingresoTotal),"#059669")}
-      {tarjeta("Total egresos",M(totalEgresos),"#DC2626",`costo de ventas ${M(costoMateriales+costoGraduacion)} + gastos ${M(totGastos)}`)}
+      {tarjeta("Total ingresos",M(ingresoTotal),"#1E293B")}
+      {tarjeta("Total egresos",M(totalEgresos),"#1E293B",`costo de ventas ${M(costoMateriales+costoGraduacion)} + gastos ${M(totGastos)}`)}
       {totPorPagar>0&&<div style={{...card,margin:0,borderLeft:"3px solid #EA580C",background:"#FFF7ED"}}><div style={{fontSize:11,color:"#9A3412",textTransform:"uppercase",letterSpacing:.4,fontWeight:700}}>⚠ Gastos pendientes</div><div style={{fontSize:21,fontWeight:800,color:"#EA580C"}}>{M(totPorPagar)}</div><div style={{fontSize:11,color:"#9A3412"}}>{porPagar.map(x=>x.label).join(", ")}</div></div>}
-      {tarjeta(resultado>=0?"Utilidad neta":"Pérdida neta",M(Math.abs(resultado)),resultado>=0?"#059669":"#DC2626")}
-      {tarjeta("Margen neto",margen,resultado>=0?"#2563EB":"#DC2626","de cada L 100 que entran")}
+      {tarjeta(resultado>=0?"Utilidad neta":"Pérdida neta",resultado>=0?M(resultado):`(${M(Math.abs(resultado))})`,"#EA580C")}
+      {tarjeta("Margen neto",margen,"#1E293B","de cada L 100 que entran")}
     </div>
 
     {/* Estado de resultados */}
     <div style={{...card,padding:"22px 24px"}}>
       <style>{EDO_CSS}</style>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:22,flexWrap:"wrap",paddingBottom:16,marginBottom:16,borderBottom:"3px solid #7C3AED"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:22,flexWrap:"wrap",paddingBottom:16,marginBottom:16,borderBottom:"3px solid #EA580C"}}>
         <img src={LOGO_SEEDS} alt="Seeds English School" style={{width:130,height:130,objectFit:"contain",background:"#fff",borderRadius:16,padding:8,border:"1px solid #E2E8F0",boxShadow:"0 4px 14px rgba(15,23,42,.08)"}}/>
         <div style={{textAlign:"left"}}>
           <div style={{fontSize:22,fontWeight:800,color:"#1E293B"}}>Seeds English School</div>
           <div style={{fontSize:12,color:"#64748B"}}>Jesús de Otoro, Intibucá, Honduras</div>
-          <div style={{fontSize:15,fontWeight:800,color:"#5B21B6",letterSpacing:.5,marginTop:6}}>ESTADO DE RESULTADOS</div>
+          <div style={{fontSize:15,fontWeight:800,color:"#EA580C",letterSpacing:.5,marginTop:6}}>ESTADO DE RESULTADOS</div>
           <div style={{fontSize:12,color:"#64748B"}}>Del 1 al {new Date(anioSel,MESES.indexOf(mesSel)+1,0).getDate()} de {mesSel} de {anioSel} · Cifras en Lempiras</div>
         </div>
       </div>
@@ -3032,7 +3032,7 @@ function ReportesPage({data,showToast}){
         <div style={{fontSize:40,lineHeight:1}}>📄</div>
         <h3 style={{fontSize:17,fontWeight:800,color:"#1E293B",margin:"10px 0 4px"}}>Tu PDF está listo</h3>
         <p style={{fontSize:12,color:"#64748B",margin:"0 0 18px",wordBreak:"break-word"}}>{pdfListo.nombre}</p>
-        <a href={pdfListo.url} download={pdfListo.nombre} style={{...btn("#DC2626"),width:"100%",justifyContent:"center",textDecoration:"none",boxSizing:"border-box",padding:"12px 18px",fontSize:14}}><Download size={16}/>Guardar PDF</a>
+        <a href={pdfListo.url} download={pdfListo.nombre} style={{...btn("#EA580C"),width:"100%",justifyContent:"center",textDecoration:"none",boxSizing:"border-box",padding:"12px 18px",fontSize:14}}><Download size={16}/>Guardar PDF</a>
         <div style={{display:"flex",gap:8,marginTop:10}}>
           <a href={pdfListo.url} target="_blank" rel="noopener" style={{...btnO,flex:1,justifyContent:"center",textDecoration:"none"}}><Eye size={14}/>Abrir PDF</a>
           {typeof navigator!=="undefined"&&navigator.canShare&&navigator.canShare({files:[new File([pdfListo.blob],pdfListo.nombre,{type:"application/pdf"})]})&&<button onClick={()=>navigator.share({files:[new File([pdfListo.blob],pdfListo.nombre,{type:"application/pdf"})],title:pdfListo.nombre}).catch(()=>{})} style={{...btnO,flex:1,justifyContent:"center"}}><Send size={14}/>Compartir</button>}
