@@ -691,6 +691,161 @@ function ResumenFinanciero({data}){
   </div>);
 }
 
+// ── ESTADO DE PADRES (al día vs. deudores, con gráfica de barras) ──
+function EstadoPadres({data,fSec,fMes}){
+  const mesActual=MESES[new Date().getMonth()];
+  const[modo,setModo]=useState("mes"); // "mes" | "rango"
+  const[mes,setMes]=useState(mesActual);
+  const[desde,setDesde]=useState(MESES[Math.max(new Date().getMonth()-2,0)]);
+  const[hasta,setHasta]=useState(mesActual);
+  const[verLista,setVerLista]=useState(false);
+  const[sec,setSec]=useState(fSec||""); // "" = general (todas las secciones)
+  const[anim,setAnim]=useState(false);
+  // Si se elige un mes en el filtro de la tabla, la gráfica lo sigue
+  useEffect(()=>{if(fMes){setModo("mes");setMes(fMes);}},[fMes]);
+  useEffect(()=>{setSec(fSec||"");},[fSec]);
+
+  const iD=MESES.indexOf(desde),iH=MESES.indexOf(hasta);
+  const mesesPeriodo=modo==="mes"?[mes]:MESES.slice(Math.min(iD,iH),Math.max(iD,iH)+1);
+  const clavePeriodo=mesesPeriodo.join(",")+"|"+sec;
+  useEffect(()=>{setAnim(false);const t=setTimeout(()=>setAnim(true),1400);return()=>clearTimeout(t);},[clavePeriodo]);
+
+  // Cobros válidos del periodo (respeta el filtro de sección)
+  const alumnoDe=(id)=>data.alumnos.find(a=>a.id===id);
+  const cobrosDe=(meses)=>data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada"&&meses.includes(f.mes_correspondiente)).filter(f=>{if(!sec)return true;const al=alumnoDe(f.alumno_id);return al&&al.seccion_id===sec;});
+  const esPend=(f)=>f.estado==="pendiente"||f.estado==="parcial";
+  const saldoDe=(f)=>Number(f.saldo)>0?Number(f.saldo):Number(f.monto_total)||0;
+  // Agrupa por padre: es deudor si tiene al menos un cobro pendiente en el periodo
+  const agrupar=(cobros)=>{
+    const m={};
+    cobros.forEach(f=>{
+      const al=alumnoDe(f.alumno_id);
+      const padre=al?data.padres.find(p=>p.id===al.padre_id):null;
+      const k=padre?.id||al?.id||f.alumno_id;
+      if(!m[k])m[k]={k,nombre:padre?.nombre||al?.nombre||"Sin nombre",tel:padre?.telefono||"",hijos:new Set(),debe:0,mesesDebe:new Set(),deudor:false};
+      if(al)m[k].hijos.add(al.nombre);
+      if(esPend(f)){m[k].deudor=true;m[k].debe+=saldoDe(f);m[k].mesesDebe.add(f.mes_correspondiente);}
+    });
+    return Object.values(m);
+  };
+  const padres=agrupar(cobrosDe(mesesPeriodo));
+  const alDia=padres.filter(p=>!p.deudor).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const deudores=padres.filter(p=>p.deudor).sort((a,b)=>b.debe-a.debe);
+  const total=padres.length;
+  const pct=(n,t=total)=>t>0?(n/t*100):0;
+  const totalDebe=deudores.reduce((s,p)=>s+p.debe,0);
+
+  // Datos para la gráfica: un grupo por mes (en modo mes, solo uno)
+  const grupos=mesesPeriodo.map(m=>{const g=agrupar(cobrosDe([m]));const d=g.filter(p=>p.deudor).length;return{m,alDia:g.length-d,deudores:d,total:g.length};});
+  const max=Math.max(...grupos.flatMap(g=>[g.alDia,g.deudores]),1);
+  const H=190;
+  const VERDE=["#34D399","#059669"],ROJO=["#FCA5A5","#DC2626"];
+  const sel={...input,width:"auto",padding:"7px 10px",cursor:"pointer"};
+  const tabModo=(v,t)=><button onClick={()=>setModo(v)} style={{padding:"6px 14px",border:"none",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit",background:modo===v?"#fff":"transparent",color:modo===v?"#1E293B":"#64748B",boxShadow:modo===v?"0 1px 3px rgba(0,0,0,.12)":"none"}}>{t}</button>;
+  const barra=(n,t,c,i,ancho)=>{const h=anim?Math.max(n/max*H,n>0?6:2):H*0.3;return(
+    <div className="ep-col" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%",width:ancho}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",opacity:anim?1:0,transform:anim?"none":"translateY(8px)",transition:"opacity .5s ease .5s, transform .5s ease .5s"}}>
+        <div style={{fontSize:11,fontWeight:800,color:c[1],background:c[1]+"14",padding:"1px 8px",borderRadius:20,marginBottom:4,whiteSpace:"nowrap"}}>{t>0?`${pct(n,t).toFixed(0)}%`:"—"}</div>
+        <div style={{fontSize:12,fontWeight:700,color:"#1E293B",marginBottom:5}}>{n}</div>
+      </div>
+      <div className={"ep-bar"+(anim?"":" ep-load")} style={{animationDelay:`${-i*0.19}s`,width:"100%",height:h,borderRadius:"8px 8px 3px 3px",background:`linear-gradient(180deg,${c[0]},${c[1]})`,boxShadow:`0 8px 18px -8px ${c[1]}90`,position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(90deg,rgba(255,255,255,.28),rgba(255,255,255,0) 45%)"}}/>
+      </div>
+    </div>);};
+  const unMes=grupos.length===1;
+
+  return(<div style={{...card,padding:0,overflow:"hidden"}}>
+    <style>{`
+      .ep-bar{transition:height .9s cubic-bezier(.22,1,.36,1), filter .2s}
+      .ep-load{animation:ep-eq .8s ease-in-out infinite alternate}
+      @keyframes ep-eq{0%{height:24px}50%{height:170px}100%{height:60px}}
+      .ep-col:hover .ep-bar{filter:brightness(1.08) saturate(1.1)}
+    `}</style>
+    {/* Encabezado con selector de periodo */}
+    <div style={{padding:"16px 20px",background:"linear-gradient(135deg,#1E293B 0%,#334155 100%)",color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+      <div>
+        <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:"#FDBA74",fontWeight:700}}>Estado de padres</div>
+        <div style={{fontSize:18,fontWeight:800,marginTop:2}}>{modo==="mes"?mes:`${mesesPeriodo[0]} – ${mesesPeriodo[mesesPeriodo.length-1]}`}{sec?<span style={{fontSize:12,fontWeight:500,color:"#CBD5E1"}}> · {data.secciones.find(s=>s.id===sec)?.nombre}</span>:null}</div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <select value={sec} onChange={e=>setSec(e.target.value)} style={sel}><option value="">General</option>{data.secciones.map(x=><option key={x.id} value={x.id}>{x.nombre}</option>)}</select>
+        <div style={{display:"flex",background:"#E2E8F0",borderRadius:8,padding:3}}>{tabModo("mes","Mes")}{tabModo("rango","Rango")}</div>
+        {modo==="mes"
+          ?<select value={mes} onChange={e=>setMes(e.target.value)} style={sel}>{MESES.map(m=><option key={m}>{m}</option>)}</select>
+          :<><select value={desde} onChange={e=>setDesde(e.target.value)} style={sel}>{MESES.map(m=><option key={m}>{m}</option>)}</select><span style={{fontSize:12,color:"#CBD5E1"}}>a</span><select value={hasta} onChange={e=>setHasta(e.target.value)} style={sel}>{MESES.map(m=><option key={m}>{m}</option>)}</select></>}
+      </div>
+    </div>
+
+    <div style={{padding:20}}>
+      {/* Resumen ponderado */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:20}}>
+        <div style={{padding:"12px 14px",borderRadius:10,background:"#ECFDF5",border:"1px solid #A7F3D0"}}>
+          <div style={{fontSize:11,color:"#047857",fontWeight:600}}>Padres al día</div>
+          <div style={{fontSize:22,fontWeight:800,color:"#059669"}}>{alDia.length} <span style={{fontSize:13}}>{total>0?`${pct(alDia.length).toFixed(1)}%`:"—"}</span></div>
+        </div>
+        <div style={{padding:"12px 14px",borderRadius:10,background:"#FEF2F2",border:"1px solid #FECACA"}}>
+          <div style={{fontSize:11,color:"#B91C1C",fontWeight:600}}>Padres deudores</div>
+          <div style={{fontSize:22,fontWeight:800,color:"#DC2626"}}>{deudores.length} <span style={{fontSize:13}}>{total>0?`${pct(deudores.length).toFixed(1)}%`:"—"}</span></div>
+          <div style={{fontSize:11,color:"#B91C1C"}}>Deben L {totalDebe.toLocaleString()}</div>
+        </div>
+        <div style={{padding:"12px 14px",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0"}}>
+          <div style={{fontSize:11,color:"#64748B",fontWeight:600}}>Padres con cobros</div>
+          <div style={{fontSize:22,fontWeight:800,color:"#1E293B"}}>{total}</div>
+          <div style={{fontSize:11,color:"#94A3B8"}}>{modo==="rango"?"deudor = debe al menos un mes":"en el mes"}</div>
+        </div>
+      </div>
+
+      {/* Gráfica de barras */}
+      {total===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:"20px 0"}}>No hay cobros en este periodo.</p>:(<>
+        <div style={{overflowX:"auto"}}>
+          <div style={{minWidth:unMes?0:grupos.length*84}}>
+            <div style={{position:"relative",height:H+60,display:"flex",alignItems:"flex-end",justifyContent:unMes?"center":"space-around",gap:unMes?"clamp(24px,8vw,90px)":6,borderBottom:"2px solid #E2E8F0",padding:"0 6px"}}>
+              {[0.25,0.5,0.75,1].map(t=><div key={t} style={{position:"absolute",left:0,right:0,bottom:H*t,borderTop:"1px dashed #EEF2F7",pointerEvents:"none"}}/>)}
+              {grupos.map((g,gi)=><div key={g.m} style={{display:"flex",alignItems:"flex-end",gap:unMes?"clamp(24px,8vw,90px)":5,height:"100%",position:"relative",zIndex:1}}>
+                {barra(g.alDia,g.total,VERDE,gi*2,unMes?84:32)}
+                {barra(g.deudores,g.total,ROJO,gi*2+1,unMes?84:32)}
+              </div>)}
+            </div>
+            <div style={{display:"flex",justifyContent:unMes?"center":"space-around",gap:unMes?"clamp(24px,8vw,90px)":6,padding:"8px 6px 0"}}>
+              {unMes
+                ?<><div style={{width:84,textAlign:"center",fontSize:13,fontWeight:700,color:"#059669"}}>Al día</div><div style={{width:84,textAlign:"center",fontSize:13,fontWeight:700,color:"#DC2626"}}>Deudores</div></>
+                :grupos.map(g=><div key={g.m} style={{width:69,textAlign:"center",fontSize:11,fontWeight:700,color:"#475569"}}>{g.m.slice(0,3)}</div>)}
+            </div>
+          </div>
+        </div>
+        {!unMes&&<div style={{display:"flex",justifyContent:"center",gap:16,marginTop:10,fontSize:12,color:"#475569"}}>
+          <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:3,background:VERDE[1]}}/>Al día</span>
+          <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:3,background:ROJO[1]}}/>Deudores</span>
+        </div>}
+
+        {/* Lista de padres */}
+        <div style={{textAlign:"center",marginTop:16}}>
+          <button onClick={()=>setVerLista(!verLista)} style={{...btnO,fontSize:12,padding:"6px 14px"}}><Users size={13}/>{verLista?"Ocultar padres":"Ver lista de padres"}</button>
+        </div>
+        {verLista&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14,marginTop:14}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:"#DC2626",marginBottom:8}}>Deudores ({deudores.length})</div>
+            <div style={{maxHeight:320,overflowY:"auto",border:"1px solid #FECACA",borderRadius:8}}>
+              {deudores.length===0?<p style={{fontSize:12,color:"#94A3B8",textAlign:"center",padding:14,margin:0}}>Nadie debe 🎉</p>:deudores.map(p=><div key={p.k} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"8px 12px",borderBottom:"1px solid #FEF2F2",fontSize:12}}>
+                <div style={{minWidth:0}}><div style={{fontWeight:700,color:"#1E293B"}}>{p.nombre}</div><div style={{color:"#94A3B8",fontSize:11}}>{[...p.hijos].join(", ")}{modo==="rango"?` · ${[...p.mesesDebe].join(", ")}`:""}</div></div>
+                <div style={{fontWeight:800,color:"#DC2626",whiteSpace:"nowrap"}}>L {p.debe.toLocaleString()}</div>
+              </div>)}
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:"#059669",marginBottom:8}}>Al día ({alDia.length})</div>
+            <div style={{maxHeight:320,overflowY:"auto",border:"1px solid #A7F3D0",borderRadius:8}}>
+              {alDia.length===0?<p style={{fontSize:12,color:"#94A3B8",textAlign:"center",padding:14,margin:0}}>Sin padres al día</p>:alDia.map(p=><div key={p.k} style={{padding:"8px 12px",borderBottom:"1px solid #ECFDF5",fontSize:12}}>
+                <div style={{fontWeight:700,color:"#1E293B"}}>{p.nombre}</div><div style={{color:"#94A3B8",fontSize:11}}>{[...p.hijos].join(", ")}</div>
+              </div>)}
+            </div>
+          </div>
+        </div>}
+      </>)}
+    </div>
+  </div>);
+}
+
 // ── SECCIONES ──
 function SeccionesPage({data,loadData,showToast,sucursalActiva}){
   const[modal,setModal]=useState(null);const[form,setForm]=useState({nombre:"",horario:"",descripcion:"",mensualidad:""});
@@ -971,6 +1126,7 @@ function FacturasPage({data,loadData,showToast}){
       </div>
       {barraFiltros}
       {panelTotales}
+      <EstadoPadres data={data} fSec={fSec} fMes={fMes}/>
       <div style={card}>{cobros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>{(fSec||fMes)?"No hay cobros con esos filtros.":"No hay cobros. Crea cobros por sección."}</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:750}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Padre","Sección","Mes","Total","Mora","Saldo","Estado",""].map(h=><th key={h} style={{textAlign:["Total","Mora","Saldo"].includes(h)?"right":"left",padding:"5px 4px",color:"#64748B",fontWeight:600,fontSize:10,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
         <tbody>{[...cobros].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=calcMora(f, data.secciones, data.alumnos);const tot=Number(f.monto_total)+mora;const cols={pagada:"#059669",pendiente:"#DC2626",parcial:"#D97706",anulada:"#64748B"};const isP=f.estado==="pendiente"||f.estado==="parcial";return(
           <tr key={f.id} style={{borderBottom:"1px solid #F1F5F9",background:isP&&mora>0?"#FEF2F2":"transparent"}}>
