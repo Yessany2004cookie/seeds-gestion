@@ -2933,6 +2933,8 @@ function ReportesPage({data,showToast}){
 
   // Descargar el PDF directamente como archivo (sin ventana de impresión)
   const[generando,setGenerando]=useState(false);
+  const[pdfListo,setPdfListo]=useState(null); // {url,nombre,blob}
+  const cerrarPdf=()=>{if(pdfListo){setTimeout(()=>URL.revokeObjectURL(pdfListo.url),60000);}setPdfListo(null);};
   const descargarPDF=async()=>{
     if(generando)return;
     setGenerando(true);
@@ -2945,15 +2947,21 @@ function ReportesPage({data,showToast}){
     const contenido=`<div class="pdfroot" style="width:100%;background:#fff"><style>${cssLocal}</style>${cuerpo}</div>`;
     try{
       const html2pdf=(await import("html2pdf.js")).default;
-      await html2pdf().set({
+      const pdfBlob=await html2pdf().set({
         margin:[10,10,12,10],
         filename:`${nombreArchivo}.pdf`,
         image:{type:"jpeg",quality:0.96},
         html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff",scrollY:0},
         jsPDF:{unit:"mm",format:"letter",orientation:"portrait"},
         pagebreak:{mode:["css","legacy"],avoid:["tr",".grafica",".cards",".aviso",".firmas",".head"]},
-      }).from(contenido,"string").save();
-      showToast&&showToast("✓ PDF descargado");
+      }).from(contenido,"string").outputPdf("blob");
+      // Se genera el archivo y se muestra una ventana con el enlace de descarga:
+      // el clic del usuario sobre el enlace es lo que más confiable funciona
+      // en todos los navegadores (algunos bloquean descargas automáticas).
+      const blob=pdfBlob instanceof Blob?pdfBlob:new Blob([pdfBlob],{type:"application/pdf"});
+      const pdf=new Blob([blob],{type:"application/pdf"});
+      if(pdfListo)URL.revokeObjectURL(pdfListo.url);
+      setPdfListo({url:URL.createObjectURL(pdf),nombre:`${nombreArchivo}.pdf`,blob:pdf});
     }catch(e){
       showToast&&showToast("No se pudo generar el PDF: "+e.message,"error");
     }finally{
@@ -3017,6 +3025,21 @@ function ReportesPage({data,showToast}){
       </div>
       <div style={{overflowX:"auto"}}><div style={{minWidth:520}} dangerouslySetInnerHTML={{__html:estadoHTML}}/></div>
     </div>
+
+    {/* PDF listo: enlace de descarga */}
+    {pdfListo&&<div onClick={cerrarPdf} style={{position:"fixed",inset:0,background:"rgba(15,23,42,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:24,width:"100%",maxWidth:400,textAlign:"center",boxShadow:"0 20px 50px rgba(0,0,0,.25)"}}>
+        <div style={{fontSize:40,lineHeight:1}}>📄</div>
+        <h3 style={{fontSize:17,fontWeight:800,color:"#1E293B",margin:"10px 0 4px"}}>Tu PDF está listo</h3>
+        <p style={{fontSize:12,color:"#64748B",margin:"0 0 18px",wordBreak:"break-word"}}>{pdfListo.nombre}</p>
+        <a href={pdfListo.url} download={pdfListo.nombre} style={{...btn("#DC2626"),width:"100%",justifyContent:"center",textDecoration:"none",boxSizing:"border-box",padding:"12px 18px",fontSize:14}}><Download size={16}/>Guardar PDF</a>
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          <a href={pdfListo.url} target="_blank" rel="noopener" style={{...btnO,flex:1,justifyContent:"center",textDecoration:"none"}}><Eye size={14}/>Abrir PDF</a>
+          {typeof navigator!=="undefined"&&navigator.canShare&&navigator.canShare({files:[new File([pdfListo.blob],pdfListo.nombre,{type:"application/pdf"})]})&&<button onClick={()=>navigator.share({files:[new File([pdfListo.blob],pdfListo.nombre,{type:"application/pdf"})],title:pdfListo.nombre}).catch(()=>{})} style={{...btnO,flex:1,justifyContent:"center"}}><Send size={14}/>Compartir</button>}
+        </div>
+        <button onClick={cerrarPdf} style={{marginTop:14,background:"none",border:"none",color:"#64748B",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cerrar</button>
+      </div>
+    </div>}
   </div>);
 }
 
