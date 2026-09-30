@@ -2696,14 +2696,14 @@ function ReportesPage({data,showToast}){
   // Materiales: solo PAGADOS, contados por la fecha real de pago.
   const ventasMes=data.ventas_material.filter(v=>v.estado==="pagado"&&esIngresoDe(v,mesSel,anioSel));
   // Pendientes: aún no hay ingreso; se muestran aparte por su mes asignado.
-  const ventasPendMes=data.ventas_material.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pendiente");
+  const ventasPendMes=data.ventas_material.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pendiente"&&(anioAsignado(v.fecha_venta,v.mes_correspondiente)??anioSel)===anioSel);
   const pendMateriales=ventasPendMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ingMateriales=ventasMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const costoMateriales=ventasMes.reduce((s,v)=>s+Number(v.costo),0);
 
   // Graduación: solo PAGADAS, contadas por la fecha real de pago.
   const gradMes=data.cobros_graduacion.filter(v=>v.estado==="pagado"&&esIngresoDe(v,mesSel,anioSel));
-  const gradPendMes=data.cobros_graduacion.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pendiente");
+  const gradPendMes=data.cobros_graduacion.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pendiente"&&(anioAsignado(v.fecha_venta,v.mes_correspondiente)??anioSel)===anioSel);
   const pendGraduacion=gradPendMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ingGraduacion=gradMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const costoGraduacion=gradMes.reduce((s,v)=>s+Number(v.costo),0);
@@ -2748,6 +2748,51 @@ function ReportesPage({data,showToast}){
   const pctIng=(v)=>ingresoTotal>0?`${(v/ingresoTotal*100).toFixed(1)}%`:"—";
   const margen=ingresoTotal>0?`${(resultado/ingresoTotal*100).toFixed(1)}%`:"—";
 
+  // ── Pendientes ──
+  // Renta: se paga todos los meses. Si no hay una renta registrada PARA este mes
+  // (mes al que corresponde), se considera que se debe, por el monto de la última renta.
+  const rentas=data.gastos.filter(g=>g.tipo==="renta");
+  const rentaPagadaMes=rentas.some(g=>g.mes_correspondiente===mesSel&&(anioAsignado(g.fecha,g.mes_correspondiente,g.anio_correspondiente)??anioSel)===anioSel);
+  const ultimaRenta=[...rentas].sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||"")))[0];
+  const mesYaLlego=anioSel<ANIO_ACTUAL||(anioSel===ANIO_ACTUAL&&MESES.indexOf(mesSel)<=new Date().getMonth());
+  const rentaPendiente=(!rentaPagadaMes&&ultimaRenta&&mesYaLlego)?Number(ultimaRenta.monto)||0:0;
+  const porPagar=[...(rentaPendiente>0?[{label:`Renta de ${mesSel}`,sub:`No está registrada como pagada · monto de la última renta (${ultimaRenta.descripcion||"Renta"})`,monto:rentaPendiente}]:[])];
+  const totPorPagar=porPagar.reduce((s,x)=>s+x.monto,0);
+  // Por cobrar: mensualidades, materiales y graduación de este mes que siguen pendientes
+  const mensPend=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&(f.estado==="pendiente"||f.estado==="parcial")&&f.mes_correspondiente===mesSel&&anioCobro(f)===anioSel);
+  const totMensPend=mensPend.reduce((s,f)=>s+(Number(f.saldo)>0?Number(f.saldo):Number(f.monto_total)||0),0);
+  const porCobrar=[
+    {label:"Mensualidades",sub:`${mensPend.length} ${mensPend.length===1?"cobro pendiente":"cobros pendientes"}`,monto:totMensPend},
+    {label:"Materiales",sub:`${ventasPendMes.length} ${ventasPendMes.length===1?"venta pendiente":"ventas pendientes"}`,monto:pendMateriales},
+    {label:"Graduación",sub:`${gradPendMes.length} ${gradPendMes.length===1?"cobro pendiente":"cobros pendientes"}`,monto:pendGraduacion},
+  ].filter(x=>x.monto>0);
+  const totPorCobrar=porCobrar.reduce((s,x)=>s+x.monto,0);
+
+  // ── Gráfica de barras (SVG: se ve igual en pantalla y en el PDF) ──
+  const barrasRep=[
+    {l:"Ingresos",v:ingresoTotal,c:["#34D399","#059669"]},
+    {l:"Egresos",v:totalEgresos,c:["#F87171","#B91C1C"]},
+    {l:"Planilla",v:totSalarios,c:["#FDBA74","#EA580C"]},
+    {l:"Renta",v:totRenta,c:["#C4B5FD","#7C3AED"]},
+    {l:"Otros gastos",v:totOtros,c:["#F9A8D4","#DB2777"]},
+    {l:"Por pagar",v:totPorPagar,c:["#FCA5A5","#DC2626"],rayas:true},
+    {l:"Por cobrar",v:totPorCobrar,c:["#FDE68A","#D97706"],rayas:true},
+  ];
+  const svgGrafica=(()=>{const W=760,H=300,top=46,base=250,n=barrasRep.length,slot=W/n,bw=Math.min(62,slot*0.56);const max=Math.max(...barrasRep.map(b=>b.v),1);
+    const fmt=(v)=>`L ${(Math.round(v*100)/100).toLocaleString()}`;
+    let out=`<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" style="font-family:'Segoe UI',system-ui,sans-serif;display:block"><defs>`;
+    barrasRep.forEach((b,i)=>{out+=`<linearGradient id="gr${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${b.c[0]}"/><stop offset="1" stop-color="${b.c[1]}"/></linearGradient>`;});
+    out+=`<pattern id="rayas" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="8" fill="rgba(255,255,255,.35)"/></pattern></defs>`;
+    [0.25,0.5,0.75,1].forEach(t=>{const y=base-(base-top)*t;out+=`<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="#EEF2F7" stroke-dasharray="4 4"/>`;});
+    out+=`<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="#E2E8F0" stroke-width="2"/>`;
+    barrasRep.forEach((b,i)=>{const h=b.v>0?Math.max(b.v/max*(base-top),4):2;const x=slot*i+(slot-bw)/2,y=base-h,cx=slot*i+slot/2;
+      out+=`<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="7" fill="url(#gr${i})"/>`;
+      if(b.rayas&&b.v>0)out+=`<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="7" fill="url(#rayas)"/>`;
+      out+=`<text x="${cx}" y="${y-8}" text-anchor="middle" font-size="12" font-weight="700" fill="#1E293B">${fmt(b.v)}</text>`;
+      if(i>0&&ingresoTotal>0)out+=`<text x="${cx}" y="${y-24}" text-anchor="middle" font-size="11" font-weight="700" fill="${b.c[1]}">${(b.v/ingresoTotal*100).toFixed(1)}%</text>`;
+      out+=`<text x="${cx}" y="${base+20}" text-anchor="middle" font-size="12" font-weight="700" fill="#475569">${b.l}</text>`;});
+    return out+`<text x="${W/2}" y="${H-4}" text-anchor="middle" font-size="10" fill="#94A3B8">Porcentajes sobre el ingreso total · barras con rayas = pendientes</text></svg>`;})();
+
   const fila=(label,valor,color="#1E293B",bold=false)=>(
     <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #F1F5F9"}}>
       <span style={{fontSize:13,color:"#475569",fontWeight:bold?700:400}}>{label}</span>
@@ -2756,11 +2801,17 @@ function ReportesPage({data,showToast}){
 
   // Descargar el reporte como PDF (vía diálogo de impresión del navegador)
   const descargarPDF=()=>{
+    const Lp=(n)=>`L ${Number(n).toLocaleString()}`;
+    const filaPend=(x,color)=>`<tr><td style="padding:5px 0;border-bottom:1px solid #eee;color:#475569">${x.label}<br><span style="color:#94a3b8;font-size:11px">${x.sub}</span></td><td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right;font-weight:700;color:${color}">${Lp(x.monto)}</td></tr>`;
+    const pendHTML=`<div class="cols" style="margin-top:20px">
+        <div class="col"><h2 style="color:#DC2626">⏳ Pendiente por pagar</h2><table>${porPagar.length?porPagar.map(x=>filaPend(x,"#DC2626")).join(""):`<tr><td style="color:#059669;padding:5px 0">✓ Todo pagado (renta al día)</td></tr>`}</table></div>
+        <div class="col"><h2 style="color:#D97706">⏳ Pendiente por cobrar</h2><table>${porCobrar.length?porCobrar.map(x=>filaPend(x,"#D97706")).join(""):`<tr><td style="color:#059669;padding:5px 0">✓ Nada pendiente por cobrar</td></tr>`}</table></div>
+      </div>${totPorPagar>0?`<div class="box">Si se paga lo pendiente, el mes quedaría con ${resultado-totPorPagar>=0?"una ganancia":"una pérdida"} de <strong>${Lp(Math.abs(resultado-totPorPagar))}</strong>.</div>`:""}`;
     const L=(n)=>`L ${Number(n).toLocaleString()}`;
     const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
     const filaHTML=(label,valor,color="#1E293B",bold=false)=>`<tr><td style="padding:7px 0;border-bottom:1px solid #eee;color:#475569;${bold?"font-weight:700":""}">${label}</td><td style="padding:7px 0;border-bottom:1px solid #eee;text-align:right;font-weight:${bold?"800":"600"};color:${color}">${L(valor)}</td></tr>`;
     const listaMat=ventasMes.length?ventasMes.map(v=>`<tr><td style="padding:3px 0;color:#475569">${v.nombre_material} ×${v.cantidad}</td><td style="padding:3px 0;text-align:right">${L(v.precio_venta)}</td></tr>`).join(""):`<tr><td style="color:#94a3b8;padding:3px 0">Sin materiales cobrados este mes</td></tr>`;
-    const listaGrad=gradMes.length?gradMes.map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const det=Array.isArray(v.detalle)?v.detalle:[];return `<tr><td style="padding:3px 0;color:#475569">${al?.nombre||"—"} (${det.map(d=>d.nombre).join(" + ")})</td><td style="padding:3px 0;text-align:right">${L(v.precio_venta)}</td></tr>`;}).join(""):`<tr><td style="color:#94a3b8;padding:3px 0">Sin graduaciones cobradas este mes</td></tr>`;
+    const listaGrad=gradMes.length?gradMes.map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const det=Array.isArray(v.detalle)?v.detalle:[];return `<tr><td style="padding:3px 0;color:#475569">${al?.nombre||"—"}${det.length?` (${det.map(d=>d.nombre).join(" + ")})`:""}</td><td style="padding:3px 0;text-align:right">${L(v.precio_venta)}</td></tr>`;}).join(""):`<tr><td style="color:#94a3b8;padding:3px 0">Sin graduaciones cobradas este mes</td></tr>`;
     const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte ${mesSel} ${anioSel}</title>
       <style>
         @page { size: letter portrait; margin: 15mm; }
@@ -2781,6 +2832,8 @@ function ReportesPage({data,showToast}){
         .box{background:#F8FAFC;border-radius:8px;padding:12px;margin-top:14px;font-size:12px;color:#475569}
         .foot{margin-top:28px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #eee;padding-top:12px}
         @media print{body{padding:0}}
+        *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        .grafica{border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:22px}
       </style></head><body>
       <div class="head">
         <div style="width:110px;height:110px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:14px;padding:6px"><img src="${LOGO_SEEDS}" alt="Seeds" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
@@ -2797,15 +2850,14 @@ function ReportesPage({data,showToast}){
         <div class="card"><div class="lbl">${resultado>=0?"Ganancia neta":"Pérdida neta"}</div><div class="val" style="color:${resultado>=0?"#059669":"#DC2626"}">${L(Math.abs(resultado))}</div></div>
         <div class="card"><div class="lbl">Margen</div><div class="val" style="color:${resultado>=0?"#059669":"#DC2626"}">${margen}</div></div>
       </div>
+      <div class="grafica">${svgGrafica}</div>
       <div class="cols">
         <div class="col">
           <h2 style="color:#059669">💰 Ingresos</h2>
           <table>
             ${filaHTML("Mensualidades cobradas",ingMensualidades,"#059669")}
             ${filaHTML("Venta de materiales (pagados)",ingMateriales,"#D97706")}
-            ${pendMateriales>0?filaHTML("Materiales por cobrar (pendiente)",pendMateriales,"#94a3b8"):""}
             ${filaHTML("Graduación cobrada (pagados)",ingGraduacion,"#7C3AED")}
-            ${pendGraduacion>0?filaHTML("Graduación por cobrar (pendiente)",pendGraduacion,"#94a3b8"):""}
             ${filaHTML("Total ingresos",ingresoTotal,"#059669",true)}
           </table>
         </div>
@@ -2823,6 +2875,7 @@ function ReportesPage({data,showToast}){
           </div>
         </div>
       </div>
+      ${pendHTML}
       <div style="margin-top:20px">
         <h2>📦 Materiales cobrados este mes</h2>
         <table>${listaMat}</table>
@@ -2868,15 +2921,19 @@ function ReportesPage({data,showToast}){
       <div style={{...card,borderLeft:"3px solid #2563EB",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Margen de ganancia</div><div style={{fontSize:22,fontWeight:800,color:resultado>=0?"#2563EB":"#DC2626"}}>{margen}</div><div style={{fontSize:11,color:"#94A3B8"}}>de cada L 100 que entran</div></div>
     </div>
 
+    {/* Gráfica */}
+    <div style={card}>
+      <h4 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 8px"}}>📊 Ingresos, egresos y pendientes</h4>
+      <div style={{overflowX:"auto"}}><div style={{minWidth:520,maxWidth:860,margin:"0 auto"}} dangerouslySetInnerHTML={{__html:svgGrafica}}/></div>
+    </div>
+
     <div style={{display:"grid",gridTemplateColumns:window.innerWidth>700?"1fr 1fr":"1fr",gap:16}}>
       {/* INGRESOS */}
       <div style={card}>
         <h4 style={{fontSize:14,fontWeight:700,color:"#059669",margin:"0 0 10px"}}>💰 Ingresos</h4>
         {fila("Mensualidades cobradas",ingMensualidades,"#059669")}
         {fila("Venta de materiales (pagados)",ingMateriales,"#D97706")}
-        {pendMateriales>0&&fila("Materiales por cobrar (pendiente)",pendMateriales,"#94A3B8")}
         {fila("Graduación cobrada (pagados)",ingGraduacion,"#7C3AED")}
-        {pendGraduacion>0&&fila("Graduación por cobrar (pendiente)",pendGraduacion,"#94A3B8")}
         <div style={{marginTop:6,paddingTop:6}}>{fila("Total ingresos",ingresoTotal,"#059669",true)}</div>
         <div style={{marginTop:14,fontSize:12,color:"#64748B"}}>
           <div style={{fontWeight:700,marginBottom:4}}>Materiales cobrados este mes:</div>
@@ -2911,6 +2968,19 @@ function ReportesPage({data,showToast}){
         </div>
       </div>
     </div>
+
+    {/* Pendientes */}
+    <div style={{display:"grid",gridTemplateColumns:window.innerWidth>700?"1fr 1fr":"1fr",gap:16,marginTop:16}}>
+      {[{t:"⏳ Pendiente por pagar",c:"#DC2626",bg:"#FEF2F2",items:porPagar,tot:totPorPagar,ok:"✓ Todo pagado (renta al día)"},{t:"⏳ Pendiente por cobrar",c:"#D97706",bg:"#FFFBEB",items:porCobrar,tot:totPorCobrar,ok:"✓ Nada pendiente por cobrar"}].map(b=>(
+        <div key={b.t} style={{...card,margin:0,borderTop:`3px solid ${b.c}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><h4 style={{fontSize:14,fontWeight:700,color:b.c,margin:0}}>{b.t}</h4><span style={{fontSize:15,fontWeight:800,color:b.c}}>L {b.tot.toLocaleString()}</span></div>
+          {b.items.length===0?<div style={{fontSize:13,color:"#059669",padding:"6px 0"}}>{b.ok}</div>:b.items.map((x,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"8px 10px",background:b.bg,borderRadius:6,marginBottom:6}}>
+            <div><div style={{fontSize:13,fontWeight:600,color:"#1E293B"}}>{x.label}</div><div style={{fontSize:11,color:"#64748B"}}>{x.sub}</div></div>
+            <div style={{fontSize:13,fontWeight:700,color:b.c,whiteSpace:"nowrap"}}>L {x.monto.toLocaleString()}</div>
+          </div>)}
+        </div>))}
+    </div>
+    {totPorPagar>0&&<div style={{...card,marginTop:16,background:"#FEF2F2",border:"1px solid #FECACA",fontSize:13,color:"#991B1B"}}>Si se paga lo pendiente, {mesSel} quedaría con {resultado-totPorPagar>=0?"una ganancia":"una pérdida"} de <strong>L {Math.abs(resultado-totPorPagar).toLocaleString()}</strong>.</div>}
 
     {/* Nota explicativa */}
     <div style={{...card,background:"#F8FAFC",marginTop:16}}>
