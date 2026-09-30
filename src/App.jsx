@@ -2716,14 +2716,22 @@ function ReportesPage({data,showToast}){
   const totGastos=totSalarios+totRenta+totOtros;
 
   // Detalle de cada rubro de egreso (para desglosar)
-  const agrupar=(arr,clave,monto,sub)=>{const m={};arr.forEach(x=>{const k=clave(x);if(!m[k])m[k]={label:k,monto:0,n:0,extra:0};m[k].monto+=monto(x);m[k].n++;m[k].extra+=sub?sub(x):0;});return Object.values(m).sort((a,b)=>b.monto-a.monto);};
   const nombreMaestro=(g)=>data.maestros.find(m=>m.id===g.maestro_id)?.nombre||g.descripcion||"Sin maestro";
   const fechaCorta=(f)=>f?String(f).split("-").reverse().slice(0,2).join("/"):"";
-  const detSalarios=agrupar(gastosMes.filter(g=>g.tipo==="salario"),nombreMaestro,g=>Number(g.monto)).map(x=>({label:x.label,sub:x.n>1?`${x.n} pagos`:"",monto:x.monto}));
-  const detRenta=gastosMes.filter(g=>g.tipo==="renta").map(g=>({label:g.descripcion||"Renta",sub:fechaCorta(g.fecha),monto:Number(g.monto)}));
-  const detOtros=gastosMes.filter(g=>g.tipo!=="salario"&&g.tipo!=="renta").sort((a,b)=>Number(b.monto)-Number(a.monto)).map(g=>({label:g.descripcion||"Gasto",sub:fechaCorta(g.fecha),monto:Number(g.monto)}));
-  const detMateriales=agrupar(ventasMes,v=>v.nombre_material||"Material",v=>Number(v.costo),v=>Number(v.cantidad)||1).map(x=>({label:x.label,sub:`${x.extra} ${x.extra===1?"unidad":"unidades"}`,monto:x.monto}));
-  const detGraduacion=agrupar(gradMes.flatMap(v=>Array.isArray(v.detalle)&&v.detalle.length?v.detalle:[{nombre:"Graduación",costo:v.costo}]),d=>d.nombre||"Concepto",d=>Number(d.costo)||0).map(x=>({label:x.label,sub:`${x.n} ${x.n===1?"alumno":"alumnos"}`,monto:x.monto}));
+  const L2=(n)=>`L ${(Math.round(Number(n)*100)/100).toLocaleString()}`;
+  // Describe a qué mes corresponde un gasto y con dinero de qué mes se pagó
+  const describirMes=(g,que)=>{const corr=g.mes_correspondiente,ded=mesGasto(g);const partes=[];
+    if(corr&&ded&&corr!==ded)partes.push(`${que} de ${corr}, pagado con dinero de ${ded}`);else if(corr)partes.push(`${que} de ${corr}`);
+    if(g.fecha)partes.push(`pagado el ${fechaCorta(g.fecha)}`);return partes.join(" · ");};
+  const detSalarios=gastosMes.filter(g=>g.tipo==="salario").sort((x,y)=>nombreMaestro(x).localeCompare(nombreMaestro(y))).map(g=>({label:nombreMaestro(g),sub:describirMes(g,"Salario"),monto:Number(g.monto)}));
+  const detRenta=gastosMes.filter(g=>g.tipo==="renta").map(g=>({label:g.descripcion||"Renta",sub:describirMes(g,"Renta"),monto:Number(g.monto)}));
+  const detOtros=gastosMes.filter(g=>g.tipo!=="salario"&&g.tipo!=="renta").sort((x,y)=>Number(y.monto)-Number(x.monto)).map(g=>({label:g.descripcion||"Gasto",sub:describirMes(g,"Gasto"),monto:Number(g.monto)}));
+  // Materiales: agrupados por material y costo unitario → "3 × L 300 c/u (vendidos a L 500 c/u)"
+  const detMateriales=(()=>{const m={};ventasMes.forEach(v=>{const cant=Number(v.cantidad)||1;const cu=Number(v.costo)/cant,pu=Number(v.precio_venta)/cant;const k=`${v.nombre_material}|${cu}|${pu}`;if(!m[k])m[k]={nombre:v.nombre_material||"Material",cu,pu,cant:0,costo:0};m[k].cant+=cant;m[k].costo+=Number(v.costo);});
+    return Object.values(m).sort((a,b)=>b.costo-a.costo).map(x=>({label:x.nombre,sub:`${x.cant} ${x.cant===1?"unidad":"unidades"} × ${L2(x.cu)} c/u a la editorial · vendidos a ${L2(x.pu)} c/u (ganancia ${L2((x.pu-x.cu)*x.cant)})`,monto:x.costo}));})();
+  // Graduación: por concepto y costo unitario → "5 × L 400 c/u"
+  const detGraduacion=(()=>{const m={};gradMes.forEach(v=>{const det=Array.isArray(v.detalle)&&v.detalle.length?v.detalle:[{nombre:"Graduación",costo:v.costo,precio_venta:v.precio_venta}];det.forEach(d=>{const cu=Number(d.costo)||0,pu=Number(d.precio_venta)||0;const k=`${d.nombre}|${cu}|${pu}`;if(!m[k])m[k]={nombre:d.nombre||"Concepto",cu,pu,n:0};m[k].n++;});});
+    return Object.values(m).sort((a,b)=>b.cu*b.n-a.cu*a.n).map(x=>({label:x.nombre,sub:`${x.n} ${x.n===1?"alumno":"alumnos"} × ${L2(x.cu)} c/u de costo · cobrado a ${L2(x.pu)} c/u (ganancia ${L2((x.pu-x.cu)*x.n)})`,monto:x.cu*x.n}));})();
   const egresos=[
     {k:"salarios",label:"Salarios a maestros",total:totSalarios,items:detSalarios},
     {k:"renta",label:"Renta",total:totRenta,items:detRenta},
@@ -2804,7 +2812,7 @@ function ReportesPage({data,showToast}){
         <div class="col">
           <h2 style="color:#DC2626">📉 Egresos y resultado</h2>
           <table>
-            ${egresos.map(e=>`<tr><td style="padding:7px 0;border-bottom:1px solid #eee;color:#475569;font-weight:600">${e.label} <span style="color:#94a3b8;font-weight:400;font-size:11px">${pctIng(e.total)}</span></td><td style="padding:7px 0;border-bottom:1px solid #eee;text-align:right;font-weight:700;color:#DC2626">${L(e.total)}</td></tr>`+(desglose.includes(e.k)?(e.items.length?e.items.map(it=>`<tr><td style="padding:3px 0 3px 14px;color:#64748B;font-size:12px">• ${it.label}${it.sub?` <span style="color:#94a3b8">(${it.sub})</span>`:""}</td><td style="padding:3px 0;text-align:right;font-size:12px;color:#64748B">${L(it.monto)}</td></tr>`).join(""):`<tr><td style="padding:3px 0 3px 14px;color:#94a3b8;font-size:12px">Sin registros</td><td></td></tr>`):"")).join("")}
+            ${egresos.map(e=>`<tr><td style="padding:7px 0;border-bottom:1px solid #eee;color:#475569;font-weight:600">${e.label} <span style="color:#94a3b8;font-weight:400;font-size:11px">${pctIng(e.total)}</span></td><td style="padding:7px 0;border-bottom:1px solid #eee;text-align:right;font-weight:700;color:#DC2626">${L(e.total)}</td></tr>`+(desglose.includes(e.k)?(e.items.length?e.items.map(it=>`<tr><td style="padding:3px 0 3px 14px;color:#64748B;font-size:12px">• ${it.label}${it.sub?`<br><span style="color:#94a3b8;font-size:11px;padding-left:9px">${it.sub}</span>`:""}</td><td style="padding:3px 0;text-align:right;font-size:12px;color:#64748B">${L(it.monto)}</td></tr>`).join(""):`<tr><td style="padding:3px 0 3px 14px;color:#94a3b8;font-size:12px">Sin registros</td><td></td></tr>`):"")).join("")}
             ${filaHTML("Total egresos",totalEgresos,"#DC2626",true)}
           </table>
           <div class="box">
@@ -2888,7 +2896,7 @@ function ReportesPage({data,showToast}){
           </div>
           {abierto&&<div style={{margin:"0 0 8px 16px",padding:"4px 10px",background:"#FEF2F2",borderRadius:6}}>
             {e.items.length===0?<div style={{fontSize:12,color:"#94A3B8",padding:"4px 0"}}>Sin registros este mes</div>:e.items.map((it,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"4px 0",fontSize:12,color:"#64748B",borderBottom:i<e.items.length-1?"1px dashed #FECACA":"none"}}>
-              <span>{it.label}{it.sub&&<span style={{color:"#94A3B8"}}> · {it.sub}</span>}</span><span style={{fontWeight:600,whiteSpace:"nowrap"}}>L {it.monto.toLocaleString()}</span>
+              <span><span style={{color:"#475569",fontWeight:600}}>{it.label}</span>{it.sub&&<span style={{display:"block",color:"#94A3B8",fontSize:11,marginTop:1}}>{it.sub}</span>}</span><span style={{fontWeight:600,whiteSpace:"nowrap"}}>L {it.monto.toLocaleString()}</span>
             </div>)}
           </div>}
         </div>);})}
