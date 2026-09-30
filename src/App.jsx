@@ -686,23 +686,7 @@ function ResumenFinanciero({data}){
         </div>)}
       </div>
 
-      {/* Distribución del ingreso */}
-      <div style={{marginTop:26}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8,flexWrap:"wrap",gap:"4px 12px"}}>
-          <span style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>¿A dónde va cada lempira que entra?</span>
-          <span style={{fontSize:12,color:"#64748B",whiteSpace:"nowrap"}}>Base: {L(ingresos)}</span>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:10,marginTop:4}}>
-          {barras.filter(b=>b.k!=="ing").map(b=><div key={b.k} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,background:"#F8FAFC",border:"1px solid #EEF2F7"}}>
-            <span style={{width:10,height:28,borderRadius:4,background:`linear-gradient(180deg,${b.c1},${b.c2})`,flexShrink:0}}/>
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:11,color:"#64748B"}}>{b.l}</div>
-              <div style={{fontSize:14,fontWeight:800,color:"#1E293B"}}>{b.neg?"-":""}{L(b.v)} <span style={{fontSize:11,fontWeight:700,color:b.c2}}>{b.neg?"-":""}{fmtPct(b.v)}</span></div>
-            </div>
-          </div>)}
-        </div>
-        {ingresos===0&&<p style={{fontSize:12,color:"#94A3B8",textAlign:"center",margin:"12px 0 0"}}>No hay ingresos registrados en {mes}; los porcentajes se calculan sobre los ingresos.</p>}
-      </div>
+      {ingresos===0&&<p style={{fontSize:12,color:"#94A3B8",textAlign:"center",margin:"14px 0 0"}}>No hay ingresos registrados en {mes}; los porcentajes se calculan sobre los ingresos.</p>}
     </div>
   </div>);
 }
