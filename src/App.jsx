@@ -2899,7 +2899,7 @@ function ReportesPage({data,showToast}){
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
         body{color:#1E293B}
         .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #7C3AED;padding-bottom:12px;margin-bottom:16px}
-        .head h1{font-size:20px;color:#5B21B6}
+        .head h1{font-size:24px;color:#5B21B6}
         .head p{font-size:12px;color:#64748B;margin-top:2px}
         .cards{display:flex;gap:10px;margin-bottom:18px}
         .card{flex:1;border:1px solid #E2E8F0;border-radius:8px;padding:10px}
@@ -2911,7 +2911,7 @@ function ReportesPage({data,showToast}){
         ${EDO_CSS}
       </style></head><body>
       <div class="head">
-        <div style="width:90px;height:90px;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="${LOGO_SEEDS}" alt="Seeds" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
+        <div style="width:140px;height:140px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:8px"><img src="${LOGO_SEEDS}" alt="Seeds English School" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
         <div>
           <h1>Seeds English School</h1>
           <p>Jesús de Otoro, Intibucá, Honduras</p>
@@ -2969,10 +2969,14 @@ function ReportesPage({data,showToast}){
     {/* Estado de resultados */}
     <div style={{...card,padding:"22px 24px"}}>
       <style>{EDO_CSS}</style>
-      <div style={{textAlign:"center",marginBottom:14}}>
-        <div style={{fontSize:15,fontWeight:800,color:"#1E293B"}}>Seeds English School</div>
-        <div style={{fontSize:13,fontWeight:700,color:"#5B21B6",letterSpacing:.5}}>ESTADO DE RESULTADOS</div>
-        <div style={{fontSize:12,color:"#64748B"}}>Del 1 al {new Date(anioSel,MESES.indexOf(mesSel)+1,0).getDate()} de {mesSel} de {anioSel} · Cifras en Lempiras</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:22,flexWrap:"wrap",paddingBottom:16,marginBottom:16,borderBottom:"3px solid #7C3AED"}}>
+        <img src={LOGO_SEEDS} alt="Seeds English School" style={{width:130,height:130,objectFit:"contain",background:"#fff",borderRadius:16,padding:8,border:"1px solid #E2E8F0",boxShadow:"0 4px 14px rgba(15,23,42,.08)"}}/>
+        <div style={{textAlign:"left"}}>
+          <div style={{fontSize:22,fontWeight:800,color:"#1E293B"}}>Seeds English School</div>
+          <div style={{fontSize:12,color:"#64748B"}}>Jesús de Otoro, Intibucá, Honduras</div>
+          <div style={{fontSize:15,fontWeight:800,color:"#5B21B6",letterSpacing:.5,marginTop:6}}>ESTADO DE RESULTADOS</div>
+          <div style={{fontSize:12,color:"#64748B"}}>Del 1 al {new Date(anioSel,MESES.indexOf(mesSel)+1,0).getDate()} de {mesSel} de {anioSel} · Cifras en Lempiras</div>
+        </div>
       </div>
       <div style={{overflowX:"auto"}}><div style={{minWidth:520}} dangerouslySetInnerHTML={{__html:estadoHTML}}/></div>
     </div>
