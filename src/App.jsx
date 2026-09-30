@@ -596,7 +596,113 @@ function Dashboard({data,setPage}){
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
       {stats.map((s,i)=>{const Icon=s.i;return(<div key={i} onClick={()=>setPage(s.p)} style={{...card,cursor:"pointer",padding:18,display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${s.c}`}}><div style={{background:s.c+"14",borderRadius:10,padding:10}}><Icon size={22} color={s.c}/></div><div><div style={{fontSize:20,fontWeight:800,color:"#1E293B"}}>{s.v}</div><div style={{fontSize:12,color:"#64748B"}}>{s.l}</div></div></div>);})}
     </div>
+    <ResumenFinanciero data={data}/>
     <div style={card}><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Acciones rápidas</h3><div style={{display:"flex",flexWrap:"wrap",gap:10}}><button onClick={()=>setPage("alumnos")} style={btn("#2563EB")}><UserPlus size={15}/>Nueva matrícula</button><button onClick={()=>setPage("facturas")} style={btn("#059669")}><FileText size={15}/>Crear cobros</button><button onClick={()=>setPage("recordatorios")} style={btn("#7C3AED")}><Bell size={15}/>Recordatorios</button></div></div>
+  </div>);
+}
+
+// ── RESUMEN FINANCIERO (gráfica de barras con ponderaciones) ──
+function ResumenFinanciero({data}){
+  const[mes,setMes]=useState(MESES[new Date().getMonth()]);
+  const[anim,setAnim]=useState(false);
+  useEffect(()=>{setAnim(false);const t=setTimeout(()=>setAnim(true),60);return()=>clearTimeout(t);},[mes]);
+  const suma=(arr,k)=>arr.reduce((s,x)=>s+(Number(x[k])||0),0);
+
+  // Ingresos del mes (mismo criterio que el reporte mensual)
+  const ingMens=suma(data.facturas.filter(f=>f.tipo_factura==="comprobante"&&mesIngreso(f)===mes),"monto_total");
+  const mat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
+  const grad=(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
+  const ingresos=ingMens+suma(mat,"precio_venta")+suma(grad,"precio_venta");
+  const costoVentas=(suma(mat,"precio_venta")-suma(mat,"ganancia"))+(suma(grad,"precio_venta")-suma(grad,"ganancia"));
+
+  // Gastos del mes
+  const gMes=data.gastos.filter(g=>mesGasto(g)===mes);
+  const pagosPlanilla=gMes.filter(g=>g.tipo==="salario");
+  const planilla=suma(pagosPlanilla,"monto");
+  const personasPlanilla=new Set(pagosPlanilla.map(g=>g.maestro_id||g.descripcion||g.id)).size;
+  const otrosGastos=suma(gMes.filter(g=>g.tipo!=="salario"),"monto");
+  const ganancia=ingresos-costoVentas-planilla-otrosGastos;
+
+  const pct=(v)=>ingresos>0?(v/ingresos*100):0;
+  const fmtPct=(v)=>ingresos>0?`${pct(v).toFixed(1)}%`:"—";
+  const L=(v)=>`L ${Math.round(v).toLocaleString()}`;
+
+  const barras=[
+    {k:"ing",l:"Ingresos",v:ingresos,c1:"#34D399",c2:"#059669",sub:"100% base"},
+    {k:"pla",l:"Planilla",v:planilla,c1:"#FDBA74",c2:"#EA580C",sub:`${pagosPlanilla.length} ${pagosPlanilla.length===1?"pago":"pagos"} · ${personasPlanilla} ${personasPlanilla===1?"persona":"personas"}`},
+    {k:"otr",l:"Otros gastos",v:otrosGastos,c1:"#FCA5A5",c2:"#DC2626",sub:"Renta y otros"},
+    ...(costoVentas>0?[{k:"cos",l:"Costo ventas",v:costoVentas,c1:"#C4B5FD",c2:"#7C3AED",sub:"Materiales y graduación"}]:[]),
+    {k:"gan",l:ganancia>=0?"Ganancia":"Pérdida",v:Math.abs(ganancia),c1:ganancia>=0?"#60A5FA":"#F87171",c2:ganancia>=0?"#2563EB":"#B91C1C",sub:ganancia>=0?"Lo que queda":"Gastos superan ingresos",neg:ganancia<0},
+  ];
+  const max=Math.max(...barras.map(b=>b.v),1);
+  const H=220;
+  const segmentos=barras.filter(b=>b.k!=="ing"&&!b.neg&&b.v>0);
+
+  return(<div style={{...card,padding:0,overflow:"hidden",marginBottom:24}}>
+    <style>{`
+      .rf-bar{transition:height .9s cubic-bezier(.22,1,.36,1), filter .2s, transform .2s;transform-origin:bottom}
+      .rf-col:hover .rf-bar{filter:brightness(1.08) saturate(1.1);transform:scaleX(1.04)}
+      .rf-col:hover .rf-val{opacity:1;transform:translateY(0)}
+      .rf-seg{transition:width .9s cubic-bezier(.22,1,.36,1)}
+    `}</style>
+    {/* Encabezado */}
+    <div style={{padding:"18px 22px",background:"linear-gradient(135deg,#1E293B 0%,#334155 100%)",color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+      <div>
+        <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:"#FDBA74",fontWeight:700}}>Resumen financiero</div>
+        <div style={{fontSize:20,fontWeight:800,marginTop:2}}>{mes}</div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:11,color:"#CBD5E1"}}>Margen de ganancia</div>
+          <div style={{fontSize:22,fontWeight:800,color:ganancia>=0?"#6EE7B7":"#FCA5A5"}}>{ingresos>0?`${(ganancia/ingresos*100).toFixed(1)}%`:"—"}</div>
+        </div>
+        <select value={mes} onChange={e=>setMes(e.target.value)} style={{background:"rgba(255,255,255,.1)",color:"#fff",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,padding:"7px 10px",fontSize:13,fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
+          {MESES.map(m=><option key={m} value={m} style={{color:"#1E293B"}}>{m}</option>)}
+        </select>
+      </div>
+    </div>
+
+    <div style={{padding:22}}>
+      {/* Gráfica de barras */}
+      <div style={{position:"relative",height:H+70,display:"flex",alignItems:"flex-end",gap:"clamp(10px,3vw,36px)",padding:"0 8px",borderBottom:"2px solid #E2E8F0"}}>
+        {[0.25,0.5,0.75,1].map(t=><div key={t} style={{position:"absolute",left:0,right:0,bottom:H*t,borderTop:"1px dashed #EEF2F7",pointerEvents:"none"}}/>)}
+        {barras.map(b=>{const h=anim?Math.max(b.v/max*H,b.v>0?6:2):0;return(
+          <div key={b.k} className="rf-col" style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%",position:"relative",zIndex:1,minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:800,color:b.c2,background:b.c2+"14",padding:"2px 9px",borderRadius:20,marginBottom:6,whiteSpace:"nowrap"}}>{b.k==="ing"?"100%":(b.neg?"-":"")+fmtPct(b.v)}</div>
+            <div className="rf-val" style={{fontSize:13,fontWeight:700,color:"#1E293B",marginBottom:6,whiteSpace:"nowrap"}}>{b.neg?"-":""}{L(b.v)}</div>
+            <div className="rf-bar" style={{width:"100%",maxWidth:78,height:h,borderRadius:"10px 10px 4px 4px",background:`linear-gradient(180deg,${b.c1} 0%,${b.c2} 100%)`,boxShadow:`0 8px 20px -8px ${b.c2}90`,position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",inset:0,background:"linear-gradient(90deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,0) 45%)"}}/>
+            </div>
+          </div>);})}
+      </div>
+      <div style={{display:"flex",gap:"clamp(10px,3vw,36px)",padding:"10px 8px 0"}}>
+        {barras.map(b=><div key={b.k} style={{flex:1,textAlign:"center",minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{b.l}</div>
+          <div style={{fontSize:10.5,color:"#94A3B8",marginTop:2}}>{b.sub}</div>
+        </div>)}
+      </div>
+
+      {/* Distribución del ingreso (barra apilada) */}
+      <div style={{marginTop:26}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8,flexWrap:"wrap",gap:"4px 12px"}}>
+          <span style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>¿A dónde va cada lempira que entra?</span>
+          <span style={{fontSize:12,color:"#64748B",whiteSpace:"nowrap"}}>Base: {L(ingresos)}</span>
+        </div>
+        <div style={{display:"flex",height:16,borderRadius:10,overflow:"hidden",background:"#F1F5F9"}}>
+          {ingresos>0&&segmentos.map(b=><div key={b.k} className="rf-seg" title={`${b.l}: ${fmtPct(b.v)}`} style={{width:anim?`${Math.min(pct(b.v),100)}%`:"0%",background:`linear-gradient(90deg,${b.c1},${b.c2})`}}/>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:10,marginTop:14}}>
+          {barras.filter(b=>b.k!=="ing").map(b=><div key={b.k} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,background:"#F8FAFC",border:"1px solid #EEF2F7"}}>
+            <span style={{width:10,height:28,borderRadius:4,background:`linear-gradient(180deg,${b.c1},${b.c2})`,flexShrink:0}}/>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:11,color:"#64748B"}}>{b.l}</div>
+              <div style={{fontSize:14,fontWeight:800,color:"#1E293B"}}>{b.neg?"-":""}{L(b.v)} <span style={{fontSize:11,fontWeight:700,color:b.c2}}>{b.neg?"-":""}{fmtPct(b.v)}</span></div>
+            </div>
+          </div>)}
+        </div>
+        {ingresos===0&&<p style={{fontSize:12,color:"#94A3B8",textAlign:"center",margin:"12px 0 0"}}>No hay ingresos registrados en {mes}; los porcentajes se calculan sobre los ingresos.</p>}
+      </div>
+    </div>
   </div>);
 }
 
