@@ -2756,7 +2756,7 @@ function ReportesPage({data,showToast}){
   const ultimaRenta=[...rentas].sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||"")))[0];
   const mesYaLlego=anioSel<ANIO_ACTUAL||(anioSel===ANIO_ACTUAL&&MESES.indexOf(mesSel)<=new Date().getMonth());
   const rentaPendiente=(!rentaPagadaMes&&ultimaRenta&&mesYaLlego)?Number(ultimaRenta.monto)||0:0;
-  const porPagar=[...(rentaPendiente>0?[{label:`Renta de ${mesSel}`,sub:`No está registrada como pagada · monto de la última renta (${ultimaRenta.descripcion||"Renta"})`,monto:rentaPendiente}]:[])];
+  const porPagar=[...(rentaPendiente>0?[{k:"renta",label:`Renta de ${mesSel}`,sub:`No está registrada como pagada · monto de la última renta (${ultimaRenta.descripcion||"Renta"})`,monto:rentaPendiente}]:[])];
   const totPorPagar=porPagar.reduce((s,x)=>s+x.monto,0);
   // Por cobrar: mensualidades, materiales y graduación de este mes que siguen pendientes
   const mensPend=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&(f.estado==="pendiente"||f.estado==="parcial")&&f.mes_correspondiente===mesSel&&anioCobro(f)===anioSel);
@@ -2808,9 +2808,11 @@ function ReportesPage({data,showToast}){
   const fCuenta=(label,total,neg=false,nota="")=>`<tr class="cta"><td>${label}${nota?`<span class="nota">${nota}</span>`:""}</td><td></td><td class="num">${neg?Mneg(total):M(total)}</td><td class="pct">${P(total)}</td></tr>`;
   const fDet=(it,neg)=>`<tr class="det"><td>${esc(it.label)}${it.sub?`<span class="nota">${esc(it.sub)}</span>`:""}</td><td class="num">${neg?Mneg(it.monto):M(it.monto)}</td><td></td><td></td></tr>`;
   const fDetalles=(e)=>desglose.includes(e.k)?(e.items.length?e.items.map(it=>fDet(it,true)).join(""):`<tr class="det"><td><span class="nota">Sin registros este mes</span></td><td></td><td></td><td></td></tr>`):"";
+  const fPendRubro=(k)=>porPagar.filter(x=>x.k===k).map(x=>`<tr class="pend"><td><span class="badge">⚠ PENDIENTE DE PAGO</span> ${esc(x.label)}<span class="nota">${esc(x.sub)} · no incluido en el total</span></td><td class="num">${M(x.monto)}</td><td></td><td></td></tr>`).join("");
   const fTotal=(label,total,cls="tot",neg=false)=>`<tr class="${cls}"><td>${label}</td><td></td><td class="num">${neg?Mneg(total):M(total)}</td><td class="pct">${P(total)}</td></tr>`;
 
-  const estadoHTML=`
+  const avisoPend=porPagar.length?`<div class="aviso">⚠ <strong>Gastos pendientes de pago en ${mesSel}:</strong> ${porPagar.map(x=>`${esc(x.label)} (${M(x.monto)})`).join(", ")}. Total pendiente: <strong>${M(totPorPagar)}</strong>.</div>`:"";
+  const estadoHTML=`${avisoPend}
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <thead><tr><th>Concepto</th><th class="num">Parcial</th><th class="num">Total</th><th class="pct">% ingr.</th></tr></thead>
       <tbody>
@@ -2826,7 +2828,7 @@ function ReportesPage({data,showToast}){
         ${fTotal("Utilidad bruta (I − II)",utilidadBruta,"sub")}
 
         ${fSec("III. Gastos de operación")}
-        ${gastosOperacion.map(e=>fCuenta(e.label==="Salarios a maestros"?"Planilla (salarios a maestros)":e.label,e.total,true)+fDetalles(e)).join("")}
+        ${gastosOperacion.map(e=>fCuenta(e.label==="Salarios a maestros"?"Planilla (salarios a maestros)":e.label,e.total,true)+fDetalles(e)+fPendRubro(e.k)).join("")}
         ${fTotal("Total gastos de operación",totGastos,"tot",true)}
 
         <tr class="${resultado>=0?"neta":"neta perdida"}"><td>${resultado>=0?"Utilidad neta del mes":"Pérdida neta del mes"} (bruta − III)</td><td></td><td class="num">${resultado>=0?M(resultado):Mneg(Math.abs(resultado))}</td><td class="pct">${margen}</td></tr>
@@ -2837,7 +2839,7 @@ function ReportesPage({data,showToast}){
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <tbody>
         ${fSec("Cuentas por pagar")}
-        ${porPagar.length?porPagar.map(x=>`<tr class="cta"><td>${esc(x.label)}<span class="nota">${esc(x.sub)}</span></td><td></td><td class="num">${M(x.monto)}</td><td></td></tr>`).join(""):`<tr class="cta"><td class="ok">✓ Sin cuentas por pagar (renta al día)</td><td></td><td></td><td></td></tr>`}
+        ${porPagar.length?porPagar.map(x=>`<tr class="pend"><td><span class="badge">⚠ PENDIENTE</span> ${esc(x.label)}<span class="nota">${esc(x.sub)}</span></td><td></td><td class="num">${M(x.monto)}</td><td></td></tr>`).join(""):`<tr class="cta"><td class="ok">✓ Sin cuentas por pagar (renta al día)</td><td></td><td></td><td></td></tr>`}
         ${fTotal("Total por pagar",totPorPagar)}
         ${fSec("Cuentas por cobrar")}
         ${porCobrar.length?porCobrar.map(x=>`<tr class="cta"><td>${esc(x.label)}<span class="nota">${esc(x.sub)}</span></td><td></td><td class="num">${M(x.monto)}</td><td></td></tr>`).join(""):`<tr class="cta"><td class="ok">✓ Sin cuentas por cobrar</td><td></td><td></td><td></td></tr>`}
@@ -2878,6 +2880,11 @@ function ReportesPage({data,showToast}){
     .edo .neta td{font-weight:800;font-size:15px;background:#ECFDF5;color:#047857;border-top:2px solid #1E293B;border-bottom:4px double #1E293B;padding-top:10px;padding-bottom:10px}
     .edo .neta.perdida td{background:#FEF2F2;color:#B91C1C}
     .edo .ok{color:#059669}
+    .edo .pend td{background:#FFF7ED;color:#9A3412;font-weight:600;border-top:1px dashed #FDBA74;border-bottom:1px dashed #FDBA74}
+    .edo .pend td:first-child{padding-left:34px;border-left:3px solid #EA580C}
+    .edo .pend .num{color:#C2410C}
+    .edo .badge,.aviso .badge{display:inline-block;background:#EA580C;color:#fff;font-size:9.5px;font-weight:800;letter-spacing:.4px;padding:2px 7px;border-radius:10px;margin-right:4px;vertical-align:1px}
+    .aviso{background:#FFF7ED;border:1px solid #FDBA74;border-left:4px solid #EA580C;border-radius:8px;padding:10px 14px;font-size:13px;color:#9A3412;margin-bottom:14px}
     .tit{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#1E293B;margin:26px 0 6px}
     .tit .nota{display:inline;font-size:11px;color:#94A3B8;font-weight:400;text-transform:none;letter-spacing:0}
     .grafica{border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px}
@@ -2954,6 +2961,7 @@ function ReportesPage({data,showToast}){
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:16}}>
       {tarjeta("Total ingresos",M(ingresoTotal),"#059669")}
       {tarjeta("Total egresos",M(totalEgresos),"#DC2626",`costo de ventas ${M(costoMateriales+costoGraduacion)} + gastos ${M(totGastos)}`)}
+      {totPorPagar>0&&<div style={{...card,margin:0,borderLeft:"3px solid #EA580C",background:"#FFF7ED"}}><div style={{fontSize:11,color:"#9A3412",textTransform:"uppercase",letterSpacing:.4,fontWeight:700}}>⚠ Gastos pendientes</div><div style={{fontSize:21,fontWeight:800,color:"#EA580C"}}>{M(totPorPagar)}</div><div style={{fontSize:11,color:"#9A3412"}}>{porPagar.map(x=>x.label).join(", ")}</div></div>}
       {tarjeta(resultado>=0?"Utilidad neta":"Pérdida neta",M(Math.abs(resultado)),resultado>=0?"#059669":"#DC2626")}
       {tarjeta("Margen neto",margen,resultado>=0?"#2563EB":"#DC2626","de cada L 100 que entran")}
     </div>
