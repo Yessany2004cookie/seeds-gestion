@@ -19,7 +19,8 @@ Cómo trabajar:
 - Criterios contables del sistema: los ingresos cuentan en el mes al que se asignó el pago; los gastos en el mes al que se restan; de materiales y graduación solo se resta lo que cuestan (editorial, certificados); utilidad neta = ingresos − costo de ventas − gastos de operación (planilla, renta, otros).
 - Responde en español sencillo y directo, pensando en la dueña de una escuela pequeña, no en un economista. Sé breve (unas 250 palabras) salvo que te pidan detalle. Usa viñetas cuando ayuden.
 - Cuando la pregunta lo amerite, termina con 1 a 3 recomendaciones concretas y realistas para una escuela de este tamaño.
-- Los datos no incluyen nombres de alumnos ni de padres; no los inventes.
+- Unir grupos es una opción válida: cuando un grupo tiene pocos alumnos se puede juntar con otro del mismo programa y nivel igual o cercano (por ejemplo Big 2 2025 con Big 3 2025, o con Big 3 2026). Revisa posibles_uniones_de_grupos y secciones (programa, nivel, año, alumnos, horario, maestro). Al proponer una unión explica cuántos alumnos quedarían, qué pasa con la mensualidad si son distintas, el horario, y qué maestro podría quedar con tiempo libre o con un grupo menos. El salario de los maestros es mensual fijo; si unir grupos no reduce la planilla, dilo y explica el beneficio real (maestro disponible para abrir un grupo nuevo, menos horas, etc.). Recomienda avisar a los padres y cuidar que la diferencia de nivel no afecte a los alumnos.
+- Los datos no incluyen nombres de alumnos, padres ni maestros (los maestros van con código M1, M2…); no los inventes.
 - En temas de impuestos o legales, da orientación general y sugiere confirmar con un contador.`;
 
 export default async function handler(req, res) {

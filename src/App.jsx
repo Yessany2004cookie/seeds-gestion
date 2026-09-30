@@ -608,7 +608,25 @@ function resumenParaAsistente(data, nombreSucursal){
   const pagando=activos.filter(a=>a.beca!==true);
   const mensualidadDe=(a)=>{const p=Number(a.monto_personalizado);if(p>0)return p;return Number(data.secciones.find(s=>s.id===a.seccion_id)?.mensualidad)||0;};
   const mensualidadProm=pagando.length?suma(pagando,mensualidadDe)/pagando.length:0;
-  const secciones=data.secciones.filter(s=>s.activa!==false).map(s=>({seccion:s.nombre,horario:s.horario||"",mensualidad:Number(s.mensualidad)||0,alumnos_activos:activos.filter(a=>a.seccion_id===s.id).length,becados:becados.filter(a=>a.seccion_id===s.id).length}));
+  // Secciones con programa, nivel y año (ej. "Big English 3, 2026" -> Big English / 3 / 2026)
+  // y el maestro asignado con un código (sin nombre).
+  const codMaestro={};(data.maestros||[]).forEach((m,i)=>{codMaestro[m.id]=`M${i+1}`;});
+  const maestroDe=(sid)=>(data.maestros||[]).find(m=>(m.secciones_ids||[]).includes(sid));
+  const nivelDe=(nombre)=>{const t=String(nombre||"");const anio=(t.match(/(20\d{2})/)||[])[1];const sinAnio=t.replace(/(20\d{2})/,"");const m=sinAnio.match(/^(.*?)(\d+)\s*[,\-]?\s*$/)||sinAnio.match(/^(.*?)(\d+)/);return {programa:(m?m[1]:sinAnio).replace(/[,\-]/g," ").replace(/\s+/g," ").trim()||t.trim(),nivel:m?Number(m[2]):null,anio:anio?Number(anio):null};};
+  const secActivas=data.secciones.filter(s=>s.activa!==false);
+  const secciones=secActivas.map(s=>{const mo=maestroDe(s.id);const nv=nivelDe(s.nombre);return {seccion:s.nombre,programa:nv.programa,nivel:nv.nivel,anio:nv.anio,horario:s.horario||"",mensualidad:Number(s.mensualidad)||0,alumnos_activos:activos.filter(a=>a.seccion_id===s.id).length,becados:becados.filter(a=>a.seccion_id===s.id).length,maestro:mo?codMaestro[mo.id]:"sin asignar"};});
+  const maestros=(data.maestros||[]).map(m=>({codigo:codMaestro[m.id],salario_mensual:Number(m.salario)||0,grupos:(m.secciones_ids||[]).map(id=>data.secciones.find(s=>s.id===id)?.nombre).filter(Boolean)}));
+  // Posibles uniones: grupos pequeños del mismo programa con nivel igual o de diferencia 1
+  const promGrupo=secciones.length?secciones.reduce((a,x)=>a+x.alumnos_activos,0)/secciones.length:0;
+  const pequeno=(x)=>x.alumnos_activos>0&&x.alumnos_activos<Math.max(6,promGrupo*0.6);
+  const norm=(t)=>String(t||"").toLowerCase().replace(/\s+/g," ").trim();
+  const uniones=[];
+  secciones.forEach((a,i)=>secciones.forEach((b,j)=>{
+    if(j<=i||!(pequeno(a)||pequeno(b)))return;
+    const mismoPrograma=norm(a.programa)===norm(b.programa);
+    if(!mismoPrograma||a.nivel===null||b.nivel===null||Math.abs(a.nivel-b.nivel)>1)return;
+    uniones.push({grupos:[a.seccion,b.seccion],alumnos_juntos:a.alumnos_activos+b.alumnos_activos,diferencia_de_nivel:Math.abs(a.nivel-b.nivel),mensualidades:[a.mensualidad,b.mensualidad],mismo_horario:!!a.horario&&a.horario===b.horario,maestros:[a.maestro,b.maestro]});
+  }));
 
   // Punto de equilibrio: con los gastos de operación promedio de los últimos 3 meses
   const ult3=meses.slice(-3).filter(m=>m.gastos_operacion.total>0);
@@ -628,7 +646,9 @@ function resumenParaAsistente(data, nombreSucursal){
     fecha_de_hoy:hoy.toISOString().split("T")[0],
     alumnos:{activos:activos.length,pagando:pagando.length,becados:becados.length,inactivos:data.alumnos.length-activos.length,mensualidad_promedio:r2(mensualidadProm)},
     secciones,
-    maestros_registrados:(data.maestros||[]).length,
+    alumnos_promedio_por_grupo:r2(promGrupo),
+    maestros,
+    posibles_uniones_de_grupos:uniones.sort((a,b)=>a.diferencia_de_nivel-b.diferencia_de_nivel||b.alumnos_juntos-a.alumnos_juntos).slice(0,12),
     ultima_renta:ultimaRenta?Number(ultimaRenta.monto)||0:null,
     ultimos_6_meses:meses,
     punto_de_equilibrio:{
@@ -669,6 +689,7 @@ const PREGUNTAS_SUGERIDAS=[
   "¿Cómo va la escuela este mes comparado con los anteriores?",
   "¿Qué gastos pesan más y dónde puedo ahorrar?",
   "¿Cuánto afecta la morosidad y qué hago para cobrar mejor?",
+  "¿Qué grupos pequeños conviene unir?",
 ];
 
 function AsistenteIA({data,session,nombreSucursal}){
