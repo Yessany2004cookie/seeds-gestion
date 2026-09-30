@@ -2685,6 +2685,9 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 function ReportesPage({data,showToast}){
   const[mesSel,setMesSel]=useState(MESES[new Date().getMonth()]);
   const[anioSel,setAnioSel]=useState(ANIO_ACTUAL);
+  // Qué rubros se desglosan (se recuerda en este navegador)
+  const[desglose,setDesglose]=useState(()=>{try{return JSON.parse(localStorage.getItem("seeds_desglose"))||["salarios"];}catch(e){return["salarios"];}});
+  const toggleDesglose=(k)=>{const n=desglose.includes(k)?desglose.filter(x=>x!==k):[...desglose,k];setDesglose(n);try{localStorage.setItem("seeds_desglose",JSON.stringify(n));}catch(e){}};
 
   // Ingresos por mensualidades: cuentan en el mes en que ENTRÓ el pago (fecha_pago real)
   const compsMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mesSel,anioSel));
@@ -2697,7 +2700,6 @@ function ReportesPage({data,showToast}){
   const pendMateriales=ventasPendMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ingMateriales=ventasMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const costoMateriales=ventasMes.reduce((s,v)=>s+Number(v.costo),0);
-  const gananciaMateriales=ventasMes.reduce((s,v)=>s+Number(v.ganancia),0);
 
   // Graduación: solo PAGADAS, contadas por la fecha real de pago.
   const gradMes=data.cobros_graduacion.filter(v=>v.estado==="pagado"&&esIngresoDe(v,mesSel,anioSel));
@@ -2705,19 +2707,38 @@ function ReportesPage({data,showToast}){
   const pendGraduacion=gradPendMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ingGraduacion=gradMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const costoGraduacion=gradMes.reduce((s,v)=>s+Number(v.costo),0);
-  const gananciaGraduacion=gradMes.reduce((s,v)=>s+Number(v.ganancia),0);
 
   // Gastos: por el mes asignado (los salarios se asignan al mes que corresponden)
   const gastosMes=data.gastos.filter(g=>esGastoDe(g,mesSel,anioSel));
   const totSalarios=gastosMes.filter(g=>g.tipo==="salario").reduce((s,g)=>s+Number(g.monto),0);
   const totRenta=gastosMes.filter(g=>g.tipo==="renta").reduce((s,g)=>s+Number(g.monto),0);
-  const totOtros=gastosMes.filter(g=>g.tipo==="otro").reduce((s,g)=>s+Number(g.monto),0);
+  const totOtros=gastosMes.filter(g=>g.tipo!=="salario"&&g.tipo!=="renta").reduce((s,g)=>s+Number(g.monto),0);
   const totGastos=totSalarios+totRenta+totOtros;
+
+  // Detalle de cada rubro de egreso (para desglosar)
+  const agrupar=(arr,clave,monto,sub)=>{const m={};arr.forEach(x=>{const k=clave(x);if(!m[k])m[k]={label:k,monto:0,n:0,extra:0};m[k].monto+=monto(x);m[k].n++;m[k].extra+=sub?sub(x):0;});return Object.values(m).sort((a,b)=>b.monto-a.monto);};
+  const nombreMaestro=(g)=>data.maestros.find(m=>m.id===g.maestro_id)?.nombre||g.descripcion||"Sin maestro";
+  const fechaCorta=(f)=>f?String(f).split("-").reverse().slice(0,2).join("/"):"";
+  const detSalarios=agrupar(gastosMes.filter(g=>g.tipo==="salario"),nombreMaestro,g=>Number(g.monto)).map(x=>({label:x.label,sub:x.n>1?`${x.n} pagos`:"",monto:x.monto}));
+  const detRenta=gastosMes.filter(g=>g.tipo==="renta").map(g=>({label:g.descripcion||"Renta",sub:fechaCorta(g.fecha),monto:Number(g.monto)}));
+  const detOtros=gastosMes.filter(g=>g.tipo!=="salario"&&g.tipo!=="renta").sort((a,b)=>Number(b.monto)-Number(a.monto)).map(g=>({label:g.descripcion||"Gasto",sub:fechaCorta(g.fecha),monto:Number(g.monto)}));
+  const detMateriales=agrupar(ventasMes,v=>v.nombre_material||"Material",v=>Number(v.costo),v=>Number(v.cantidad)||1).map(x=>({label:x.label,sub:`${x.extra} ${x.extra===1?"unidad":"unidades"}`,monto:x.monto}));
+  const detGraduacion=agrupar(gradMes.flatMap(v=>Array.isArray(v.detalle)&&v.detalle.length?v.detalle:[{nombre:"Graduación",costo:v.costo}]),d=>d.nombre||"Concepto",d=>Number(d.costo)||0).map(x=>({label:x.label,sub:`${x.n} ${x.n===1?"alumno":"alumnos"}`,monto:x.monto}));
+  const egresos=[
+    {k:"salarios",label:"Salarios a maestros",total:totSalarios,items:detSalarios},
+    {k:"renta",label:"Renta",total:totRenta,items:detRenta},
+    {k:"otros",label:"Otros gastos",total:totOtros,items:detOtros},
+    {k:"materiales",label:"Costo de materiales vendidos",total:costoMateriales,items:detMateriales},
+    {k:"graduacion",label:"Costo de graduación",total:costoGraduacion,items:detGraduacion},
+  ];
+  const totalEgresos=egresos.reduce((s,e)=>s+e.total,0);
 
   // Ingreso total = mensualidades + venta de materiales + graduación (precio completo)
   const ingresoTotal=ingMensualidades+ingMateriales+ingGraduacion;
-  // Resultado neto = ingresos - costo de materiales/graduación - gastos
-  const resultado=ingMensualidades+gananciaMateriales+gananciaGraduacion-totGastos;
+  // Resultado neto = ingreso total - egresos (gastos + costo de materiales/graduación)
+  const resultado=ingresoTotal-totalEgresos;
+  const pctIng=(v)=>ingresoTotal>0?`${(v/ingresoTotal*100).toFixed(1)}%`:"—";
+  const margen=ingresoTotal>0?`${(resultado/ingresoTotal*100).toFixed(1)}%`:"—";
 
   const fila=(label,valor,color="#1E293B",bold=false)=>(
     <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #F1F5F9"}}>
@@ -2764,8 +2785,9 @@ function ReportesPage({data,showToast}){
       </div>
       <div class="cards">
         <div class="card"><div class="lbl">Ingreso total</div><div class="val" style="color:#059669">${L(ingresoTotal)}</div></div>
-        <div class="card"><div class="lbl">Gastos</div><div class="val" style="color:#DC2626">${L(totGastos)}</div></div>
+        <div class="card"><div class="lbl">Egresos totales</div><div class="val" style="color:#DC2626">${L(totalEgresos)}</div></div>
         <div class="card"><div class="lbl">${resultado>=0?"Ganancia neta":"Pérdida neta"}</div><div class="val" style="color:${resultado>=0?"#059669":"#DC2626"}">${L(Math.abs(resultado))}</div></div>
+        <div class="card"><div class="lbl">Margen</div><div class="val" style="color:${resultado>=0?"#059669":"#DC2626"}">${margen}</div></div>
       </div>
       <div class="cols">
         <div class="col">
@@ -2780,21 +2802,16 @@ function ReportesPage({data,showToast}){
           </table>
         </div>
         <div class="col">
-          <h2 style="color:#DC2626">📉 Gastos y resultado</h2>
+          <h2 style="color:#DC2626">📉 Egresos y resultado</h2>
           <table>
-            ${filaHTML("Salarios a maestros",totSalarios,"#DC2626")}
-            ${filaHTML("Renta",totRenta,"#DC2626")}
-            ${filaHTML("Otros gastos",totOtros,"#DC2626")}
-            ${filaHTML("Costo de materiales vendidos",costoMateriales,"#DC2626")}
-            ${costoGraduacion>0?filaHTML("Costo de graduación",costoGraduacion,"#DC2626"):""}
+            ${egresos.map(e=>`<tr><td style="padding:7px 0;border-bottom:1px solid #eee;color:#475569;font-weight:600">${e.label} <span style="color:#94a3b8;font-weight:400;font-size:11px">${pctIng(e.total)}</span></td><td style="padding:7px 0;border-bottom:1px solid #eee;text-align:right;font-weight:700;color:#DC2626">${L(e.total)}</td></tr>`+(desglose.includes(e.k)?(e.items.length?e.items.map(it=>`<tr><td style="padding:3px 0 3px 14px;color:#64748B;font-size:12px">• ${it.label}${it.sub?` <span style="color:#94a3b8">(${it.sub})</span>`:""}</td><td style="padding:3px 0;text-align:right;font-size:12px;color:#64748B">${L(it.monto)}</td></tr>`).join(""):`<tr><td style="padding:3px 0 3px 14px;color:#94a3b8;font-size:12px">Sin registros</td><td></td></tr>`):"")).join("")}
+            ${filaHTML("Total egresos",totalEgresos,"#DC2626",true)}
           </table>
           <div class="box">
             <div style="margin-bottom:6px"><strong>Cálculo del resultado:</strong></div>
-            Mensualidades: ${L(ingMensualidades)}<br>
-            + Ganancia materiales: ${L(gananciaMateriales)}<br>
-            ${gananciaGraduacion>0?`+ Ganancia graduación: ${L(gananciaGraduacion)}<br>`:""}
-            − Gastos: ${L(totGastos)}<br>
-            <div style="margin-top:6px;padding-top:6px;border-top:1px solid #ccc;font-size:15px;font-weight:800;color:${resultado>=0?"#059669":"#DC2626"}">= ${L(resultado)} ${resultado>=0?"✓":""}</div>
+            Ingreso total: ${L(ingresoTotal)}<br>
+            − Egresos totales: ${L(totalEgresos)}<br>
+            <div style="margin-top:6px;padding-top:6px;border-top:1px solid #ccc;font-size:15px;font-weight:800;color:${resultado>=0?"#059669":"#DC2626"}">= ${L(resultado)} ${resultado>=0?"✓":""} <span style="font-size:12px;font-weight:600">(margen ${margen})</span></div>
           </div>
         </div>
       </div>
@@ -2827,11 +2844,20 @@ function ReportesPage({data,showToast}){
       </div>
     </div>
 
+    {/* Elegir qué egresos desglosar */}
+    <div style={{...card,padding:"12px 16px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+      <span style={{fontSize:12,fontWeight:700,color:"#475569",marginRight:4}}>Desglosar egresos:</span>
+      {egresos.map(e=>{const on=desglose.includes(e.k);return(<button key={e.k} onClick={()=>toggleDesglose(e.k)} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:"pointer",border:`1px solid ${on?"#DC2626":"#D1D5DB"}`,background:on?"#FEF2F2":"#fff",color:on?"#DC2626":"#64748B"}}>{on?<Check size={12}/>:<Plus size={12}/>}{e.label.replace(" a maestros","").replace(" vendidos","")}</button>);})}
+      <span style={{flex:1}}/>
+      <button onClick={()=>{const n=desglose.length===egresos.length?[]:egresos.map(e=>e.k);setDesglose(n);try{localStorage.setItem("seeds_desglose",JSON.stringify(n));}catch(e){}}} style={{background:"none",border:"none",color:"#2563EB",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{desglose.length===egresos.length?"Ninguno":"Todos"}</button>
+    </div>
+
     {/* Tarjetas resumen */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:16}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:16}}>
       <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ingreso total</div><div style={{fontSize:22,fontWeight:800,color:"#059669"}}>L {ingresoTotal.toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>mensualidades + materiales + graduación</div></div>
-      <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Gastos</div><div style={{fontSize:22,fontWeight:800,color:"#DC2626"}}>L {totGastos.toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>salarios + renta + otros</div></div>
-      <div style={{...card,borderLeft:`3px solid ${resultado>=0?"#059669":"#DC2626"}`,margin:0}}><div style={{fontSize:12,color:"#64748B"}}>{resultado>=0?"Ganancia neta":"Pérdida neta"}</div><div style={{fontSize:22,fontWeight:800,color:resultado>=0?"#059669":"#DC2626"}}>L {Math.abs(resultado).toLocaleString()}</div></div>
+      <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Egresos totales</div><div style={{fontSize:22,fontWeight:800,color:"#DC2626"}}>L {totalEgresos.toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>gastos L {totGastos.toLocaleString()} + costos L {(costoMateriales+costoGraduacion).toLocaleString()}</div></div>
+      <div style={{...card,borderLeft:`3px solid ${resultado>=0?"#059669":"#DC2626"}`,margin:0}}><div style={{fontSize:12,color:"#64748B"}}>{resultado>=0?"Ganancia neta":"Pérdida neta"}</div><div style={{fontSize:22,fontWeight:800,color:resultado>=0?"#059669":"#DC2626"}}>L {Math.abs(resultado).toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>ingresos − egresos</div></div>
+      <div style={{...card,borderLeft:"3px solid #2563EB",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Margen de ganancia</div><div style={{fontSize:22,fontWeight:800,color:resultado>=0?"#2563EB":"#DC2626"}}>{margen}</div><div style={{fontSize:11,color:"#94A3B8"}}>de cada L 100 que entran</div></div>
     </div>
 
     <div style={{display:"grid",gridTemplateColumns:window.innerWidth>700?"1fr 1fr":"1fr",gap:16}}>
@@ -2854,20 +2880,25 @@ function ReportesPage({data,showToast}){
 
       {/* EGRESOS Y GANANCIA */}
       <div style={card}>
-        <h4 style={{fontSize:14,fontWeight:700,color:"#DC2626",margin:"0 0 10px"}}>📉 Gastos y resultado</h4>
-        {fila("Salarios a maestros",totSalarios,"#DC2626")}
-        {fila("Renta",totRenta,"#DC2626")}
-        {fila("Otros gastos",totOtros,"#DC2626")}
-        {fila("Costo de materiales vendidos",costoMateriales,"#DC2626")}
-        {costoGraduacion>0&&fila("Costo de graduación",costoGraduacion,"#DC2626")}
+        <h4 style={{fontSize:14,fontWeight:700,color:"#DC2626",margin:"0 0 10px"}}>📉 Egresos y resultado</h4>
+        {egresos.map(e=>{const abierto=desglose.includes(e.k);return(<div key={e.k} style={{borderBottom:"1px solid #F1F5F9"}}>
+          <div onClick={()=>toggleDesglose(e.k)} title={abierto?"Ocultar desglose":"Ver desglose"} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",cursor:"pointer"}}>
+            <span style={{fontSize:13,color:"#475569",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:10,color:"#94A3B8",width:10,display:"inline-block",transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span>{e.label} <span style={{fontSize:11,color:"#94A3B8"}}>{pctIng(e.total)}</span></span>
+            <span style={{fontSize:13,fontWeight:600,color:"#DC2626"}}>L {e.total.toLocaleString()}</span>
+          </div>
+          {abierto&&<div style={{margin:"0 0 8px 16px",padding:"4px 10px",background:"#FEF2F2",borderRadius:6}}>
+            {e.items.length===0?<div style={{fontSize:12,color:"#94A3B8",padding:"4px 0"}}>Sin registros este mes</div>:e.items.map((it,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"4px 0",fontSize:12,color:"#64748B",borderBottom:i<e.items.length-1?"1px dashed #FECACA":"none"}}>
+              <span>{it.label}{it.sub&&<span style={{color:"#94A3B8"}}> · {it.sub}</span>}</span><span style={{fontWeight:600,whiteSpace:"nowrap"}}>L {it.monto.toLocaleString()}</span>
+            </div>)}
+          </div>}
+        </div>);})}
+        <div style={{marginTop:6,paddingTop:6}}>{fila("Total egresos",totalEgresos,"#DC2626",true)}</div>
         <div style={{marginTop:14,padding:12,background:resultado>=0?"#ECFDF5":"#FEF2F2",borderRadius:8}}>
           <div style={{fontSize:12,color:"#64748B",marginBottom:6}}>Cálculo del resultado:</div>
-          <div style={{fontSize:12,color:"#475569"}}>Mensualidades: L {ingMensualidades.toLocaleString()}</div>
-          <div style={{fontSize:12,color:"#475569"}}>+ Ganancia materiales: L {gananciaMateriales.toLocaleString()}</div>
-          {gananciaGraduacion>0&&<div style={{fontSize:12,color:"#475569"}}>+ Ganancia graduación: L {gananciaGraduacion.toLocaleString()}</div>}
-          <div style={{fontSize:12,color:"#475569"}}>− Gastos: L {totGastos.toLocaleString()}</div>
+          <div style={{fontSize:12,color:"#475569"}}>Ingreso total: L {ingresoTotal.toLocaleString()}</div>
+          <div style={{fontSize:12,color:"#475569"}}>− Egresos totales: L {totalEgresos.toLocaleString()}</div>
           <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid #D1D5DB",fontSize:16,fontWeight:800,color:resultado>=0?"#059669":"#DC2626"}}>
-            = L {resultado.toLocaleString()} {resultado>=0?"✓":""}
+            = L {resultado.toLocaleString()} {resultado>=0?"✓":""} <span style={{fontSize:12,fontWeight:600}}>(margen {margen})</span>
           </div>
         </div>
       </div>
@@ -2876,7 +2907,7 @@ function ReportesPage({data,showToast}){
     {/* Nota explicativa */}
     <div style={{...card,background:"#F8FAFC",marginTop:16}}>
       <div style={{fontSize:12,color:"#64748B"}}>
-        <strong>Nota:</strong> El "Ingreso total" cuenta el precio completo de los materiales (lo que entra a caja). El "Resultado neto" usa solo la <em>ganancia</em> de los materiales (precio − costo), porque el costo es dinero que sale para reponerlos. Así el resultado refleja tu utilidad real.
+        <strong>Nota:</strong> El "Ingreso total" cuenta el precio completo de materiales y graduación (lo que entra a caja). En egresos solo se resta lo que te <em>cuestan</em> (lo que pagas a la editorial o por certificados), así la ganancia neta es tu utilidad real. Los porcentajes de cada egreso son sobre el ingreso total. Toca un rubro o usa "Desglosar egresos" para ver su detalle; lo que desgloses también sale en el PDF.
       </div>
     </div>
   </div>);
