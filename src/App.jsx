@@ -605,7 +605,8 @@ function Dashboard({data,setPage}){
 function ResumenFinanciero({data}){
   const[mes,setMes]=useState(MESES[new Date().getMonth()]);
   const[anim,setAnim]=useState(false);
-  useEffect(()=>{setAnim(false);const t=setTimeout(()=>setAnim(true),60);return()=>clearTimeout(t);},[mes]);
+  // Al cargar, las barras suben y bajan como ecualizador y luego se acomodan en su valor real
+  useEffect(()=>{setAnim(false);const t=setTimeout(()=>setAnim(true),1600);return()=>clearTimeout(t);},[mes]);
   const suma=(arr,k)=>arr.reduce((s,x)=>s+(Number(x[k])||0),0);
 
   // Ingresos del mes (mismo criterio que el reporte mensual)
@@ -641,6 +642,9 @@ function ResumenFinanciero({data}){
   return(<div style={{...card,padding:0,overflow:"hidden",marginBottom:24}}>
     <style>{`
       .rf-bar{transition:height .9s cubic-bezier(.22,1,.36,1), filter .2s, transform .2s;transform-origin:bottom}
+      .rf-load{animation:rf-eq .8s ease-in-out infinite alternate}
+      @keyframes rf-eq{0%{height:28px}50%{height:190px}100%{height:70px}}
+      .rf-info{transition:opacity .5s ease .5s, transform .5s ease .5s}
       .rf-col:hover .rf-bar{filter:brightness(1.08) saturate(1.1);transform:scaleX(1.04)}
       .rf-col:hover .rf-val{opacity:1;transform:translateY(0)}
       .rf-seg{transition:width .9s cubic-bezier(.22,1,.36,1)}
@@ -666,11 +670,13 @@ function ResumenFinanciero({data}){
       {/* Gráfica de barras */}
       <div style={{position:"relative",height:H+70,display:"flex",alignItems:"flex-end",gap:"clamp(10px,3vw,36px)",padding:"0 8px",borderBottom:"2px solid #E2E8F0"}}>
         {[0.25,0.5,0.75,1].map(t=><div key={t} style={{position:"absolute",left:0,right:0,bottom:H*t,borderTop:"1px dashed #EEF2F7",pointerEvents:"none"}}/>)}
-        {barras.map(b=>{const h=anim?Math.max(b.v/max*H,b.v>0?6:2):0;return(
+        {barras.map((b,i)=>{const h=anim?Math.max(b.v/max*H,b.v>0?6:2):H*0.3;return(
           <div key={b.k} className="rf-col" style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%",position:"relative",zIndex:1,minWidth:0}}>
+            <div className="rf-info" style={{display:"flex",flexDirection:"column",alignItems:"center",opacity:anim?1:0,transform:anim?"translateY(0)":"translateY(8px)"}}>
             <div style={{fontSize:12,fontWeight:800,color:b.c2,background:b.c2+"14",padding:"2px 9px",borderRadius:20,marginBottom:6,whiteSpace:"nowrap"}}>{b.k==="ing"?"100%":(b.neg?"-":"")+fmtPct(b.v)}</div>
             <div className="rf-val" style={{fontSize:13,fontWeight:700,color:"#1E293B",marginBottom:6,whiteSpace:"nowrap"}}>{b.neg?"-":""}{L(b.v)}</div>
-            <div className="rf-bar" style={{width:"100%",maxWidth:78,height:h,borderRadius:"10px 10px 4px 4px",background:`linear-gradient(180deg,${b.c1} 0%,${b.c2} 100%)`,boxShadow:`0 8px 20px -8px ${b.c2}90`,position:"relative",overflow:"hidden"}}>
+            </div>
+            <div className={"rf-bar"+(anim?"":" rf-load")} style={{animationDelay:`${-i*0.23}s`,width:"100%",maxWidth:78,height:h,borderRadius:"10px 10px 4px 4px",background:`linear-gradient(180deg,${b.c1} 0%,${b.c2} 100%)`,boxShadow:`0 8px 20px -8px ${b.c2}90`,position:"relative",overflow:"hidden"}}>
               <div style={{position:"absolute",inset:0,background:"linear-gradient(90deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,0) 45%)"}}/>
             </div>
           </div>);})}
