@@ -24,16 +24,17 @@ const mesIngreso = (reg) => reg.mes_ingreso || mesDeFecha(reg.fecha_pago) || reg
 // (mes_deduccion) que elige el usuario; si no existe, el mes que corresponde,
 // y como ultimo respaldo la fecha real de pago.
 const mesGasto = (g) => g.mes_deduccion || g.mes_correspondiente || mesDeFecha(g.fecha) || null;
-// Año en que cuenta un registro: se toma de su fecha real y se ajusta si el
-// mes asignado queda del otro lado del cambio de año (ej. salario de Diciembre
+// Año en que cuenta un registro: el de su fecha real. Solo se ajusta si el mes
+// elegido queda del otro lado del cambio de año (ej. salario de Diciembre
 // pagado el 5 de Enero cuenta en Diciembre del año anterior).
 const anioAsignado = (fecha, mes, respaldo) => {
   const [y, m] = String(fecha || "").split("-").map(Number);
   if (!y) return Number(respaldo) || null;
   const ma = MESES.indexOf(mes), mf = (m || 0) - 1;
   if (ma < 0 || mf < 0) return y;
-  if (ma - mf > 6) return y - 1;
-  if (mf - ma > 6) return y + 1;
+  // Solo se cruza de año en el cambio Nov/Dic <-> Ene/Feb; si no, el año de la fecha
+  if (ma >= 10 && mf <= 1) return y - 1;
+  if (ma <= 1 && mf >= 10) return y + 1;
   return y;
 };
 const ANIO_ACTUAL = new Date().getFullYear();
