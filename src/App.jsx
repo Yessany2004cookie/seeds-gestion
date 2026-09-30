@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
   Plus, Trash2, Edit, Search, Calendar, X, Eye,
   Send, Home, UserPlus, GraduationCap, Phone, Mail, DollarSign,
-  Check, AlertCircle, Menu, RefreshCw, Download, Upload, Award
+  Check, AlertCircle, Menu, RefreshCw, Download, Upload, Award, MessageCircle, Sparkles
 } from "lucide-react";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -557,9 +557,199 @@ export default function App() {
         </header>
         <div style={{flex:1,overflow:"auto",padding:20}}>{pageMap[page]}</div>
       </main>
+      <AsistenteIA data={dataSuc} session={session} nombreSucursal={data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||""}/>
       {toast&&<div style={{position:"fixed",bottom:20,right:20,padding:"12px 20px",background:toast.type==="success"?"#059669":"#DC2626",color:"#fff",borderRadius:8,fontSize:13,fontWeight:500,boxShadow:"0 4px 12px rgba(0,0,0,0.15)",zIndex:999,maxWidth:320}}>{toast.msg}</div>}
     </div>
   );
+}
+
+// ── ASISTENTE FINANCIERO (chat con Claude) ──
+// Resumen de los números que se envía al asistente. Solo totales y conteos:
+// no incluye nombres de alumnos, padres ni maestros.
+function resumenParaAsistente(data, nombreSucursal){
+  const suma=(arr,f)=>arr.reduce((s,x)=>s+(Number(f(x))||0),0);
+  const r2=(n)=>Math.round(n*100)/100;
+  const hoy=new Date();
+  // Últimos 6 meses (incluye el actual)
+  const periodos=[];
+  for(let i=5;i>=0;i--){const d=new Date(hoy.getFullYear(),hoy.getMonth()-i,1);periodos.push({mes:MESES[d.getMonth()],anio:d.getFullYear()});}
+  const meses=periodos.map(({mes,anio})=>{
+    const mens=suma(data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,anio)),f=>f.monto_total);
+    const mat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,anio));
+    const grad=(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,anio));
+    const gas=data.gastos.filter(g=>esGastoDe(g,mes,anio));
+    const planilla=suma(gas.filter(g=>g.tipo==="salario"),g=>g.monto);
+    const renta=suma(gas.filter(g=>g.tipo==="renta"),g=>g.monto);
+    const otros=suma(gas.filter(g=>g.tipo!=="salario"&&g.tipo!=="renta"),g=>g.monto);
+    const ingMat=suma(mat,v=>v.precio_venta),ingGrad=suma(grad,v=>v.precio_venta);
+    const costoVentas=suma(mat,v=>v.costo)+suma(grad,v=>v.costo);
+    const ingresos=mens+ingMat+ingGrad;
+    const gastosOp=planilla+renta+otros;
+    const utilidad=ingresos-costoVentas-gastosOp;
+    // Cobros de mensualidad emitidos para ese mes y cuántos se pagaron
+    const cobros=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada"&&f.mes_correspondiente===mes&&anioCobro(f)===anio);
+    const pend=cobros.filter(f=>f.estado==="pendiente"||f.estado==="parcial");
+    const rentaRegistrada=data.gastos.some(g=>g.tipo==="renta"&&g.mes_correspondiente===mes&&(anioAsignado(g.fecha,g.mes_correspondiente,g.anio_correspondiente)??anio)===anio);
+    return {
+      mes:`${mes} ${anio}`,
+      ingresos:{mensualidades:r2(mens),materiales:r2(ingMat),graduacion:r2(ingGrad),total:r2(ingresos)},
+      costo_de_ventas:r2(costoVentas),
+      gastos_operacion:{planilla:r2(planilla),pagos_de_planilla:gas.filter(g=>g.tipo==="salario").length,renta:r2(renta),otros:r2(otros),total:r2(gastosOp)},
+      utilidad_neta:r2(utilidad),
+      margen_pct:ingresos>0?r2(utilidad/ingresos*100):null,
+      cobros_mensualidad:{emitidos:cobros.length,pagados:cobros.length-pend.length,pendientes:pend.length,monto_pendiente:r2(suma(pend,f=>Number(f.saldo)>0?f.saldo:f.monto_total)),tasa_cobro_pct:cobros.length?r2((cobros.length-pend.length)/cobros.length*100):null},
+      renta_del_mes_registrada:rentaRegistrada,
+    };
+  });
+
+  // Alumnos y mensualidades
+  const activos=data.alumnos.filter(a=>a.estado==="activo");
+  const becados=activos.filter(a=>a.beca===true);
+  const pagando=activos.filter(a=>a.beca!==true);
+  const mensualidadDe=(a)=>{const p=Number(a.monto_personalizado);if(p>0)return p;return Number(data.secciones.find(s=>s.id===a.seccion_id)?.mensualidad)||0;};
+  const mensualidadProm=pagando.length?suma(pagando,mensualidadDe)/pagando.length:0;
+  const secciones=data.secciones.filter(s=>s.activa!==false).map(s=>({seccion:s.nombre,horario:s.horario||"",mensualidad:Number(s.mensualidad)||0,alumnos_activos:activos.filter(a=>a.seccion_id===s.id).length,becados:becados.filter(a=>a.seccion_id===s.id).length}));
+
+  // Punto de equilibrio: con los gastos de operación promedio de los últimos 3 meses
+  const ult3=meses.slice(-3).filter(m=>m.gastos_operacion.total>0);
+  const gastosFijos=ult3.length?suma(ult3,m=>m.gastos_operacion.total)/ult3.length:0;
+  const tasas=meses.slice(-3).map(m=>m.cobros_mensualidad.tasa_cobro_pct).filter(t=>t!==null);
+  const tasaCobro=tasas.length?suma(tasas,t=>t)/tasas.length/100:1;
+  const necesarios=mensualidadProm>0?Math.ceil(gastosFijos/mensualidadProm):null;
+  const necesariosReal=mensualidadProm>0&&tasaCobro>0?Math.ceil(gastosFijos/(mensualidadProm*tasaCobro)):null;
+
+  const deudaTotal=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&(f.estado==="pendiente"||f.estado==="parcial"));
+  const alumnosDeudores=new Set(deudaTotal.map(f=>f.alumno_id));
+  const ultimaRenta=[...data.gastos.filter(g=>g.tipo==="renta")].sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||"")))[0];
+
+  return {
+    escuela:"Seeds English School",
+    sucursal:nombreSucursal||"",
+    fecha_de_hoy:hoy.toISOString().split("T")[0],
+    alumnos:{activos:activos.length,pagando:pagando.length,becados:becados.length,inactivos:data.alumnos.length-activos.length,mensualidad_promedio:r2(mensualidadProm)},
+    secciones,
+    maestros_registrados:(data.maestros||[]).length,
+    ultima_renta:ultimaRenta?Number(ultimaRenta.monto)||0:null,
+    ultimos_6_meses:meses,
+    punto_de_equilibrio:{
+      explicacion:"Alumnos que deben pagar mensualidad para cubrir los gastos de operación promedio de los últimos 3 meses (sin contar ganancia de materiales y graduación).",
+      gastos_operacion_promedio_mensual:r2(gastosFijos),
+      mensualidad_promedio:r2(mensualidadProm),
+      alumnos_necesarios_si_todos_pagan:necesarios,
+      tasa_de_cobro_promedio_pct:r2(tasaCobro*100),
+      alumnos_necesarios_con_tasa_de_cobro_actual:necesariosReal,
+      alumnos_pagando_hoy:pagando.length,
+      alumnos_que_faltan_si_todos_pagan:necesarios!==null?Math.max(necesarios-pagando.length,0):null,
+      alumnos_que_faltan_con_tasa_de_cobro_actual:necesariosReal!==null?Math.max(necesariosReal-pagando.length,0):null,
+    },
+    morosidad_total:{cobros_pendientes:deudaTotal.length,alumnos_con_deuda:alumnosDeudores.size,monto:r2(suma(deudaTotal,f=>Number(f.saldo)>0?f.saldo:f.monto_total))},
+  };
+}
+
+// Convierte el texto del asistente (markdown sencillo) en HTML seguro
+function mdAHtml(t){
+  const esc=(s)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const inline=(s)=>esc(s).replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*(?!\s)(.+?)\*(?!\*)/g,"$1<em>$2</em>").replace(/`([^`]+)`/g,"<code>$1</code>");
+  const out=[];let lista=null;
+  const cerrar=()=>{if(lista){out.push(`</${lista}>`);lista=null;}};
+  String(t).split("\n").forEach(l=>{
+    const h=l.match(/^#{1,4}\s+(.*)/),ul=l.match(/^\s*[-*•]\s+(.*)/),ol=l.match(/^\s*\d+[.)]\s+(.*)/);
+    if(h){cerrar();out.push(`<div class="as-h">${inline(h[1])}</div>`);}
+    else if(ul){if(lista!=="ul"){cerrar();out.push("<ul>");lista="ul";}out.push(`<li>${inline(ul[1])}</li>`);}
+    else if(ol){if(lista!=="ol"){cerrar();out.push("<ol>");lista="ol";}out.push(`<li>${inline(ol[1])}</li>`);}
+    else if(!l.trim()){cerrar();out.push('<div class="as-sp"></div>');}
+    else{cerrar();out.push(`<p>${inline(l)}</p>`);}
+  });
+  cerrar();
+  return out.join("");
+}
+
+const PREGUNTAS_SUGERIDAS=[
+  "¿Cuántos alumnos más necesito para cubrir los gastos?",
+  "¿Cómo va la escuela este mes comparado con los anteriores?",
+  "¿Qué gastos pesan más y dónde puedo ahorrar?",
+  "¿Cuánto afecta la morosidad y qué hago para cobrar mejor?",
+];
+
+function AsistenteIA({data,session,nombreSucursal}){
+  const[abierto,setAbierto]=useState(false);
+  const[mensajes,setMensajes]=useState([]); // {role,content}
+  const[texto,setTexto]=useState("");
+  const[pensando,setPensando]=useState(false);
+  const finRef=useRef(null);
+  useEffect(()=>{finRef.current?.scrollIntoView({behavior:"smooth"});},[mensajes,pensando]);
+
+  const enviar=async(pregunta)=>{
+    const q=(pregunta??texto).trim();
+    if(!q||pensando)return;
+    setTexto("");
+    const historial=[...mensajes,{role:"user",content:q}];
+    setMensajes([...historial,{role:"assistant",content:""}]);
+    setPensando(true);
+    const ponerRespuesta=(t)=>setMensajes(ms=>{const c=[...ms];c[c.length-1]={role:"assistant",content:t};return c;});
+    try{
+      const {data:{session:s}}=await supabase.auth.getSession();
+      const r=await fetch("/api/asistente",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${s?.access_token||session?.access_token||""}`},body:JSON.stringify({mensajes:historial,datos:resumenParaAsistente(data,nombreSucursal)})});
+      if(!r.ok){
+        let msg=`Error ${r.status}`;
+        try{const j=await r.json();msg=j.error||msg;}catch(e){if(r.status===404)msg="El asistente no está disponible todavía (la función /api/asistente no está publicada).";}
+        ponerRespuesta(`⚠ ${msg}`);return;
+      }
+      const lector=r.body.getReader();const dec=new TextDecoder();let acumulado="";
+      for(;;){const{done,value}=await lector.read();if(done)break;acumulado+=dec.decode(value,{stream:true});ponerRespuesta(acumulado);}
+      if(!acumulado.trim())ponerRespuesta("⚠ No llegó respuesta. Intenta de nuevo.");
+    }catch(e){
+      ponerRespuesta("⚠ No se pudo conectar con el asistente. Revisa tu internet e intenta de nuevo.");
+    }finally{setPensando(false);}
+  };
+
+  const ancho=window.innerWidth<=520;
+  return(<>
+    <style>{`
+      .as-burbuja p{margin:0 0 4px}.as-burbuja ul,.as-burbuja ol{margin:2px 0 6px;padding-left:20px}.as-burbuja li{margin:2px 0}
+      .as-burbuja .as-h{font-weight:800;margin:6px 0 2px;color:#0F172A}.as-burbuja .as-sp{height:4px}
+      .as-burbuja code{background:#F1F5F9;padding:1px 4px;border-radius:4px;font-size:12px}
+      @keyframes as-punto{0%,80%,100%{opacity:.25}40%{opacity:1}}
+      .as-punto{display:inline-block;width:6px;height:6px;border-radius:50%;background:#EA580C;margin:0 2px;animation:as-punto 1.2s infinite}
+    `}</style>
+    {!abierto&&<button onClick={()=>setAbierto(true)} title="Asistente financiero con IA" style={{position:"fixed",right:20,bottom:20,zIndex:90,display:"flex",alignItems:"center",gap:8,padding:"12px 18px",borderRadius:30,border:"none",background:"#EA580C",color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer",boxShadow:"0 8px 24px rgba(234,88,12,.4)"}}>
+      <MessageCircle size={18}/>Asistente IA
+    </button>}
+    {abierto&&<div style={{position:"fixed",right:ancho?0:20,bottom:ancho?0:20,top:ancho?0:"auto",left:ancho?0:"auto",zIndex:95,width:ancho?"100%":400,height:ancho?"100%":"min(640px, calc(100vh - 40px))",background:"#fff",borderRadius:ancho?0:16,boxShadow:"0 20px 60px rgba(15,23,42,.3)",display:"flex",flexDirection:"column",overflow:"hidden",border:"1px solid #E2E8F0"}}>
+      <div style={{padding:"14px 16px",background:"#1E293B",color:"#fff",display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:34,height:34,borderRadius:10,background:"#EA580C",display:"flex",alignItems:"center",justifyContent:"center"}}><Sparkles size={18}/></div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:800,fontSize:14}}>Asistente financiero</div>
+          <div style={{fontSize:11,color:"#CBD5E1"}}>Analiza tus números con IA{nombreSucursal?` · ${nombreSucursal}`:""}</div>
+        </div>
+        {mensajes.length>0&&<button onClick={()=>setMensajes([])} title="Nueva conversación" style={{background:"none",border:"1px solid #475569",borderRadius:6,color:"#CBD5E1",fontSize:11,padding:"4px 8px",cursor:"pointer",fontFamily:"inherit"}}>Nueva</button>}
+        <button onClick={()=>setAbierto(false)} title="Cerrar" style={{background:"none",border:"none",cursor:"pointer",padding:4,display:"flex"}}><X size={18} color="#fff"/></button>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:14,background:"#F8FAFC"}}>
+        {mensajes.length===0&&<div>
+          <div style={{background:"#fff",border:"1px solid #E2E8F0",borderRadius:12,padding:12,fontSize:13,color:"#334155",lineHeight:1.5}}>
+            👋 Hola. Puedo analizar los ingresos, gastos, alumnos y cobros de <strong>{nombreSucursal||"la escuela"}</strong> de los últimos 6 meses y darte recomendaciones.
+            <div style={{fontSize:11,color:"#94A3B8",marginTop:6}}>Solo recibo totales y cifras, nunca nombres de alumnos o padres.</div>
+          </div>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748B",margin:"14px 2px 6px",textTransform:"uppercase",letterSpacing:.4}}>Prueba preguntar</div>
+          {PREGUNTAS_SUGERIDAS.map(p=><button key={p} onClick={()=>enviar(p)} style={{display:"block",width:"100%",textAlign:"left",background:"#fff",border:"1px solid #FED7AA",borderRadius:10,padding:"9px 12px",marginBottom:6,fontSize:13,color:"#9A3412",cursor:"pointer",fontFamily:"inherit"}}>{p}</button>)}
+        </div>}
+        {mensajes.map((m,i)=>m.role==="user"
+          ?<div key={i} style={{display:"flex",justifyContent:"flex-end",margin:"8px 0"}}><div style={{maxWidth:"85%",background:"#EA580C",color:"#fff",borderRadius:"14px 14px 4px 14px",padding:"8px 12px",fontSize:13,lineHeight:1.45,whiteSpace:"pre-wrap"}}>{m.content}</div></div>
+          :<div key={i} style={{display:"flex",margin:"8px 0"}}><div className="as-burbuja" style={{maxWidth:"92%",background:"#fff",border:"1px solid #E2E8F0",color:"#1E293B",borderRadius:"14px 14px 14px 4px",padding:"10px 12px",fontSize:13,lineHeight:1.5}}>
+            {m.content?<div dangerouslySetInnerHTML={{__html:mdAHtml(m.content)}}/>:<span><span className="as-punto"/><span className="as-punto" style={{animationDelay:".2s"}}/><span className="as-punto" style={{animationDelay:".4s"}}/><span style={{fontSize:12,color:"#94A3B8",marginLeft:6}}>Analizando tus números…</span></span>}
+          </div></div>)}
+        <div ref={finRef}/>
+      </div>
+
+      <form onSubmit={e=>{e.preventDefault();enviar();}} style={{display:"flex",gap:8,padding:10,borderTop:"1px solid #E2E8F0",background:"#fff"}}>
+        <textarea value={texto} onChange={e=>setTexto(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();enviar();}}} placeholder="Escribe tu pregunta…" rows={1} maxLength={2000} style={{...input,resize:"none",minHeight:40,maxHeight:110,lineHeight:1.4}}/>
+        <button type="submit" disabled={pensando||!texto.trim()} title="Enviar" style={{...btn("#EA580C"),padding:"0 14px",opacity:pensando||!texto.trim()?.5:1,cursor:pensando?"wait":"pointer"}}><Send size={16}/></button>
+      </form>
+      <div style={{fontSize:10,color:"#94A3B8",textAlign:"center",padding:"0 10px 8px",background:"#fff"}}>La IA puede equivocarse. Verifica las cifras importantes en Reportes.</div>
+    </div>}
+  </>);
 }
 
 // ── ESTILOS ──
