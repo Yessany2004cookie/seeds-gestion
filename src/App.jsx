@@ -2793,98 +2793,133 @@ function ReportesPage({data,showToast}){
       out+=`<text x="${cx}" y="${base+20}" text-anchor="middle" font-size="12" font-weight="700" fill="#475569">${b.l}</text>`;});
     return out+`<text x="${W/2}" y="${H-4}" text-anchor="middle" font-size="10" fill="#94A3B8">Porcentajes sobre el ingreso total · barras con rayas = pendientes</text></svg>`;})();
 
-  const fila=(label,valor,color="#1E293B",bold=false)=>(
-    <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #F1F5F9"}}>
-      <span style={{fontSize:13,color:"#475569",fontWeight:bold?700:400}}>{label}</span>
-      <span style={{fontSize:13,fontWeight:bold?800:600,color}}>L {valor.toLocaleString()}</span>
-    </div>);
+  // ── ESTADO DE RESULTADOS (formato contable) ──
+  // Se arma una sola vez como HTML y se usa igual en pantalla y en el PDF.
+  const M=(n)=>`L ${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const Mneg=(n)=>`(${M(n)})`; // en contabilidad las restas van entre paréntesis
+  const P=(n)=>ingresoTotal>0?`${(n/ingresoTotal*100).toFixed(1)}%`:"—";
+  const esc=(t)=>String(t??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const utilidadBruta=ingresoTotal-costoMateriales-costoGraduacion;
+  const gastosOperacion=egresos.filter(e=>["salarios","renta","otros"].includes(e.k));
+  const costosVenta=egresos.filter(e=>["materiales","graduacion"].includes(e.k));
+  const hoyTxt=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
+
+  const fSec=(t)=>`<tr class="sec"><td colspan="4">${t}</td></tr>`;
+  const fCuenta=(label,total,neg=false,nota="")=>`<tr class="cta"><td>${label}${nota?`<span class="nota">${nota}</span>`:""}</td><td></td><td class="num">${neg?Mneg(total):M(total)}</td><td class="pct">${P(total)}</td></tr>`;
+  const fDet=(it,neg)=>`<tr class="det"><td>${esc(it.label)}${it.sub?`<span class="nota">${esc(it.sub)}</span>`:""}</td><td class="num">${neg?Mneg(it.monto):M(it.monto)}</td><td></td><td></td></tr>`;
+  const fDetalles=(e)=>desglose.includes(e.k)?(e.items.length?e.items.map(it=>fDet(it,true)).join(""):`<tr class="det"><td><span class="nota">Sin registros este mes</span></td><td></td><td></td><td></td></tr>`):"";
+  const fTotal=(label,total,cls="tot",neg=false)=>`<tr class="${cls}"><td>${label}</td><td></td><td class="num">${neg?Mneg(total):M(total)}</td><td class="pct">${P(total)}</td></tr>`;
+
+  const estadoHTML=`
+    <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
+      <thead><tr><th>Concepto</th><th class="num">Parcial</th><th class="num">Total</th><th class="pct">% ingr.</th></tr></thead>
+      <tbody>
+        ${fSec("I. Ingresos")}
+        ${fCuenta("Mensualidades cobradas",ingMensualidades,false,`${compsMes.length} ${compsMes.length===1?"pago recibido":"pagos recibidos"}`)}
+        ${fCuenta("Venta de materiales",ingMateriales,false,`${(u=>`${u} ${u===1?"unidad pagada":"unidades pagadas"}`)(ventasMes.reduce((s,v)=>s+(Number(v.cantidad)||1),0))}`)}
+        ${fCuenta("Cobros de graduación",ingGraduacion,false,`${gradMes.length} ${gradMes.length===1?"alumno":"alumnos"}`)}
+        ${fTotal("Total ingresos",ingresoTotal)}
+
+        ${fSec("II. Costo de ventas")}
+        ${costosVenta.map(e=>fCuenta(e.label,e.total,true)+fDetalles(e)).join("")}
+        ${fTotal("Total costo de ventas",costoMateriales+costoGraduacion,"tot",true)}
+        ${fTotal("Utilidad bruta (I − II)",utilidadBruta,"sub")}
+
+        ${fSec("III. Gastos de operación")}
+        ${gastosOperacion.map(e=>fCuenta(e.label==="Salarios a maestros"?"Planilla (salarios a maestros)":e.label,e.total,true)+fDetalles(e)).join("")}
+        ${fTotal("Total gastos de operación",totGastos,"tot",true)}
+
+        <tr class="${resultado>=0?"neta":"neta perdida"}"><td>${resultado>=0?"Utilidad neta del mes":"Pérdida neta del mes"} (bruta − III)</td><td></td><td class="num">${resultado>=0?M(resultado):Mneg(Math.abs(resultado))}</td><td class="pct">${margen}</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="tit">IV. Cuentas pendientes <span class="nota">(no afectan la utilidad del mes hasta que se paguen o cobren)</span></h3>
+    <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
+      <tbody>
+        ${fSec("Cuentas por pagar")}
+        ${porPagar.length?porPagar.map(x=>`<tr class="cta"><td>${esc(x.label)}<span class="nota">${esc(x.sub)}</span></td><td></td><td class="num">${M(x.monto)}</td><td></td></tr>`).join(""):`<tr class="cta"><td class="ok">✓ Sin cuentas por pagar (renta al día)</td><td></td><td></td><td></td></tr>`}
+        ${fTotal("Total por pagar",totPorPagar)}
+        ${fSec("Cuentas por cobrar")}
+        ${porCobrar.length?porCobrar.map(x=>`<tr class="cta"><td>${esc(x.label)}<span class="nota">${esc(x.sub)}</span></td><td></td><td class="num">${M(x.monto)}</td><td></td></tr>`).join(""):`<tr class="cta"><td class="ok">✓ Sin cuentas por cobrar</td><td></td><td></td><td></td></tr>`}
+        ${fTotal("Total por cobrar",totPorCobrar)}
+        ${totPorPagar>0?`<tr class="sub"><td>Utilidad ajustada (si se paga lo pendiente)</td><td></td><td class="num">${resultado-totPorPagar>=0?M(resultado-totPorPagar):Mneg(Math.abs(resultado-totPorPagar))}</td><td class="pct">${P(resultado-totPorPagar)}</td></tr>`:""}
+      </tbody>
+    </table>
+
+    <h3 class="tit">V. Análisis gráfico</h3>
+    <div class="grafica">${svgGrafica}</div>
+
+    <h3 class="tit">Anexos</h3>
+    <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
+      <tbody>
+        ${fSec("Anexo A — Materiales cobrados")}
+        ${ventasMes.length?ventasMes.map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);return `<tr class="det"><td>${esc(v.nombre_material)} ×${v.cantidad||1}${al?`<span class="nota">${esc(al.nombre)}${v.fecha_pago?` · pagado el ${fechaCorta(v.fecha_pago)}`:""}</span>`:""}</td><td class="num">${M(v.precio_venta)}</td><td></td><td></td></tr>`;}).join(""):`<tr class="det"><td><span class="nota">Sin materiales cobrados este mes</span></td><td></td><td></td><td></td></tr>`}
+        ${fSec("Anexo B — Graduaciones cobradas")}
+        ${gradMes.length?gradMes.map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const det=Array.isArray(v.detalle)?v.detalle:[];return `<tr class="det"><td>${esc(al?.nombre||"—")}${det.length?`<span class="nota">${esc(det.map(d=>d.nombre).join(" + "))}</span>`:""}</td><td class="num">${M(v.precio_venta)}</td><td></td><td></td></tr>`;}).join(""):`<tr class="det"><td><span class="nota">Sin graduaciones cobradas este mes</span></td><td></td><td></td><td></td></tr>`}
+      </tbody>
+    </table>
+    <p class="pie">Criterios: los ingresos cuentan en el mes al que se asignó el pago; los gastos en el mes al que se restan. En costo de ventas solo se resta lo que cuestan los materiales y la graduación (editorial / certificados). Las cifras entre paréntesis son restas.</p>`;
+
+  const EDO_CSS=`
+    .edo{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px;color:#1E293B}
+    .edo th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748B;font-weight:700;text-align:left;padding:6px 8px;border-bottom:2px solid #1E293B}
+    .edo td{padding:6px 8px;vertical-align:top}
+    .edo .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .edo .pct{text-align:right;white-space:nowrap;color:#94A3B8;font-size:11px}
+    .edo .sec td{padding-top:16px;font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:#5B21B6;border-bottom:1px solid #DDD6FE}
+    .edo .cta td{border-bottom:1px solid #F1F5F9}
+    .edo .cta td:first-child{padding-left:16px}
+    .edo .det td{font-size:12px;color:#475569;padding-top:3px;padding-bottom:3px}
+    .edo .det td:first-child{padding-left:34px}
+    .edo .det .num{color:#64748B}
+    .edo .nota{display:block;font-size:10.5px;color:#94A3B8;font-weight:400;text-transform:none;letter-spacing:0}
+    .edo .tot td{font-weight:700;border-top:1px solid #1E293B}
+    .edo .sub td{font-weight:800;background:#F1F5F9;border-top:1px solid #1E293B;border-bottom:1px solid #1E293B}
+    .edo .neta td{font-weight:800;font-size:15px;background:#ECFDF5;color:#047857;border-top:2px solid #1E293B;border-bottom:4px double #1E293B;padding-top:10px;padding-bottom:10px}
+    .edo .neta.perdida td{background:#FEF2F2;color:#B91C1C}
+    .edo .ok{color:#059669}
+    .tit{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#1E293B;margin:26px 0 6px}
+    .tit .nota{display:inline;font-size:11px;color:#94A3B8;font-weight:400;text-transform:none;letter-spacing:0}
+    .grafica{border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px}
+    .grafica svg{max-width:760px;margin:0 auto}
+    .pie{font-size:11px;color:#94A3B8;margin-top:18px;line-height:1.5}`;
 
   // Descargar el reporte como PDF (vía diálogo de impresión del navegador)
   const descargarPDF=()=>{
-    const Lp=(n)=>`L ${Number(n).toLocaleString()}`;
-    const filaPend=(x,color)=>`<tr><td style="padding:5px 0;border-bottom:1px solid #eee;color:#475569">${x.label}<br><span style="color:#94a3b8;font-size:11px">${x.sub}</span></td><td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right;font-weight:700;color:${color}">${Lp(x.monto)}</td></tr>`;
-    const pendHTML=`<div class="cols" style="margin-top:20px">
-        <div class="col"><h2 style="color:#DC2626">⏳ Pendiente por pagar</h2><table>${porPagar.length?porPagar.map(x=>filaPend(x,"#DC2626")).join(""):`<tr><td style="color:#059669;padding:5px 0">✓ Todo pagado (renta al día)</td></tr>`}</table></div>
-        <div class="col"><h2 style="color:#D97706">⏳ Pendiente por cobrar</h2><table>${porCobrar.length?porCobrar.map(x=>filaPend(x,"#D97706")).join(""):`<tr><td style="color:#059669;padding:5px 0">✓ Nada pendiente por cobrar</td></tr>`}</table></div>
-      </div>${totPorPagar>0?`<div class="box">Si se paga lo pendiente, el mes quedaría con ${resultado-totPorPagar>=0?"una ganancia":"una pérdida"} de <strong>${Lp(Math.abs(resultado-totPorPagar))}</strong>.</div>`:""}`;
-    const L=(n)=>`L ${Number(n).toLocaleString()}`;
-    const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
-    const filaHTML=(label,valor,color="#1E293B",bold=false)=>`<tr><td style="padding:7px 0;border-bottom:1px solid #eee;color:#475569;${bold?"font-weight:700":""}">${label}</td><td style="padding:7px 0;border-bottom:1px solid #eee;text-align:right;font-weight:${bold?"800":"600"};color:${color}">${L(valor)}</td></tr>`;
-    const listaMat=ventasMes.length?ventasMes.map(v=>`<tr><td style="padding:3px 0;color:#475569">${v.nombre_material} ×${v.cantidad}</td><td style="padding:3px 0;text-align:right">${L(v.precio_venta)}</td></tr>`).join(""):`<tr><td style="color:#94a3b8;padding:3px 0">Sin materiales cobrados este mes</td></tr>`;
-    const listaGrad=gradMes.length?gradMes.map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const det=Array.isArray(v.detalle)?v.detalle:[];return `<tr><td style="padding:3px 0;color:#475569">${al?.nombre||"—"}${det.length?` (${det.map(d=>d.nombre).join(" + ")})`:""}</td><td style="padding:3px 0;text-align:right">${L(v.precio_venta)}</td></tr>`;}).join(""):`<tr><td style="color:#94a3b8;padding:3px 0">Sin graduaciones cobradas este mes</td></tr>`;
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte ${mesSel} ${anioSel}</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Estado de resultados ${mesSel} ${anioSel}</title>
       <style>
-        @page { size: letter portrait; margin: 15mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
-        body{padding:0;color:#1E293B}
-        .head{display:flex;align-items:center;gap:20px;border-bottom:3px solid #7C3AED;padding-bottom:14px;margin-bottom:20px}
-        .head .htxt{text-align:left}
-        .head h1{font-size:22px;color:#5B21B6}
-        .head p{font-size:12px;color:#64748B;margin-top:3px}
-        .cards{display:flex;gap:12px;margin-bottom:22px}
-        .card{flex:1;border:1px solid #E2E8F0;border-radius:8px;padding:12px}
-        .card .lbl{font-size:11px;color:#64748B}
-        .card .val{font-size:20px;font-weight:800;margin-top:2px}
-        h2{font-size:14px;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #eee}
-        table{width:100%;border-collapse:collapse;font-size:13px}
-        .cols{display:flex;gap:24px}
-        .col{flex:1}
-        .box{background:#F8FAFC;border-radius:8px;padding:12px;margin-top:14px;font-size:12px;color:#475569}
-        .foot{margin-top:28px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #eee;padding-top:12px}
-        @media print{body{padding:0}}
-        *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-        .grafica{border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:22px}
+        @page { size: letter portrait; margin: 14mm; }
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        body{color:#1E293B}
+        .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #7C3AED;padding-bottom:12px;margin-bottom:16px}
+        .head h1{font-size:20px;color:#5B21B6}
+        .head p{font-size:12px;color:#64748B;margin-top:2px}
+        .cards{display:flex;gap:10px;margin-bottom:18px}
+        .card{flex:1;border:1px solid #E2E8F0;border-radius:8px;padding:10px}
+        .card .lbl{font-size:10px;color:#64748B;text-transform:uppercase;letter-spacing:.4px}
+        .card .val{font-size:17px;font-weight:800;margin-top:2px}
+        tr{page-break-inside:avoid}
+        .firmas{display:flex;gap:60px;margin-top:50px}
+        .firmas div{flex:1;border-top:1px solid #1E293B;padding-top:6px;text-align:center;font-size:11px;color:#475569}
+        ${EDO_CSS}
       </style></head><body>
       <div class="head">
-        <div style="width:110px;height:110px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:14px;padding:6px"><img src="${LOGO_SEEDS}" alt="Seeds" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
-        <div class="htxt">
+        <div style="width:90px;height:90px;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="${LOGO_SEEDS}" alt="Seeds" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
+        <div>
           <h1>Seeds English School</h1>
           <p>Jesús de Otoro, Intibucá, Honduras</p>
-          <p style="margin-top:8px;font-size:15px;font-weight:700;color:#1E293B">📊 Reporte económico — ${mesSel} ${anioSel}</p>
-          <p>Generado el ${hoy}</p>
+          <p style="margin-top:6px;font-size:15px;font-weight:800;color:#1E293B">ESTADO DE RESULTADOS — ${mesSel.toUpperCase()} ${anioSel}</p>
+          <p>Del 1 al ${new Date(anioSel,MESES.indexOf(mesSel)+1,0).getDate()} de ${mesSel} de ${anioSel} · Cifras en Lempiras · Generado el ${hoyTxt}</p>
         </div>
       </div>
       <div class="cards">
-        <div class="card"><div class="lbl">Ingreso total</div><div class="val" style="color:#059669">${L(ingresoTotal)}</div></div>
-        <div class="card"><div class="lbl">Egresos totales</div><div class="val" style="color:#DC2626">${L(totalEgresos)}</div></div>
-        <div class="card"><div class="lbl">${resultado>=0?"Ganancia neta":"Pérdida neta"}</div><div class="val" style="color:${resultado>=0?"#059669":"#DC2626"}">${L(Math.abs(resultado))}</div></div>
-        <div class="card"><div class="lbl">Margen</div><div class="val" style="color:${resultado>=0?"#059669":"#DC2626"}">${margen}</div></div>
+        <div class="card"><div class="lbl">Total ingresos</div><div class="val" style="color:#059669">${M(ingresoTotal)}</div></div>
+        <div class="card"><div class="lbl">Total egresos</div><div class="val" style="color:#DC2626">${M(totalEgresos)}</div></div>
+        <div class="card"><div class="lbl">${resultado>=0?"Utilidad neta":"Pérdida neta"}</div><div class="val" style="color:${resultado>=0?"#059669":"#DC2626"}">${M(Math.abs(resultado))}</div></div>
+        <div class="card"><div class="lbl">Margen neto</div><div class="val" style="color:${resultado>=0?"#2563EB":"#DC2626"}">${margen}</div></div>
       </div>
-      <div class="grafica">${svgGrafica}</div>
-      <div class="cols">
-        <div class="col">
-          <h2 style="color:#059669">💰 Ingresos</h2>
-          <table>
-            ${filaHTML("Mensualidades cobradas",ingMensualidades,"#059669")}
-            ${filaHTML("Venta de materiales (pagados)",ingMateriales,"#D97706")}
-            ${filaHTML("Graduación cobrada (pagados)",ingGraduacion,"#7C3AED")}
-            ${filaHTML("Total ingresos",ingresoTotal,"#059669",true)}
-          </table>
-        </div>
-        <div class="col">
-          <h2 style="color:#DC2626">📉 Egresos y resultado</h2>
-          <table>
-            ${egresos.map(e=>`<tr><td style="padding:7px 0;border-bottom:1px solid #eee;color:#475569;font-weight:600">${e.label} <span style="color:#94a3b8;font-weight:400;font-size:11px">${pctIng(e.total)}</span></td><td style="padding:7px 0;border-bottom:1px solid #eee;text-align:right;font-weight:700;color:#DC2626">${L(e.total)}</td></tr>`+(desglose.includes(e.k)?(e.items.length?e.items.map(it=>`<tr><td style="padding:3px 0 3px 14px;color:#64748B;font-size:12px">• ${it.label}${it.sub?`<br><span style="color:#94a3b8;font-size:11px;padding-left:9px">${it.sub}</span>`:""}</td><td style="padding:3px 0;text-align:right;font-size:12px;color:#64748B">${L(it.monto)}</td></tr>`).join(""):`<tr><td style="padding:3px 0 3px 14px;color:#94a3b8;font-size:12px">Sin registros</td><td></td></tr>`):"")).join("")}
-            ${filaHTML("Total egresos",totalEgresos,"#DC2626",true)}
-          </table>
-          <div class="box">
-            <div style="margin-bottom:6px"><strong>Cálculo del resultado:</strong></div>
-            Ingreso total: ${L(ingresoTotal)}<br>
-            − Egresos totales: ${L(totalEgresos)}<br>
-            <div style="margin-top:6px;padding-top:6px;border-top:1px solid #ccc;font-size:15px;font-weight:800;color:${resultado>=0?"#059669":"#DC2626"}">= ${L(resultado)} ${resultado>=0?"✓":""} <span style="font-size:12px;font-weight:600">(margen ${margen})</span></div>
-          </div>
-        </div>
-      </div>
-      ${pendHTML}
-      <div style="margin-top:20px">
-        <h2>📦 Materiales cobrados este mes</h2>
-        <table>${listaMat}</table>
-      </div>
-      <div style="margin-top:20px">
-        <h2>🎓 Graduaciones cobradas este mes</h2>
-        <table>${listaGrad}</table>
-      </div>
-      <div class="foot">Seeds English School — Área Administrativa</div>
+      ${estadoHTML}
+      <div class="firmas"><div>Elaborado por</div><div>Revisado / Aprobado</div></div>
       </body></html>`;
     const w=window.open("","_blank");
     if(!w){showToast&&showToast("Permite las ventanas emergentes para descargar el PDF","error");return;}
@@ -2893,9 +2928,11 @@ function ReportesPage({data,showToast}){
     setTimeout(()=>{w.focus();w.print();},400);
   };
 
+  const tarjeta=(t,v,c,sub)=>(<div style={{...card,borderLeft:`3px solid ${c}`,margin:0}}><div style={{fontSize:11,color:"#64748B",textTransform:"uppercase",letterSpacing:.4}}>{t}</div><div style={{fontSize:21,fontWeight:800,color:c}}>{v}</div>{sub&&<div style={{fontSize:11,color:"#94A3B8"}}>{sub}</div>}</div>);
+
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
-      <h3 style={{fontSize:16,fontWeight:700,color:"#1E293B",margin:0}}>📊 Reporte económico — {mesSel} {anioSel}</h3>
+      <h3 style={{fontSize:16,fontWeight:700,color:"#1E293B",margin:0}}>📊 Estado de resultados — {mesSel} {anioSel}</h3>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <select value={mesSel} onChange={e=>setMesSel(e.target.value)} style={{...input,width:160,cursor:"pointer"}}>
           {MESES.map(m=><option key={m} value={m}>{m}</option>)}
@@ -2908,85 +2945,28 @@ function ReportesPage({data,showToast}){
     {/* Elegir qué egresos desglosar */}
     <div style={{...card,padding:"12px 16px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
       <span style={{fontSize:12,fontWeight:700,color:"#475569",marginRight:4}}>Desglosar egresos:</span>
-      {egresos.map(e=>{const on=desglose.includes(e.k);return(<button key={e.k} onClick={()=>toggleDesglose(e.k)} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:"pointer",border:`1px solid ${on?"#DC2626":"#D1D5DB"}`,background:on?"#FEF2F2":"#fff",color:on?"#DC2626":"#64748B"}}>{on?<Check size={12}/>:<Plus size={12}/>}{e.label.replace(" a maestros","").replace(" vendidos","")}</button>);})}
+      {egresos.map(e=>{const on=desglose.includes(e.k);return(<button key={e.k} onClick={()=>toggleDesglose(e.k)} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:"pointer",border:`1px solid ${on?"#DC2626":"#D1D5DB"}`,background:on?"#FEF2F2":"#fff",color:on?"#DC2626":"#64748B"}}>{on?<Check size={12}/>:<Plus size={12}/>}{e.k==="salarios"?"Planilla":e.label.replace(" vendidos","")}</button>);})}
       <span style={{flex:1}}/>
       <button onClick={()=>{const n=desglose.length===egresos.length?[]:egresos.map(e=>e.k);setDesglose(n);try{localStorage.setItem("seeds_desglose",JSON.stringify(n));}catch(e){}}} style={{background:"none",border:"none",color:"#2563EB",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{desglose.length===egresos.length?"Ninguno":"Todos"}</button>
     </div>
 
-    {/* Tarjetas resumen */}
+    {/* Resumen */}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:16}}>
-      <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ingreso total</div><div style={{fontSize:22,fontWeight:800,color:"#059669"}}>L {ingresoTotal.toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>mensualidades + materiales + graduación</div></div>
-      <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Egresos totales</div><div style={{fontSize:22,fontWeight:800,color:"#DC2626"}}>L {totalEgresos.toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>gastos L {totGastos.toLocaleString()} + costos L {(costoMateriales+costoGraduacion).toLocaleString()}</div></div>
-      <div style={{...card,borderLeft:`3px solid ${resultado>=0?"#059669":"#DC2626"}`,margin:0}}><div style={{fontSize:12,color:"#64748B"}}>{resultado>=0?"Ganancia neta":"Pérdida neta"}</div><div style={{fontSize:22,fontWeight:800,color:resultado>=0?"#059669":"#DC2626"}}>L {Math.abs(resultado).toLocaleString()}</div><div style={{fontSize:11,color:"#94A3B8"}}>ingresos − egresos</div></div>
-      <div style={{...card,borderLeft:"3px solid #2563EB",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Margen de ganancia</div><div style={{fontSize:22,fontWeight:800,color:resultado>=0?"#2563EB":"#DC2626"}}>{margen}</div><div style={{fontSize:11,color:"#94A3B8"}}>de cada L 100 que entran</div></div>
+      {tarjeta("Total ingresos",M(ingresoTotal),"#059669")}
+      {tarjeta("Total egresos",M(totalEgresos),"#DC2626",`costo de ventas ${M(costoMateriales+costoGraduacion)} + gastos ${M(totGastos)}`)}
+      {tarjeta(resultado>=0?"Utilidad neta":"Pérdida neta",M(Math.abs(resultado)),resultado>=0?"#059669":"#DC2626")}
+      {tarjeta("Margen neto",margen,resultado>=0?"#2563EB":"#DC2626","de cada L 100 que entran")}
     </div>
 
-    {/* Gráfica */}
-    <div style={card}>
-      <h4 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 8px"}}>📊 Ingresos, egresos y pendientes</h4>
-      <div style={{overflowX:"auto"}}><div style={{minWidth:520,maxWidth:860,margin:"0 auto"}} dangerouslySetInnerHTML={{__html:svgGrafica}}/></div>
-    </div>
-
-    <div style={{display:"grid",gridTemplateColumns:window.innerWidth>700?"1fr 1fr":"1fr",gap:16}}>
-      {/* INGRESOS */}
-      <div style={card}>
-        <h4 style={{fontSize:14,fontWeight:700,color:"#059669",margin:"0 0 10px"}}>💰 Ingresos</h4>
-        {fila("Mensualidades cobradas",ingMensualidades,"#059669")}
-        {fila("Venta de materiales (pagados)",ingMateriales,"#D97706")}
-        {fila("Graduación cobrada (pagados)",ingGraduacion,"#7C3AED")}
-        <div style={{marginTop:6,paddingTop:6}}>{fila("Total ingresos",ingresoTotal,"#059669",true)}</div>
-        <div style={{marginTop:14,fontSize:12,color:"#64748B"}}>
-          <div style={{fontWeight:700,marginBottom:4}}>Materiales cobrados este mes:</div>
-          {ventasMes.length===0?<div style={{color:"#94A3B8"}}>Sin materiales cobrados este mes</div>:ventasMes.slice(0,8).map(v=>(
-            <div key={v.id} style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}><span>{v.nombre_material} ×{v.cantidad}</span><span>L {Number(v.precio_venta).toLocaleString()}</span></div>
-          ))}
-        </div>
+    {/* Estado de resultados */}
+    <div style={{...card,padding:"22px 24px"}}>
+      <style>{EDO_CSS}</style>
+      <div style={{textAlign:"center",marginBottom:14}}>
+        <div style={{fontSize:15,fontWeight:800,color:"#1E293B"}}>Seeds English School</div>
+        <div style={{fontSize:13,fontWeight:700,color:"#5B21B6",letterSpacing:.5}}>ESTADO DE RESULTADOS</div>
+        <div style={{fontSize:12,color:"#64748B"}}>Del 1 al {new Date(anioSel,MESES.indexOf(mesSel)+1,0).getDate()} de {mesSel} de {anioSel} · Cifras en Lempiras</div>
       </div>
-
-      {/* EGRESOS Y GANANCIA */}
-      <div style={card}>
-        <h4 style={{fontSize:14,fontWeight:700,color:"#DC2626",margin:"0 0 10px"}}>📉 Egresos y resultado</h4>
-        {egresos.map(e=>{const abierto=desglose.includes(e.k);return(<div key={e.k} style={{borderBottom:"1px solid #F1F5F9"}}>
-          <div onClick={()=>toggleDesglose(e.k)} title={abierto?"Ocultar desglose":"Ver desglose"} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",cursor:"pointer"}}>
-            <span style={{fontSize:13,color:"#475569",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:10,color:"#94A3B8",width:10,display:"inline-block",transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span>{e.label} <span style={{fontSize:11,color:"#94A3B8"}}>{pctIng(e.total)}</span></span>
-            <span style={{fontSize:13,fontWeight:600,color:"#DC2626"}}>L {e.total.toLocaleString()}</span>
-          </div>
-          {abierto&&<div style={{margin:"0 0 8px 16px",padding:"4px 10px",background:"#FEF2F2",borderRadius:6}}>
-            {e.items.length===0?<div style={{fontSize:12,color:"#94A3B8",padding:"4px 0"}}>Sin registros este mes</div>:e.items.map((it,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"4px 0",fontSize:12,color:"#64748B",borderBottom:i<e.items.length-1?"1px dashed #FECACA":"none"}}>
-              <span><span style={{color:"#475569",fontWeight:600}}>{it.label}</span>{it.sub&&<span style={{display:"block",color:"#94A3B8",fontSize:11,marginTop:1}}>{it.sub}</span>}</span><span style={{fontWeight:600,whiteSpace:"nowrap"}}>L {it.monto.toLocaleString()}</span>
-            </div>)}
-          </div>}
-        </div>);})}
-        <div style={{marginTop:6,paddingTop:6}}>{fila("Total egresos",totalEgresos,"#DC2626",true)}</div>
-        <div style={{marginTop:14,padding:12,background:resultado>=0?"#ECFDF5":"#FEF2F2",borderRadius:8}}>
-          <div style={{fontSize:12,color:"#64748B",marginBottom:6}}>Cálculo del resultado:</div>
-          <div style={{fontSize:12,color:"#475569"}}>Ingreso total: L {ingresoTotal.toLocaleString()}</div>
-          <div style={{fontSize:12,color:"#475569"}}>− Egresos totales: L {totalEgresos.toLocaleString()}</div>
-          <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid #D1D5DB",fontSize:16,fontWeight:800,color:resultado>=0?"#059669":"#DC2626"}}>
-            = L {resultado.toLocaleString()} {resultado>=0?"✓":""} <span style={{fontSize:12,fontWeight:600}}>(margen {margen})</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {/* Pendientes */}
-    <div style={{display:"grid",gridTemplateColumns:window.innerWidth>700?"1fr 1fr":"1fr",gap:16,marginTop:16}}>
-      {[{t:"⏳ Pendiente por pagar",c:"#DC2626",bg:"#FEF2F2",items:porPagar,tot:totPorPagar,ok:"✓ Todo pagado (renta al día)"},{t:"⏳ Pendiente por cobrar",c:"#D97706",bg:"#FFFBEB",items:porCobrar,tot:totPorCobrar,ok:"✓ Nada pendiente por cobrar"}].map(b=>(
-        <div key={b.t} style={{...card,margin:0,borderTop:`3px solid ${b.c}`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><h4 style={{fontSize:14,fontWeight:700,color:b.c,margin:0}}>{b.t}</h4><span style={{fontSize:15,fontWeight:800,color:b.c}}>L {b.tot.toLocaleString()}</span></div>
-          {b.items.length===0?<div style={{fontSize:13,color:"#059669",padding:"6px 0"}}>{b.ok}</div>:b.items.map((x,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"8px 10px",background:b.bg,borderRadius:6,marginBottom:6}}>
-            <div><div style={{fontSize:13,fontWeight:600,color:"#1E293B"}}>{x.label}</div><div style={{fontSize:11,color:"#64748B"}}>{x.sub}</div></div>
-            <div style={{fontSize:13,fontWeight:700,color:b.c,whiteSpace:"nowrap"}}>L {x.monto.toLocaleString()}</div>
-          </div>)}
-        </div>))}
-    </div>
-    {totPorPagar>0&&<div style={{...card,marginTop:16,background:"#FEF2F2",border:"1px solid #FECACA",fontSize:13,color:"#991B1B"}}>Si se paga lo pendiente, {mesSel} quedaría con {resultado-totPorPagar>=0?"una ganancia":"una pérdida"} de <strong>L {Math.abs(resultado-totPorPagar).toLocaleString()}</strong>.</div>}
-
-    {/* Nota explicativa */}
-    <div style={{...card,background:"#F8FAFC",marginTop:16}}>
-      <div style={{fontSize:12,color:"#64748B"}}>
-        <strong>Nota:</strong> El "Ingreso total" cuenta el precio completo de materiales y graduación (lo que entra a caja). En egresos solo se resta lo que te <em>cuestan</em> (lo que pagas a la editorial o por certificados), así la ganancia neta es tu utilidad real. Los porcentajes de cada egreso son sobre el ingreso total. Toca un rubro o usa "Desglosar egresos" para ver su detalle; lo que desgloses también sale en el PDF.
-      </div>
+      <div style={{overflowX:"auto"}}><div style={{minWidth:520}} dangerouslySetInnerHTML={{__html:estadoHTML}}/></div>
     </div>
   </div>);
 }
