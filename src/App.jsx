@@ -637,7 +637,6 @@ function ResumenFinanciero({data}){
   ];
   const max=Math.max(...barras.map(b=>b.v),1);
   const H=220;
-  const segmentos=barras.filter(b=>b.k!=="ing"&&!b.neg&&b.v>0);
 
   return(<div style={{...card,padding:0,overflow:"hidden",marginBottom:24}}>
     <style>{`
@@ -647,7 +646,6 @@ function ResumenFinanciero({data}){
       .rf-info{transition:opacity .5s ease .5s, transform .5s ease .5s}
       .rf-col:hover .rf-bar{filter:brightness(1.08) saturate(1.1);transform:scaleX(1.04)}
       .rf-col:hover .rf-val{opacity:1;transform:translateY(0)}
-      .rf-seg{transition:width .9s cubic-bezier(.22,1,.36,1)}
     `}</style>
     {/* Encabezado */}
     <div style={{padding:"18px 22px",background:"linear-gradient(135deg,#1E293B 0%,#334155 100%)",color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
@@ -688,16 +686,13 @@ function ResumenFinanciero({data}){
         </div>)}
       </div>
 
-      {/* Distribución del ingreso (barra apilada) */}
+      {/* Distribución del ingreso */}
       <div style={{marginTop:26}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8,flexWrap:"wrap",gap:"4px 12px"}}>
           <span style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>¿A dónde va cada lempira que entra?</span>
           <span style={{fontSize:12,color:"#64748B",whiteSpace:"nowrap"}}>Base: {L(ingresos)}</span>
         </div>
-        <div style={{display:"flex",height:16,borderRadius:10,overflow:"hidden",background:"#F1F5F9"}}>
-          {ingresos>0&&segmentos.map(b=><div key={b.k} className="rf-seg" title={`${b.l}: ${fmtPct(b.v)}`} style={{width:anim?`${Math.min(pct(b.v),100)}%`:"0%",background:`linear-gradient(90deg,${b.c1},${b.c2})`}}/>)}
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:10,marginTop:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:10,marginTop:4}}>
           {barras.filter(b=>b.k!=="ing").map(b=><div key={b.k} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,background:"#F8FAFC",border:"1px solid #EEF2F7"}}>
             <span style={{width:10,height:28,borderRadius:4,background:`linear-gradient(180deg,${b.c1},${b.c2})`,flexShrink:0}}/>
             <div style={{minWidth:0}}>
