@@ -24,6 +24,24 @@ const mesIngreso = (reg) => reg.mes_ingreso || mesDeFecha(reg.fecha_pago) || reg
 // (mes_deduccion) que elige el usuario; si no existe, el mes que corresponde,
 // y como ultimo respaldo la fecha real de pago.
 const mesGasto = (g) => g.mes_deduccion || g.mes_correspondiente || mesDeFecha(g.fecha) || null;
+// Año en que cuenta un registro: se toma de su fecha real y se ajusta si el
+// mes asignado queda del otro lado del cambio de año (ej. salario de Diciembre
+// pagado el 5 de Enero cuenta en Diciembre del año anterior).
+const anioAsignado = (fecha, mes, respaldo) => {
+  const [y, m] = String(fecha || "").split("-").map(Number);
+  if (!y) return Number(respaldo) || null;
+  const ma = MESES.indexOf(mes), mf = (m || 0) - 1;
+  if (ma < 0 || mf < 0) return y;
+  if (ma - mf > 6) return y - 1;
+  if (mf - ma > 6) return y + 1;
+  return y;
+};
+const ANIO_ACTUAL = new Date().getFullYear();
+// ¿El ingreso / gasto cuenta en ese mes y año? (sin fecha ni año guardado, cuenta)
+const esIngresoDe = (r, mes, anio) => mesIngreso(r) === mes && (anioAsignado(r.fecha_pago || r.fecha_venta || r.fecha_emision, mesIngreso(r), r.anio_correspondiente) ?? anio) === anio;
+const esGastoDe = (g, mes, anio) => mesGasto(g) === mes && (anioAsignado(g.fecha, mesGasto(g), g.anio_correspondiente) ?? anio) === anio;
+// Año de un cobro (mensualidad): el guardado, o el de su fecha de emisión
+const anioCobro = (f) => Number(f.anio_correspondiente) || anioAsignado(f.fecha_emision, f.mes_correspondiente) || ANIO_ACTUAL;
 const TIPOS_PAGO = [{value:"efectivo",label:"Efectivo"},{value:"transferencia",label:"Transferencia"},{value:"tarjeta",label:"Tarjeta"},{value:"deposito",label:"Depósito"}];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -581,15 +599,15 @@ function Dashboard({data,setPage}){
   const ts=data.secciones.filter(s=>s.activa!==false).length;
   const pend=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
   const mes=MESES[new Date().getMonth()];
-  const ingMens=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&mesIngreso(f)===mes).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
-  const ventMat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
+  const ingMens=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL)).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+  const ventMat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
-  const gradPag=(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
+  const gradPag=(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const ingGrad=gradPag.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganGrad=gradPag.reduce((s,v)=>s+Number(v.ganancia),0);
   const ing=ingMens+ingMat+ingGrad;
-  const gastos=data.gastos.filter(g=>mesGasto(g)===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
+  const gastos=data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
   const ganancia=ingMens+ganMat+ganGrad-gastos;
   const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString()}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastos.toLocaleString()}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString()}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
   return(<div>
@@ -610,14 +628,14 @@ function ResumenFinanciero({data}){
   const suma=(arr,k)=>arr.reduce((s,x)=>s+(Number(x[k])||0),0);
 
   // Ingresos del mes (mismo criterio que el reporte mensual)
-  const ingMens=suma(data.facturas.filter(f=>f.tipo_factura==="comprobante"&&mesIngreso(f)===mes),"monto_total");
-  const mat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
-  const grad=(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
+  const ingMens=suma(data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL)),"monto_total");
+  const mat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
+  const grad=(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const ingresos=ingMens+suma(mat,"precio_venta")+suma(grad,"precio_venta");
   const costoVentas=(suma(mat,"precio_venta")-suma(mat,"ganancia"))+(suma(grad,"precio_venta")-suma(grad,"ganancia"));
 
   // Gastos del mes
-  const gMes=data.gastos.filter(g=>mesGasto(g)===mes);
+  const gMes=data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL));
   const pagosPlanilla=gMes.filter(g=>g.tipo==="salario");
   const planilla=suma(pagosPlanilla,"monto");
   const personasPlanilla=new Set(pagosPlanilla.map(g=>g.maestro_id||g.descripcion||g.id)).size;
@@ -712,7 +730,7 @@ function EstadoPadres({data,fSec,fMes}){
 
   // Cobros válidos del periodo (respeta el filtro de sección)
   const alumnoDe=(id)=>data.alumnos.find(a=>a.id===id);
-  const cobrosDe=(meses)=>data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada"&&meses.includes(f.mes_correspondiente)).filter(f=>{if(!sec)return true;const al=alumnoDe(f.alumno_id);return al&&al.seccion_id===sec;});
+  const cobrosDe=(meses)=>data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada"&&meses.includes(f.mes_correspondiente)&&anioCobro(f)===ANIO_ACTUAL).filter(f=>{if(!sec)return true;const al=alumnoDe(f.alumno_id);return al&&al.seccion_id===sec;});
   const esPend=(f)=>f.estado==="pendiente"||f.estado==="parcial";
   const saldoDe=(f)=>Number(f.saldo)>0?Number(f.saldo):Number(f.monto_total)||0;
   // Agrupa por padre: es deudor si tiene al menos un cobro pendiente en el periodo
@@ -1746,13 +1764,13 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
 
   const eliminarGasto=async(id)=>{if(!confirm("¿Eliminar gasto?"))return;try{await db.remove("gastos",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
-  const ingresosMes=(mes)=>data.facturas.filter(f=>f.tipo_factura==="comprobante"&&mesIngreso(f)===mes).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
-  const gastosMes=(mes)=>data.gastos.filter(g=>mesGasto(g)===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
-  const salariosMes=(mes)=>data.gastos.filter(g=>g.tipo==="salario"&&mesGasto(g)===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
-  const rentaMes=(mes)=>data.gastos.filter(g=>g.tipo==="renta"&&mesGasto(g)===mes).reduce((s,g)=>s+(Number(g.monto)||0),0);
+  const ingresosMes=(mes)=>data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL)).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+  const gastosMes=(mes)=>data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
+  const salariosMes=(mes)=>data.gastos.filter(g=>g.tipo==="salario"&&esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
+  const rentaMes=(mes)=>data.gastos.filter(g=>g.tipo==="renta"&&esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
   // Materiales y graduacion pagados del mes (por fecha de pago), igual que Dashboard/Reportes
-  const matMes=(mes)=>(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
-  const gradMesF=(mes)=>(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&mesIngreso(v)===mes);
+  const matMes=(mes)=>(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
+  const gradMesF=(mes)=>(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const ingMatMes=(mes)=>matMes(mes).reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganMatMes=(mes)=>matMes(mes).reduce((s,v)=>s+Number(v.ganancia),0);
   const ingGradMes=(mes)=>gradMesF(mes).reduce((s,v)=>s+Number(v.precio_venta),0);
@@ -2665,13 +2683,14 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 // ── REPORTES (resumen económico mensual completo) ──
 function ReportesPage({data,showToast}){
   const[mesSel,setMesSel]=useState(MESES[new Date().getMonth()]);
+  const[anioSel,setAnioSel]=useState(ANIO_ACTUAL);
 
   // Ingresos por mensualidades: cuentan en el mes en que ENTRÓ el pago (fecha_pago real)
-  const compsMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&mesIngreso(f)===mesSel);
+  const compsMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mesSel,anioSel));
   const ingMensualidades=compsMes.reduce((s,f)=>s+Number(f.monto_total||0),0);
 
   // Materiales: solo PAGADOS, contados por la fecha real de pago.
-  const ventasMes=data.ventas_material.filter(v=>v.estado==="pagado"&&mesIngreso(v)===mesSel);
+  const ventasMes=data.ventas_material.filter(v=>v.estado==="pagado"&&esIngresoDe(v,mesSel,anioSel));
   // Pendientes: aún no hay ingreso; se muestran aparte por su mes asignado.
   const ventasPendMes=data.ventas_material.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pendiente");
   const pendMateriales=ventasPendMes.reduce((s,v)=>s+Number(v.precio_venta),0);
@@ -2680,7 +2699,7 @@ function ReportesPage({data,showToast}){
   const gananciaMateriales=ventasMes.reduce((s,v)=>s+Number(v.ganancia),0);
 
   // Graduación: solo PAGADAS, contadas por la fecha real de pago.
-  const gradMes=data.cobros_graduacion.filter(v=>v.estado==="pagado"&&mesIngreso(v)===mesSel);
+  const gradMes=data.cobros_graduacion.filter(v=>v.estado==="pagado"&&esIngresoDe(v,mesSel,anioSel));
   const gradPendMes=data.cobros_graduacion.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pendiente");
   const pendGraduacion=gradPendMes.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ingGraduacion=gradMes.reduce((s,v)=>s+Number(v.precio_venta),0);
@@ -2688,7 +2707,7 @@ function ReportesPage({data,showToast}){
   const gananciaGraduacion=gradMes.reduce((s,v)=>s+Number(v.ganancia),0);
 
   // Gastos: por el mes asignado (los salarios se asignan al mes que corresponden)
-  const gastosMes=data.gastos.filter(g=>mesGasto(g)===mesSel);
+  const gastosMes=data.gastos.filter(g=>esGastoDe(g,mesSel,anioSel));
   const totSalarios=gastosMes.filter(g=>g.tipo==="salario").reduce((s,g)=>s+Number(g.monto),0);
   const totRenta=gastosMes.filter(g=>g.tipo==="renta").reduce((s,g)=>s+Number(g.monto),0);
   const totOtros=gastosMes.filter(g=>g.tipo==="otro").reduce((s,g)=>s+Number(g.monto),0);
@@ -2712,7 +2731,7 @@ function ReportesPage({data,showToast}){
     const filaHTML=(label,valor,color="#1E293B",bold=false)=>`<tr><td style="padding:7px 0;border-bottom:1px solid #eee;color:#475569;${bold?"font-weight:700":""}">${label}</td><td style="padding:7px 0;border-bottom:1px solid #eee;text-align:right;font-weight:${bold?"800":"600"};color:${color}">${L(valor)}</td></tr>`;
     const listaMat=ventasMes.length?ventasMes.map(v=>`<tr><td style="padding:3px 0;color:#475569">${v.nombre_material} ×${v.cantidad}</td><td style="padding:3px 0;text-align:right">${L(v.precio_venta)}</td></tr>`).join(""):`<tr><td style="color:#94a3b8;padding:3px 0">Sin materiales cobrados este mes</td></tr>`;
     const listaGrad=gradMes.length?gradMes.map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const det=Array.isArray(v.detalle)?v.detalle:[];return `<tr><td style="padding:3px 0;color:#475569">${al?.nombre||"—"} (${det.map(d=>d.nombre).join(" + ")})</td><td style="padding:3px 0;text-align:right">${L(v.precio_venta)}</td></tr>`;}).join(""):`<tr><td style="color:#94a3b8;padding:3px 0">Sin graduaciones cobradas este mes</td></tr>`;
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte ${mesSel}</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte ${mesSel} ${anioSel}</title>
       <style>
         @page { size: letter portrait; margin: 15mm; }
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
@@ -2738,7 +2757,7 @@ function ReportesPage({data,showToast}){
         <div class="htxt">
           <h1>Seeds English School</h1>
           <p>Jesús de Otoro, Intibucá, Honduras</p>
-          <p style="margin-top:8px;font-size:15px;font-weight:700;color:#1E293B">📊 Reporte económico — ${mesSel}</p>
+          <p style="margin-top:8px;font-size:15px;font-weight:700;color:#1E293B">📊 Reporte económico — ${mesSel} ${anioSel}</p>
           <p>Generado el ${hoy}</p>
         </div>
       </div>
@@ -2797,11 +2816,12 @@ function ReportesPage({data,showToast}){
 
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
-      <h3 style={{fontSize:16,fontWeight:700,color:"#1E293B",margin:0}}>📊 Reporte económico — {mesSel}</h3>
+      <h3 style={{fontSize:16,fontWeight:700,color:"#1E293B",margin:0}}>📊 Reporte económico — {mesSel} {anioSel}</h3>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <select value={mesSel} onChange={e=>setMesSel(e.target.value)} style={{...input,width:160,cursor:"pointer"}}>
           {MESES.map(m=><option key={m} value={m}>{m}</option>)}
         </select>
+        <select value={anioSel} onChange={e=>setAnioSel(Number(e.target.value))} style={{...input,width:100,cursor:"pointer"}}>{[ANIO_ACTUAL,ANIO_ACTUAL-1,ANIO_ACTUAL-2].map(y=><option key={y} value={y}>{y}</option>)}</select>
         <button onClick={descargarPDF} style={btn("#DC2626")}><Download size={15}/>Descargar PDF</button>
       </div>
     </div>
