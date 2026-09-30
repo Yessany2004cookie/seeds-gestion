@@ -2891,9 +2891,10 @@ function ReportesPage({data,showToast}){
     .grafica svg{max-width:760px;margin:0 auto}
     .pie{font-size:11px;color:#94A3B8;margin-top:18px;line-height:1.5}`;
 
-  // Descargar el reporte como PDF (vía diálogo de impresión del navegador)
-  const descargarPDF=()=>{
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Estado de resultados ${mesSel} ${anioSel}</title>
+  // Documento completo del reporte (se usa para descargar el PDF y para imprimir)
+  const nombreArchivo=`Estado de resultados ${mesSel} ${anioSel}`;
+  const documentoHTML=()=>{
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${nombreArchivo}</title>
       <style>
         @page { size: letter portrait; margin: 14mm; }
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -2928,6 +2929,41 @@ function ReportesPage({data,showToast}){
       ${estadoHTML}
       <div class="firmas"><div>Elaborado por</div><div>Revisado / Aprobado</div></div>
       </body></html>`;
+  };
+
+  // Descargar el PDF directamente como archivo (sin ventana de impresión)
+  const[generando,setGenerando]=useState(false);
+  const descargarPDF=async()=>{
+    if(generando)return;
+    setGenerando(true);
+    const html=documentoHTML();
+    // Se toma el estilo y el cuerpo del documento y se limitan a un contenedor
+    // para no afectar el resto de la aplicación mientras se genera el archivo.
+    const css=(html.match(/<style>([\s\S]*?)<\/style>/)||[])[1]||"";
+    const cuerpo=(html.match(/<body>([\s\S]*)<\/body>/)||[])[1]||"";
+    const cssLocal=css.replace(/@page[^}]*\}/,"").replace(/@media print\{[^}]*\}\}/,"").replace(/\*\{/g,".pdfroot,.pdfroot *{").replace(/(^|\s)body\{/,"$1.pdfroot{");
+    const contenido=`<div class="pdfroot" style="width:100%;background:#fff"><style>${cssLocal}</style>${cuerpo}</div>`;
+    try{
+      const html2pdf=(await import("html2pdf.js")).default;
+      await html2pdf().set({
+        margin:[10,10,12,10],
+        filename:`${nombreArchivo}.pdf`,
+        image:{type:"jpeg",quality:0.96},
+        html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff",scrollY:0},
+        jsPDF:{unit:"mm",format:"letter",orientation:"portrait"},
+        pagebreak:{mode:["css","legacy"],avoid:["tr",".grafica",".cards",".aviso",".firmas",".head"]},
+      }).from(contenido,"string").save();
+      showToast&&showToast("✓ PDF descargado");
+    }catch(e){
+      showToast&&showToast("No se pudo generar el PDF: "+e.message,"error");
+    }finally{
+      setGenerando(false);
+    }
+  };
+
+  // Imprimir (abre el diálogo de impresión del navegador)
+  const imprimir=()=>{
+    const html=documentoHTML();
     const w=window.open("","_blank");
     if(!w){showToast&&showToast("Permite las ventanas emergentes para descargar el PDF","error");return;}
     w.document.write(html);
@@ -2945,7 +2981,8 @@ function ReportesPage({data,showToast}){
           {MESES.map(m=><option key={m} value={m}>{m}</option>)}
         </select>
         <select value={anioSel} onChange={e=>setAnioSel(Number(e.target.value))} style={{...input,width:100,cursor:"pointer"}}>{[ANIO_ACTUAL,ANIO_ACTUAL-1,ANIO_ACTUAL-2].map(y=><option key={y} value={y}>{y}</option>)}</select>
-        <button onClick={descargarPDF} style={btn("#DC2626")}><Download size={15}/>Descargar PDF</button>
+        <button onClick={descargarPDF} disabled={generando} style={{...btn("#DC2626"),opacity:generando?.7:1,cursor:generando?"wait":"pointer"}}><Download size={15}/>{generando?"Generando PDF…":"Descargar PDF"}</button>
+        <button onClick={imprimir} style={btnO}><FileText size={15}/>Imprimir</button>
       </div>
     </div>
 
