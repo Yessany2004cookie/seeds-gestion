@@ -737,12 +737,16 @@ function AdminReportes({ data, setError }) {
 //  ADMINISTRACIÓN: acceso de un maestro al portal (en la página Maestros)
 // ════════════════════════════════════════════════════════════
 const llamarApiDocentes = async (body) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  const r = await fetch("/api/docentes", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` }, body: JSON.stringify(body) });
-  let j = {};
-  try { j = await r.json(); } catch (e) { if (r.status === 404) j = { error: "La función /api/docentes aún no está publicada." }; }
-  if (!r.ok) throw new Error(j.error || `Error ${r.status}`);
-  return j;
+  // Edge Function "docentes" en Supabase (supabase/functions/docentes)
+  const { data, error } = await supabase.functions.invoke("docentes", { body });
+  if (error) {
+    let msg = error.message;
+    try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; } catch (e) { /* sin detalle */ }
+    if (/Failed to send|fetch/i.test(msg)) msg = "No se pudo conectar con el servidor. Revisa tu internet.";
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
 };
 
 export function useAccesosDocentes() {
