@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
 import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
+import { Bitacora, AdminBitacoras } from "./bitacora";
 import {
   LogOut, Users, BookOpen, Check, X, Menu, Send, Home, ClipboardList,
   MessageSquare, FileText, Phone, Plus, Trash2, RefreshCw, Save, Inbox, KeyRound, UserCheck,
@@ -141,6 +142,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
     { id: "inicio", label: "Inicio", icon: Home },
     { id: "grupos", label: "Mis grupos", icon: Users },
     { id: "asistencia", label: "Libreta de asistencia", icon: UserCheck },
+    { id: "bitacora", label: "Bitácora", icon: BookOpen },
     { id: "reflections", label: "Reflections", icon: MessageSquare },
     { id: "reporte", label: "Reporte de clase", icon: ClipboardList },
     { id: "solicitudes", label: "Solicitudes", icon: Inbox },
@@ -151,6 +153,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
     inicio: <InicioDocente {...props} />,
     grupos: <MisGrupos {...props} />,
     asistencia: <Asistencia {...props} />,
+    bitacora: <Bitacora maestro={datos.maestro} secciones={datos.secciones} editable avisar={avisar} esAdmin={!!onVolver} />,
     reflections: <Reflections {...props} />,
     reporte: <ReporteClase {...props} />,
     solicitudes: <SolicitudesDocente {...props} />,
@@ -216,6 +219,7 @@ function InicioDocente({ datos, setPage }) {
   const activos = datos.alumnos.filter((a) => a.estado === "activo");
   const accesos = [
     { id: "asistencia", t: "Libreta de asistencia", d: "Pasa lista de hoy y revisa los días anteriores", icon: UserCheck },
+    { id: "bitacora", t: "Bitácora", d: "Escribe lo que hiciste en tu clase de hoy", icon: BookOpen },
     { id: "reporte", t: "Reporte de clase", d: "Llena el formulario de la clase de hoy", icon: ClipboardList },
     { id: "reflections", t: "Escribir reflection", d: "Anota el avance o la conducta de un alumno", icon: MessageSquare },
     { id: "solicitudes", t: "Hacer una solicitud", d: "Pide algo a administración", icon: Inbox },
@@ -651,11 +655,13 @@ export function AdminDocentesPage({ data, showToast }) {
       <button onClick={() => setTab("asistencia")} style={tBtn(tab === "asistencia")}>✅ Asistencia</button>
       <button onClick={() => setTab("reflections")} style={tBtn(tab === "reflections")}>💬 Reflections</button>
       <button onClick={() => setTab("reportes")} style={tBtn(tab === "reportes")}>📋 Reportes de clase</button>
+      <button onClick={() => setTab("bitacoras")} style={tBtn(tab === "bitacoras")}>📖 Bitácoras</button>
     </div>
     {tab === "solicitudes" && <AdminSolicitudes {...props} />}
     {tab === "asistencia" && <AdminAsistencia {...props} />}
     {tab === "reflections" && <AdminReflections {...props} />}
     {tab === "reportes" && <AdminReportes {...props} />}
+    {tab === "bitacoras" && <AdminBitacoras data={data} showToast={showToast} />}
   </div>);
 }
 
