@@ -279,7 +279,21 @@ function MisGrupos({ datos }) {
 }
 
 // ── Asistencia ──
-function Asistencia({ datos, maestroId, avisar }) {
+function Asistencia(props) {
+  const [tab, setTab] = useState("tomar");
+  const [error, setError] = useState("");
+  const tBtn = (a) => ({ padding: "9px 16px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", borderBottom: a ? `3px solid ${NAR}` : "3px solid transparent", background: "transparent", color: a ? NAR : "#64748B" });
+  return (<div>
+    <div style={{ display: "flex", borderBottom: "1px solid #E2E8F0", marginBottom: 14 }}>
+      <button onClick={() => setTab("tomar")} style={tBtn(tab === "tomar")}>Tomar asistencia</button>
+      <button onClick={() => setTab("historial")} style={tBtn(tab === "historial")}>Historial</button>
+    </div>
+    {error && <div style={{ ...card, background: "#FFF7ED", border: "1px solid #FDBA74", color: "#9A3412", fontSize: 13 }}>⚠ {error}</div>}
+    {tab === "tomar" ? <TomarAsistencia {...props} /> : <GridAsistencia secciones={props.datos.secciones} alumnos={props.datos.alumnos} setError={setError} />}
+  </div>);
+}
+
+function TomarAsistencia({ datos, maestroId, avisar }) {
   const [sec, setSec] = useState(datos.secciones[0]?.id || "");
   const [fecha, setFecha] = useState(hoyISO());
   const [marcas, setMarcas] = useState({}); // alumno_id -> estado
@@ -635,8 +649,8 @@ function AdminSolicitudes({ data, showToast, setError }) {
   </div>);
 }
 
-function AdminAsistencia({ data, setError }) {
-  const secciones = data.secciones.filter((s) => s.activa !== false);
+// Tabla mensual de asistencia de un grupo (la usan administración y docentes)
+function GridAsistencia({ secciones, alumnos: todos, setError }) {
   const [sec, setSec] = useState(secciones[0]?.id || "");
   const [mes, setMes] = useState(hoyISO().slice(0, 7));
   const [regs, setRegs] = useState([]);
@@ -647,25 +661,31 @@ function AdminAsistencia({ data, setError }) {
     setError(""); setRegs(d || []);
   })(); }, [sec, mes]);
   const dias = [...new Set(regs.map((r) => r.fecha))].sort();
-  const alumnos = data.alumnos.filter((a) => a.seccion_id === sec && a.estado === "activo");
+  // Alumnos activos del grupo y también los que ya no están pero tienen registros ese mes
+  const conRegistro = new Set(regs.map((r) => r.alumno_id));
+  const alumnos = todos.filter((a) => a.seccion_id === sec && a.estado === "activo" || conRegistro.has(a.id));
   const est = (aid, d) => regs.find((r) => r.alumno_id === aid && r.fecha === d)?.estado;
+  const nombreMes = new Date(mes + "-15T12:00:00").toLocaleDateString("es-HN", { month: "long", year: "numeric" });
   return (<div>
-    <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
       <SelectorGrupo secciones={secciones} value={sec} onChange={setSec} />
-      <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} style={{ ...input, width: 170 }} />
+      <input type="month" value={mes} max={hoyISO().slice(0, 7)} onChange={(e) => setMes(e.target.value)} style={{ ...input, width: 170 }} />
+      <span style={{ fontSize: 12, color: "#64748B" }}>{dias.length} {dias.length === 1 ? "clase registrada" : "clases registradas"} en {nombreMes}</span>
     </div>
     <div style={card}>
-      {dias.length === 0 ? <Vacio>No hay asistencia registrada para este grupo en este mes.</Vacio> : (
+      {dias.length === 0 ? <Vacio>No hay asistencia registrada para este grupo en {nombreMes}.</Vacio> : (
         <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
           <thead><tr style={{ borderBottom: "2px solid #E2E8F0" }}>
             <th style={{ textAlign: "left", padding: "6px 8px", color: "#64748B" }}>Alumno</th>
-            {dias.map((d) => <th key={d} style={{ padding: "6px 4px", color: "#64748B", fontWeight: 600 }}>{Number(d.slice(8))}</th>)}
+            {dias.map((d) => <th key={d} title={fechaLarga(d)} style={{ padding: "6px 4px", color: "#64748B", fontWeight: 600 }}>{Number(d.slice(8))}</th>)}
+            <th style={{ padding: "6px 8px", color: "#64748B", textAlign: "right" }}>Ausencias</th>
             <th style={{ padding: "6px 8px", color: "#64748B", textAlign: "right" }}>% asistencia</th>
           </tr></thead>
-          <tbody>{alumnos.map((a) => { const r = regs.filter((x) => x.alumno_id === a.id); const ok = r.filter((x) => x.estado === "presente" || x.estado === "tarde").length; const pct = r.length ? Math.round((ok / r.length) * 100) : null; return (
+          <tbody>{alumnos.map((a) => { const r = regs.filter((x) => x.alumno_id === a.id); const ok = r.filter((x) => x.estado === "presente" || x.estado === "tarde").length; const aus = r.filter((x) => x.estado === "ausente").length; const pct = r.length ? Math.round((ok / r.length) * 100) : null; return (
             <tr key={a.id} style={{ borderBottom: "1px solid #F1F5F9" }}>
-              <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{a.nombre}</td>
+              <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{a.nombre}{a.estado !== "activo" && <span style={{ ...badge("#94A3B8"), marginLeft: 6 }}>inactivo</span>}</td>
               {dias.map((d) => { const e = ESTADOS_ASIS.find((x) => x.v === est(a.id, d)); return <td key={d} style={{ textAlign: "center", padding: "4px" }}>{e ? <span title={e.l} style={{ display: "inline-block", width: 22, height: 22, lineHeight: "22px", borderRadius: 5, background: e.c + "1A", color: e.c, fontWeight: 800 }}>{e.k}</span> : <span style={{ color: "#CBD5E1" }}>·</span>}</td>; })}
+              <td style={{ textAlign: "right", padding: "6px 8px", color: aus ? "#DC2626" : "#94A3B8" }}>{aus}</td>
               <td style={{ textAlign: "right", padding: "6px 8px", fontWeight: 700, color: pct !== null && pct < 75 ? "#DC2626" : "#1E293B" }}>{pct === null ? "—" : pct + "%"}</td>
             </tr>
           ); })}</tbody>
@@ -674,6 +694,10 @@ function AdminAsistencia({ data, setError }) {
       <div style={{ display: "flex", gap: 12, marginTop: 10, fontSize: 11, color: "#64748B", flexWrap: "wrap" }}>{ESTADOS_ASIS.map((e) => <span key={e.v}><strong style={{ color: e.c }}>{e.k}</strong> {e.l}</span>)}</div>
     </div>
   </div>);
+}
+
+function AdminAsistencia({ data, setError }) {
+  return <GridAsistencia secciones={data.secciones.filter((s) => s.activa !== false)} alumnos={data.alumnos} setError={setError} />;
 }
 
 function AdminReflections({ data, setError }) {
@@ -818,4 +842,94 @@ export function AccesoDocente({ maestro, perfiles, recargar, showToast }) {
       </div>
     </div>}
   </>);
+}
+
+// ════════════════════════════════════════════════════════════
+//  ADMINISTRACIÓN (Inicio): alumnos activos sin asistencia en 2 meses
+// ════════════════════════════════════════════════════════════
+const DIAS_SIN_ASISTENCIA = 60;
+const leerIgnorados = () => { try { return JSON.parse(localStorage.getItem("seeds_inactividad_ignorados")) || {}; } catch (e) { return {}; } };
+
+export function AlertasInactividad({ data, loadData, showToast }) {
+  const [regs, setRegs] = useState(null); // null = sin datos (módulo no activo o cargando)
+  const [ignorados, setIgnorados] = useState(leerIgnorados);
+  const [abierto, setAbierto] = useState(false);
+  const [ocupado, setOcupado] = useState(null);
+  const desde = new Date(Date.now() - DIAS_SIN_ASISTENCIA * 86400000).toLocaleDateString("en-CA");
+
+  useEffect(() => { (async () => {
+    // Se lee por páginas: la base devuelve máximo 1000 filas por consulta
+    const todas = [];
+    for (let i = 0; i < 20; i++) {
+      const { data: d, error } = await supabase.from("asistencias").select("seccion_id,alumno_id,fecha,estado").gte("fecha", desde).order("fecha").range(i * 1000, i * 1000 + 999);
+      if (error) { setRegs(null); return; }
+      todas.push(...(d || []));
+      if (!d || d.length < 1000) break;
+    }
+    setRegs(todas);
+  })(); }, [desde]);
+
+  if (!regs) return null;
+  // Solo grupos donde el docente sí está tomando asistencia en este periodo
+  const gruposConLista = new Set(regs.map((r) => r.seccion_id));
+  const asistio = new Set(regs.filter((r) => r.estado === "presente" || r.estado === "tarde").map((r) => r.alumno_id));
+  const hoyMs = Date.now();
+  const candidatos = data.alumnos.filter((a) =>
+    a.estado === "activo" && a.beca !== true &&
+    gruposConLista.has(a.seccion_id) &&
+    !asistio.has(a.id) &&
+    (!a.fecha_ingreso || a.fecha_ingreso <= desde) &&
+    !(ignorados[a.id] && ignorados[a.id] > hoyMs)
+  ).map((a) => {
+    const r = regs.filter((x) => x.alumno_id === a.id);
+    const pend = data.facturas.filter((f) => f.alumno_id === a.id && (f.tipo_factura || "cobro") === "cobro" && (f.estado === "pendiente" || f.estado === "parcial"));
+    return { a, ausencias: r.filter((x) => x.estado === "ausente").length, justificadas: r.filter((x) => x.estado === "justificado").length, clases: new Set(regs.filter((x) => x.seccion_id === a.seccion_id).map((x) => x.fecha)).size, pendientes: pend.length, debe: pend.reduce((t, f) => t + (Number(f.saldo) > 0 ? Number(f.saldo) : Number(f.monto_total) || 0), 0) };
+  });
+  if (candidatos.length === 0) return null;
+
+  const grupo = (id) => data.secciones.find((s) => s.id === id)?.nombre || "—";
+  const inactivar = async (a) => {
+    if (!confirm(`¿Cambiar a ${a.nombre} a INACTIVO?\n\nYa no se le crearán cobros nuevos. Sus cobros pendientes y su historial se conservan. Puedes reactivarlo en Matrícula cuando quieras.`)) return;
+    setOcupado(a.id);
+    const { error } = await supabase.from("alumnos").update({ estado: "inactivo" }).eq("id", a.id);
+    setOcupado(null);
+    if (error) { showToast("Error: " + mensajeError(error), "error"); return; }
+    showToast(`✓ ${a.nombre} ahora está inactivo`);
+    loadData();
+  };
+  const ignorar = (a) => {
+    const n = { ...leerIgnorados(), [a.id]: hoyMs + 30 * 86400000 };
+    try { localStorage.setItem("seeds_inactividad_ignorados", JSON.stringify(n)); } catch (e) { /* sin almacenamiento */ }
+    setIgnorados(n);
+  };
+  const visibles = abierto ? candidatos : candidatos.slice(0, 5);
+
+  return (
+    <div style={{ ...card, border: "1px solid #FDBA74", borderLeft: `4px solid ${NAR}`, padding: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#9A3412" }}>⚠ {candidatos.length} {candidatos.length === 1 ? "alumno activo sin asistir" : "alumnos activos sin asistir"} en los últimos 2 meses</div>
+          <div style={{ fontSize: 12, color: "#9A3412", marginTop: 2 }}>Según las listas de asistencia de los docentes. Si ya no vienen, cámbialos a inactivo para no seguir generándoles cobros.</div>
+        </div>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        {visibles.map(({ a, ausencias, justificadas, clases, pendientes, debe }) => (
+          <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: "1px solid #FED7AA", flexWrap: "wrap" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#1E293B" }}>{a.nombre} <span style={{ fontWeight: 400, color: "#94A3B8" }}>· {grupo(a.seccion_id)}</span></div>
+              <div style={{ fontSize: 11, color: "#64748B" }}>
+                {clases} {clases === 1 ? "clase registrada" : "clases registradas"} en el grupo · {ausencias} {ausencias === 1 ? "ausencia" : "ausencias"}{justificadas ? ` · ${justificadas} justificadas` : ""}
+                {pendientes > 0 && <span style={{ color: "#DC2626", fontWeight: 600 }}> · {pendientes} {pendientes === 1 ? "cobro pendiente" : "cobros pendientes"} (L {debe.toLocaleString()})</span>}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => ignorar(a)} title="No mostrar por 30 días" style={{ ...btnO, padding: "5px 10px", fontSize: 12 }}>Sigue activo</button>
+              <button onClick={() => inactivar(a)} disabled={ocupado === a.id} style={{ ...btn(), padding: "5px 12px", fontSize: 12, opacity: ocupado === a.id ? 0.6 : 1 }}>Marcar inactivo</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {candidatos.length > 5 && <button onClick={() => setAbierto(!abierto)} style={{ background: "none", border: "none", color: NAR, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginTop: 6 }}>{abierto ? "Ver menos" : `Ver los ${candidatos.length}`}</button>}
+    </div>
+  );
 }

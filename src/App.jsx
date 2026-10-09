@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
-import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo } from "./docentes";
+import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
   Plus, Trash2, Edit, Search, Calendar, X, Eye,
@@ -531,7 +531,7 @@ export default function App() {
 
   const props = { data, loadData, showToast, sucursalActiva };
   const pageMap = {
-    dashboard:<Dashboard data={dataSuc} setPage={setPage}/>,
+    dashboard:<Dashboard data={dataSuc} setPage={setPage} loadData={loadData} showToast={showToast}/>,
     secciones:<SeccionesPage {...props}/>,
     maestros:<MaestrosPage {...props}/>,
     alumnos:<AlumnosPage {...propsSuc}/>,
@@ -833,7 +833,7 @@ function LoginPage({showToast,toast}){
 }
 
 // ── DASHBOARD ──
-function Dashboard({data,setPage}){
+function Dashboard({data,setPage,loadData,showToast}){
   const ta=data.alumnos.filter(a=>a.estado==="activo").length;
   const ts=data.secciones.filter(s=>s.activa!==false).length;
   const pend=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
@@ -850,6 +850,7 @@ function Dashboard({data,setPage}){
   const ganancia=ingMens+ganMat+ganGrad-gastos;
   const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString()}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastos.toLocaleString()}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString()}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
   return(<div>
+    <AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
       {stats.map((s,i)=>{const Icon=s.i;return(<div key={i} onClick={()=>setPage(s.p)} style={{...card,cursor:"pointer",padding:18,display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${s.c}`}}><div style={{background:s.c+"14",borderRadius:10,padding:10}}><Icon size={22} color={s.c}/></div><div><div style={{fontSize:20,fontWeight:800,color:"#1E293B"}}>{s.v}</div><div style={{fontSize:12,color:"#64748B"}}>{s.l}</div></div></div>);})}
     </div>
