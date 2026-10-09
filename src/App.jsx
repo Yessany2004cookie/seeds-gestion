@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
+import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes } from "./docentes";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
   Plus, Trash2, Edit, Search, Calendar, X, Eye,
   Send, Home, UserPlus, GraduationCap, Phone, Mail, DollarSign,
-  Check, AlertCircle, Menu, RefreshCw, Download, Upload, Award, MessageCircle, Sparkles
+  Check, AlertCircle, Menu, RefreshCw, Download, Upload, Award, MessageCircle, Sparkles, ClipboardList
 } from "lucide-react";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -436,6 +437,8 @@ export default function App() {
   const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[] });
   const [sucursalActiva, setSucursalActiva] = useState(null); // id de la sucursal seleccionada
   const [toast, setToast] = useState(null);
+  // Rol del usuario: "cargando" | "admin" | "docente" | "sin_acceso"
+  const [rol, setRol] = useState({ estado: "cargando", perfil: null });
 
   const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
 
@@ -466,12 +469,29 @@ export default function App() {
     } catch(e) { showToast("Error cargando datos: "+e.message,"error"); }
   }, []);
 
-  useEffect(() => { if(session) loadData(); }, [session, loadData]);
+  // Averiguar el rol. Si el módulo de roles aún no se activó en Supabase
+  // (no existe la tabla perfiles), todos siguen entrando como administración.
+  useEffect(() => {
+    if (!session) { setRol({ estado: "cargando", perfil: null }); return; }
+    let vivo = true;
+    supabase.from("perfiles").select("*").eq("user_id", session.user.id).maybeSingle().then(({ data: perfil, error }) => {
+      if (!vivo) return;
+      if (error) setRol({ estado: "admin", perfil: null });
+      else if (!perfil) setRol({ estado: "sin_acceso", perfil: null });
+      else setRol({ estado: perfil.rol === "docente" ? "docente" : "admin", perfil });
+    });
+    return () => { vivo = false; };
+  }, [session]);
+
+  useEffect(() => { if(session && rol.estado==="admin") loadData(); }, [session, rol.estado, loadData]);
 
   const logout = async () => { await supabase.auth.signOut(); setSession(null); };
 
   if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC"}}><div style={{textAlign:"center"}}><img src={LOGO_SEEDS} alt="Seeds" style={{width:80,height:80,objectFit:"contain",marginBottom:12}}/><p style={{color:"#64748B"}}>Cargando Seeds...</p></div></div>;
   if (!session) return <LoginPage showToast={showToast} toast={toast} />;
+  if (rol.estado === "cargando") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC",fontFamily:"'Segoe UI',system-ui,sans-serif",color:"#64748B",fontSize:14}}>Cargando…</div>;
+  if (rol.estado === "docente") return <DocenteApp session={session} perfil={rol.perfil} />;
+  if (rol.estado === "sin_acceso") return <PantallaMensaje titulo="Tu usuario no tiene acceso" texto="Pide a administración de Seeds que te dé acceso al sistema." onSalir={logout} />;
 
   const NAV = [
     {id:"dashboard",label:"Inicio",icon:Home},{id:"secciones",label:"Secciones",icon:BookOpen},
@@ -480,6 +500,7 @@ export default function App() {
     {id:"graduacion",label:"Graduación",icon:Award},
     {id:"historial",label:"Historial",icon:Calendar},{id:"recordatorios",label:"Recordatorios",icon:Bell},
     {id:"finanzas",label:"Finanzas",icon:DollarSign},{id:"reportes",label:"Reportes",icon:FileText},
+    {id:"docentes",label:"Docentes",icon:ClipboardList},
     {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema",icon:LogIn},
   ];
 
@@ -517,6 +538,7 @@ export default function App() {
     recordatorios:<RecordatoriosPage {...propsSuc}/>,
     finanzas:<FinanzasPage {...propsSuc}/>,
     reportes:<ReportesPage {...propsSuc}/>,
+    docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
     config:<ConfiguracionPage {...props}/>,
     sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}/>,
   };
@@ -1149,6 +1171,7 @@ function SeccionesPage({data,loadData,showToast,sucursalActiva}){
 
 // ── MAESTROS ──
 function MaestrosPage({data,loadData,showToast}){
+  const {perfiles,recargar}=useAccesosDocentes();
   const[modal,setModal]=useState(null);const[form,setForm]=useState({nombre:"",telefono:"",email:"",secciones_ids:[],salario:""});
   const open=(m=null)=>{setForm(m?{nombre:m.nombre,telefono:m.telefono||"",email:m.email||"",secciones_ids:m.secciones_ids||[],salario:m.salario||""}:{nombre:"",telefono:"",email:"",secciones_ids:[],salario:""});setModal(m?.id||"new");};
   const sv=async()=>{
@@ -1164,7 +1187,8 @@ function MaestrosPage({data,loadData,showToast}){
   const tog=(sid)=>{const ids=form.secciones_ids.includes(sid)?form.secciones_ids.filter(id=>id!==sid):[...form.secciones_ids,sid];setForm({...form,secciones_ids:ids});};
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><p style={{fontSize:13,color:"#64748B",margin:0}}>{data.maestros.length} maestros</p><button onClick={()=>open()} style={btn("#2563EB")}><Plus size={15}/>Nuevo maestro</button></div>
-    <div style={card}>{data.maestros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay maestros</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Nombre","Teléfono","Email","Salario","Secciones",""].map(h=><th key={h} style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{data.maestros.map(m=>(<tr key={m.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"8px 10px",fontWeight:600}}>{m.nombre}</td><td style={{padding:"8px 10px"}}>{m.telefono||"—"}</td><td style={{padding:"8px 10px"}}>{m.email||"—"}</td><td style={{padding:"8px 10px",fontWeight:600,color:"#059669"}}>{m.salario?`L ${Number(m.salario).toLocaleString()}`:"—"}</td><td style={{padding:"8px 10px"}}>{(m.secciones_ids||[]).map(sid=>{const sec=data.secciones.find(s=>s.id===sid);return sec?<span key={sid} style={{...badge("#F97316"),marginRight:4}}>{sec.nombre}</span>:null;})}{(!m.secciones_ids||m.secciones_ids.length===0)&&"—"}</td><td style={{padding:"8px 10px"}}><button onClick={()=>open(m)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>del(m.id)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Trash2 size={15} color="#EF4444"/></button></td></tr>))}</tbody></table></div>)}</div>
+    {perfiles===null&&<div style={{...card,background:"#FFF7ED",border:"1px solid #FDBA74",fontSize:13,color:"#9A3412"}}>⚠ Para dar acceso al <strong>portal docente</strong>, primero hay que activar el módulo de roles en Supabase (script <code>supabase/roles_docentes.sql</code>).</div>}
+    <div style={card}>{data.maestros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay maestros</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Nombre","Teléfono","Email","Salario","Secciones","Portal docente",""].map(h=><th key={h} style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{data.maestros.map(m=>(<tr key={m.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"8px 10px",fontWeight:600}}>{m.nombre}</td><td style={{padding:"8px 10px"}}>{m.telefono||"—"}</td><td style={{padding:"8px 10px"}}>{m.email||"—"}</td><td style={{padding:"8px 10px",fontWeight:600,color:"#059669"}}>{m.salario?`L ${Number(m.salario).toLocaleString()}`:"—"}</td><td style={{padding:"8px 10px"}}>{(m.secciones_ids||[]).map(sid=>{const sec=data.secciones.find(s=>s.id===sid);return sec?<span key={sid} style={{...badge("#F97316"),marginRight:4}}>{sec.nombre}</span>:null;})}{(!m.secciones_ids||m.secciones_ids.length===0)&&"—"}</td><td style={{padding:"8px 10px"}}><AccesoDocente maestro={m} perfiles={perfiles} recargar={recargar} showToast={showToast}/></td><td style={{padding:"8px 10px",whiteSpace:"nowrap"}}><button onClick={()=>open(m)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>del(m.id)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Trash2 size={15} color="#EF4444"/></button></td></tr>))}</tbody></table></div>)}</div>
     {modal&&<Modal title={modal==="new"?"Nuevo maestro":"Editar maestro"} onClose={()=>setModal(null)} onSave={sv}><Field label="Nombre" value={form.nombre} onChange={v=>setForm({...form,nombre:v})}/><Field label="Teléfono" value={form.telefono} onChange={v=>setForm({...form,telefono:v})}/><Field label="Email" value={form.email} onChange={v=>setForm({...form,email:v})} type="email"/><Field label="Salario mensual (L)" value={form.salario} onChange={v=>setForm({...form,salario:v})} type="number" placeholder="Ej: 5000"/><div><label style={label}>Secciones</label><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{data.secciones.map(s=>(<button key={s.id} onClick={()=>tog(s.id)} style={{padding:"6px 12px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"inherit",border:form.secciones_ids.includes(s.id)?"2px solid #F97316":"1px solid #D1D5DB",background:form.secciones_ids.includes(s.id)?"#FFF7ED":"#fff",color:form.secciones_ids.includes(s.id)?"#F97316":"#64748B",fontWeight:form.secciones_ids.includes(s.id)?600:400}}>{form.secciones_ids.includes(s.id)&&<Check size={12} style={{marginRight:4}}/>}{s.nombre}</button>))}{data.secciones.length===0&&<p style={{fontSize:12,color:"#94A3B8"}}>Crea secciones primero</p>}</div></div></Modal>}
   </div>);
 }
