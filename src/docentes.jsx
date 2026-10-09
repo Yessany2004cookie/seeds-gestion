@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
+import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
 import {
   LogOut, Users, BookOpen, Check, X, Menu, Send, Home, ClipboardList,
   MessageSquare, FileText, Phone, Plus, Trash2, RefreshCw, Save, Inbox, KeyRound, UserCheck,
@@ -17,6 +18,34 @@ const btn = (c = NAR) => ({ padding: "9px 18px", background: c, color: "#fff", b
 const btnO = { padding: "8px 14px", background: "transparent", color: "#64748B", border: "1px solid #D1D5DB", borderRadius: 7, cursor: "pointer", fontSize: 13, fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 5 };
 const label = { fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4, display: "block" };
 const badge = (c) => ({ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: c + "18", color: c, whiteSpace: "nowrap" });
+// Editor SQL del proyecto de Supabase (se arma con la URL del proyecto)
+const EDITOR_SQL = (() => { const ref = (String(supabase.supabaseUrl || "").match(/https:\/\/([^.]+)\.supabase\.co/) || [])[1]; return ref ? `https://supabase.com/dashboard/project/${ref}/sql/new` : "https://supabase.com/dashboard"; })();
+
+// Aviso con los pasos para activar el módulo (botón para copiar el script)
+export function AvisoActivarModulo({ showToast }) {
+  const [copiado, setCopiado] = useState(false);
+  const copiar = async () => {
+    try { await navigator.clipboard.writeText(SCRIPT_ROLES); setCopiado(true); showToast && showToast("✓ Script copiado. Ahora pégalo en Supabase"); }
+    catch (e) { showToast && showToast("No se pudo copiar automáticamente", "error"); }
+  };
+  return (
+    <div style={{ ...card, background: "#FFF7ED", border: "1px solid #FDBA74" }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: "#9A3412", marginBottom: 6 }}>⚠ Falta activar el módulo de docentes (se hace una sola vez)</div>
+      <ol style={{ fontSize: 13, color: "#7C2D12", margin: "0 0 12px", paddingLeft: 20, lineHeight: 1.7 }}>
+        <li>Toca <strong>“1. Copiar script”</strong>.</li>
+        <li>Toca <strong>“2. Abrir Supabase”</strong> (entra con tu cuenta si te lo pide).</li>
+        <li>En el editor que se abre, pega con <strong>Ctrl + V</strong> y toca <strong>Run</strong>. Debe decir <em>Success</em>.</li>
+        <li>Vuelve aquí y recarga la página con <strong>Ctrl + Shift + R</strong>.</li>
+      </ol>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button onClick={copiar} style={btn()}>{copiado ? "✓ Copiado" : "1. Copiar script"}</button>
+        <a href={EDITOR_SQL} target="_blank" rel="noreferrer" style={{ ...btn("#1E293B"), textDecoration: "none" }}>2. Abrir Supabase</a>
+      </div>
+      <div style={{ fontSize: 11, color: "#9A3412", marginTop: 8 }}>No borra ningún dato. Las cuentas que ya existen (como la tuya) quedan como administración.</div>
+    </div>
+  );
+}
+
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const hoyISO = () => new Date().toLocaleDateString("en-CA"); // AAAA-MM-DD en hora local
 const fechaLarga = (f) => (f ? new Date(f + "T12:00:00").toLocaleDateString("es-HN", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "");
@@ -533,7 +562,7 @@ export function AdminDocentesPage({ data, showToast }) {
   const tBtn = (a) => ({ padding: "10px 16px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", borderBottom: a ? `3px solid ${NAR}` : "3px solid transparent", background: "transparent", color: a ? NAR : "#64748B" });
   const props = { data, showToast, setError };
   return (<div>
-    {error && <div style={{ ...card, background: "#FFF7ED", border: "1px solid #FDBA74", color: "#9A3412", fontSize: 13 }}>⚠ {error}</div>}
+    {error && (error.startsWith("Falta activar") ? <AvisoActivarModulo showToast={showToast} /> : <div style={{ ...card, background: "#FFF7ED", border: "1px solid #FDBA74", color: "#9A3412", fontSize: 13 }}>⚠ {error}</div>)}
     <div style={{ display: "flex", borderBottom: "1px solid #E2E8F0", marginBottom: 16, flexWrap: "wrap" }}>
       <button onClick={() => setTab("solicitudes")} style={tBtn(tab === "solicitudes")}>📥 Solicitudes</button>
       <button onClick={() => setTab("asistencia")} style={tBtn(tab === "asistencia")}>✅ Asistencia</button>
