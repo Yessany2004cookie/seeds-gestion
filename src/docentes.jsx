@@ -351,7 +351,7 @@ function Asistencia({ datos, maestroId, avisar }) {
   const totales = (aid) => {
     const v = dias.map((d) => marcas[`${aid}|${d}`]).filter(Boolean);
     const asis = v.filter((e) => e === "presente" || e === "tarde").length;
-    return { asis, faltas: v.filter((e) => e === "ausente").length, pct: v.length ? Math.round((asis / v.length) * 100) : null };
+    return { asis, faltas: v.filter((e) => e === "ausente").length };
   };
   const nombreMes = (() => { const t = new Date(mes + "-15T12:00:00").toLocaleDateString("es-HN", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); })();
   const celdaBase = { borderRight: "1px solid #E2E8F0", borderBottom: "1px solid #E2E8F0", textAlign: "center", padding: 0 };
@@ -397,7 +397,7 @@ function Asistencia({ datos, maestroId, avisar }) {
                   </th>
                 ); })}
                 {dias.length === 0 && <th style={{ ...celdaBase, borderBottom: "2px solid #E7DCC8", background: "#FFF7ED", padding: "8px 12px", fontSize: 12, color: "#9A3412", fontWeight: 400 }}>Agrega un día de clase con “Agregar día”</th>}
-                {["Asist.", "Faltas", "% asist."].map((h) => <th key={h} style={{ ...celdaBase, borderBottom: "2px solid #E7DCC8", background: "#F1F5F9", padding: "8px 8px", fontSize: 11, color: "#475569", minWidth: 48 }}>{h}</th>)}
+                {["Asist.", "Faltas"].map((h) => <th key={h} style={{ ...celdaBase, borderBottom: "2px solid #E7DCC8", background: "#F1F5F9", padding: "8px 8px", fontSize: 11, color: "#475569", minWidth: 48 }}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -414,14 +414,13 @@ function Asistencia({ datos, maestroId, avisar }) {
                   {dias.length === 0 && <td style={celdaBase} />}
                   <td style={{ ...celdaBase, fontWeight: 700, color: "#059669" }}>{t.asis}</td>
                   <td style={{ ...celdaBase, fontWeight: 700, color: t.faltas ? "#DC2626" : "#94A3B8" }}>{t.faltas}</td>
-                  <td style={{ ...celdaBase, fontWeight: 800, color: t.pct !== null && t.pct < 75 ? "#DC2626" : "#1E293B" }}>{t.pct === null ? "—" : t.pct + "%"}</td>
                 </tr>
               ); })}
               <tr>
                 <td style={{ position: "sticky", left: 0, zIndex: 1, background: "#F1F5F9", padding: "6px 10px", borderRight: "2px solid #E7DCC8", fontSize: 11, fontWeight: 700, color: "#475569" }}>Presentes del día</td>
                 {dias.map((d) => <td key={d} style={{ ...celdaBase, background: "#F1F5F9", fontSize: 12, fontWeight: 700, color: "#475569", padding: "6px 0" }}>{alumnos.filter((a) => ["presente", "tarde"].includes(marcas[`${a.id}|${d}`])).length}</td>)}
                 {dias.length === 0 && <td style={{ ...celdaBase, background: "#F1F5F9" }} />}
-                <td colSpan={3} style={{ ...celdaBase, background: "#F1F5F9" }} />
+                <td colSpan={2} style={{ ...celdaBase, background: "#F1F5F9" }} />
               </tr>
             </tbody>
           </table>
