@@ -51,6 +51,10 @@ language sql stable security definer set search_path = public as $$
   where a.seccion_id in (select public.mis_secciones());
 $$;
 
+-- Las funciones solo las usan usuarios con sesión iniciada
+revoke execute on function public.es_admin(), public.mi_maestro_id(), public.mis_secciones(), public.mis_padres() from public, anon;
+grant execute on function public.es_admin(), public.mi_maestro_id(), public.mis_secciones(), public.mis_padres() to authenticated;
+
 -- 3. TABLAS DE DOCENTES ---------------------------------------
 create table if not exists public.asistencias (
   id text primary key,
