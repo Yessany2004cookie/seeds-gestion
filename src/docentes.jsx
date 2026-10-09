@@ -106,7 +106,7 @@ function SelectorGrupo({ secciones, value, onChange }) {
 // ════════════════════════════════════════════════════════════
 //  APLICACIÓN DEL DOCENTE
 // ════════════════════════════════════════════════════════════
-export function DocenteApp({ session, perfil }) {
+export function DocenteApp({ session, perfil, onVolver }) {
   const [page, setPage] = useState("inicio");
   const [menu, setMenu] = useState(false);
   const [datos, setDatos] = useState({ maestro: null, secciones: [], alumnos: [], padres: [] });
@@ -125,7 +125,12 @@ export function DocenteApp({ session, perfil }) {
       ]);
       const err = m.error || s.error || a.error || p.error;
       if (err) throw err;
-      setDatos({ maestro: m.data, secciones: (s.data || []).filter((x) => x.activa !== false), alumnos: a.data || [], padres: p.data || [] });
+      // Solo los grupos de este maestro (la base ya lo limita para docentes;
+      // aquí también, por si quien entra es administración en vista docente)
+      const mios = new Set(m.data?.secciones_ids || []);
+      const alumnos = (a.data || []).filter((x) => mios.has(x.seccion_id));
+      const padresIds = new Set(alumnos.map((x) => x.padre_id));
+      setDatos({ maestro: m.data, secciones: (s.data || []).filter((x) => x.activa !== false && mios.has(x.id)), alumnos, padres: (p.data || []).filter((x) => padresIds.has(x.id)) });
     } catch (e) { avisar("Error cargando tus datos: " + mensajeError(e), "error"); }
     setCargando(false);
   }, [perfil.maestro_id]);
@@ -171,6 +176,7 @@ export function DocenteApp({ session, perfil }) {
             <button key={n.id} onClick={() => { setPage(n.id); setMenu(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 16px", border: "none", cursor: "pointer", background: a ? "#334155" : "transparent", color: a ? "#F97316" : "#CBD5E1", fontSize: 13, fontWeight: a ? 600 : 400, fontFamily: "inherit", borderLeft: a ? "3px solid #F97316" : "3px solid transparent", textAlign: "left" }}><Icon size={17} />{n.label}</button>
           ); })}
         </nav>
+        {onVolver && <button onClick={onVolver} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", border: "none", borderTop: "1px solid #334155", background: "transparent", color: "#FDBA74", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}><RefreshCw size={16} />Volver a administración</button>}
         <button onClick={salir} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", border: "none", borderTop: "1px solid #334155", background: "transparent", color: "#EF4444", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}><LogOut size={16} />Cerrar sesión</button>
       </aside>
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -180,6 +186,7 @@ export function DocenteApp({ session, perfil }) {
             <h1 style={{ fontSize: 17, fontWeight: 700, color: "#1E293B", margin: 0 }}>{NAV.find((n) => n.id === page)?.label}</h1>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {onVolver && <button onClick={onVolver} title="Volver a administración" style={{ ...btnO, padding: "5px 10px", fontSize: 12, color: NAR, borderColor: "#FED7AA" }}>Administración</button>}
             <button onClick={cargar} title="Actualizar" style={{ background: "none", border: "1px solid #E2E8F0", borderRadius: 6, cursor: "pointer", padding: "5px 8px", display: "flex" }}><RefreshCw size={14} color="#64748B" /></button>
             <div style={{ fontSize: 12, color: "#64748B", textAlign: "right" }}><div style={{ fontWeight: 700, color: "#1E293B" }}>{datos.maestro?.nombre || ""}</div><div>{session.user.email}</div></div>
           </div>
@@ -430,7 +437,7 @@ function ReporteClase({ datos, maestroId, avisar }) {
   const grupo = (id) => datos.secciones.find((s) => s.id === id)?.nombre || "—";
 
   const cargar = useCallback(async () => {
-    const { data, error } = await supabase.from("reportes_clase").select("*").order("fecha", { ascending: false }).limit(60);
+    const { data, error } = await supabase.from("reportes_clase").select("*").eq("maestro_id", maestroId).order("fecha", { ascending: false }).limit(60);
     if (error) { avisar(mensajeError(error), "error"); return; }
     setLista(data || []);
   }, []);
@@ -501,7 +508,7 @@ function SolicitudesDocente({ maestroId, avisar }) {
   const [lista, setLista] = useState([]);
   const [enviando, setEnviando] = useState(false);
   const cargar = useCallback(async () => {
-    const { data, error } = await supabase.from("solicitudes").select("*").order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("solicitudes").select("*").eq("maestro_id", maestroId).order("created_at", { ascending: false });
     if (error) { avisar(mensajeError(error), "error"); return; }
     setLista(data || []);
   }, []);
@@ -752,7 +759,7 @@ const llamarApiDocentes = async (body) => {
 export function useAccesosDocentes() {
   const [perfiles, setPerfiles] = useState(null); // null = módulo no activado
   const recargar = useCallback(async () => {
-    const { data, error } = await supabase.from("perfiles").select("user_id,maestro_id,email,rol").eq("rol", "docente");
+    const { data, error } = await supabase.from("perfiles").select("user_id,maestro_id,email,rol").not("maestro_id", "is", null);
     setPerfiles(error ? null : data || []);
   }, []);
   useEffect(() => { recargar(); }, [recargar]);
@@ -770,15 +777,17 @@ export function AccesoDocente({ maestro, perfiles, recargar, showToast }) {
   const enviar = async () => {
     setOcupado(true);
     try {
-      if (modal === "crear") await llamarApiDocentes({ accion: "crear", maestro_id: maestro.id, email: form.email, password: form.password });
-      else await llamarApiDocentes({ accion: "contrasena", maestro_id: maestro.id, password: form.password });
-      showToast(modal === "crear" ? `✓ Acceso creado para ${maestro.nombre}` : "✓ Contraseña cambiada");
+      let r;
+      if (modal === "crear") r = await llamarApiDocentes({ accion: "crear", maestro_id: maestro.id, email: form.email, password: form.password });
+      else r = await llamarApiDocentes({ accion: "contrasena", maestro_id: maestro.id, password: form.password });
+      showToast(r?.vinculado ? `✓ Cuenta de administración vinculada a ${maestro.nombre}. Recarga la página (Ctrl + Shift + R) y usa el botón “Vista docente” de arriba.` : modal === "crear" ? `✓ Acceso creado para ${maestro.nombre}` : "✓ Contraseña cambiada");
       setModal(null); recargar();
     } catch (e) { showToast(e.message, "error"); }
     setOcupado(false);
   };
   const quitar = async () => {
-    if (!confirm(`¿Quitar el acceso de ${maestro.nombre}? Ya no podrá entrar al portal docente. Lo que registró (asistencia, reflections) se conserva.`)) return;
+    const esAdmin = acceso?.rol === "admin";
+    if (!confirm(esAdmin ? `¿Desvincular ${acceso.email} de ${maestro.nombre}? La cuenta de administración sigue igual; solo deja de tener la vista docente.` : `¿Quitar el acceso de ${maestro.nombre}? Ya no podrá entrar al portal docente. Lo que registró (asistencia, reflections) se conserva.`)) return;
     try { await llamarApiDocentes({ accion: "quitar", maestro_id: maestro.id }); showToast("Acceso quitado", "error"); recargar(); }
     catch (e) { showToast(e.message, "error"); }
   };
@@ -787,8 +796,8 @@ export function AccesoDocente({ maestro, perfiles, recargar, showToast }) {
   return (<>
     {acceso ? (
       <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
-        <span title={acceso.email} style={badge("#059669")}>✓ {acceso.email}</span>
-        <button onClick={() => abrir("contrasena")} title="Cambiar contraseña" style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}><KeyRound size={14} color="#64748B" /></button>
+        <span title={acceso.email} style={badge(acceso.rol === "admin" ? "#7C3AED" : "#059669")}>{acceso.rol === "admin" ? "★ Admin · " : "✓ "}{acceso.email}</span>
+        {acceso.rol !== "admin" && <button onClick={() => abrir("contrasena")} title="Cambiar contraseña" style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}><KeyRound size={14} color="#64748B" /></button>}
         <button onClick={quitar} title="Quitar acceso" style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}><X size={14} color="#EF4444" /></button>
       </div>
     ) : (
@@ -800,7 +809,7 @@ export function AccesoDocente({ maestro, perfiles, recargar, showToast }) {
         <p style={{ fontSize: 12, color: "#64748B", margin: "0 0 14px" }}>{maestro.nombre}</p>
         {modal === "crear" && <div style={{ marginBottom: 12 }}><label style={label}>Correo del docente</label><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={input} placeholder="docente@correo.com" /></div>}
         <div style={{ marginBottom: 6 }}><label style={label}>Contraseña {modal === "crear" ? "temporal" : "nueva"}</label><input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} style={input} /></div>
-        <p style={{ fontSize: 11, color: "#94A3B8", margin: "0 0 14px" }}>Mínimo 8 caracteres. Copia los datos y envíaselos al docente por WhatsApp.</p>
+        <p style={{ fontSize: 11, color: "#94A3B8", margin: "0 0 14px" }}>Mínimo 8 caracteres. Copia los datos y envíaselos al docente por WhatsApp.{modal === "crear" && " Si el correo es de una cuenta de administración, no se crea otra: se vincula y esa persona usa el botón “Vista docente” (la contraseña de aquí se ignora)."}</p>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
           <button onClick={copiar} style={btnO}>Copiar datos</button>
           <button onClick={() => setModal(null)} style={btnO}>Cancelar</button>

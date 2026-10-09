@@ -439,6 +439,9 @@ export default function App() {
   const [toast, setToast] = useState(null);
   // Rol del usuario: "cargando" | "admin" | "docente" | "sin_acceso"
   const [rol, setRol] = useState({ estado: "cargando", perfil: null });
+  // Administración que también da clases: puede cambiar a la vista docente
+  const [vistaDocente, setVistaDocente] = useState(()=>{try{return localStorage.getItem("seeds_vista")==="docente";}catch(e){return false;}});
+  const cambiarVista = (docente) => { setVistaDocente(docente); try{localStorage.setItem("seeds_vista",docente?"docente":"admin");}catch(e){} };
 
   const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
 
@@ -491,6 +494,7 @@ export default function App() {
   if (!session) return <LoginPage showToast={showToast} toast={toast} />;
   if (rol.estado === "cargando") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC",fontFamily:"'Segoe UI',system-ui,sans-serif",color:"#64748B",fontSize:14}}>Cargando…</div>;
   if (rol.estado === "docente") return <DocenteApp session={session} perfil={rol.perfil} />;
+  if (rol.estado === "admin" && rol.perfil?.maestro_id && vistaDocente) return <DocenteApp session={session} perfil={rol.perfil} onVolver={()=>cambiarVista(false)} />;
   if (rol.estado === "sin_acceso") return <PantallaMensaje titulo="Tu usuario no tiene acceso" texto="Pide a administración de Seeds que te dé acceso al sistema." onSalir={logout} />;
 
   const NAV = [
@@ -573,6 +577,7 @@ export default function App() {
                 {data.sucursales.filter(s=>s.activa!==false).map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
             </div>}
+            {rol.perfil?.maestro_id&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:8,cursor:"pointer",padding:"5px 10px",color:"#EA580C",fontSize:12,fontWeight:700,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
             <button onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"none",border:"1px solid #E2E8F0",borderRadius:6,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
             <div style={{fontSize:12,color:"#64748B"}} className="hide-mobile">{session.user.email}</div>
           </div>

@@ -34,7 +34,8 @@ Deno.serve(async (req) => {
 
   const { data: maestro } = await admin.from("maestros").select("id,nombre").eq("id", maestro_id).maybeSingle();
   if (!maestro) return responder(404, { error: "No se encontró el maestro." });
-  const { data: actual } = await admin.from("perfiles").select("user_id,email").eq("maestro_id", maestro_id).eq("rol", "docente").maybeSingle();
+  // Cuenta que ya tiene este maestro (de docente, o de administración vinculada)
+  const { data: actual } = await admin.from("perfiles").select("user_id,email,rol").eq("maestro_id", maestro_id).maybeSingle();
 
   try {
     if (accion === "crear") {
@@ -43,6 +44,17 @@ Deno.serve(async (req) => {
       if (!/^\S+@\S+\.\S+$/.test(email)) return responder(400, { error: "Escribe un correo válido." });
       if (password.length < 8) return responder(400, { error: "La contraseña debe tener al menos 8 caracteres." });
       if (actual) return responder(400, { error: `${maestro.nombre} ya tiene acceso (${actual.email}).` });
+
+      // Si el correo es de una cuenta de administración, se vincula (no se crea otra):
+      // esa persona podrá cambiar a la vista docente desde su cuenta.
+      const { data: existente } = await admin.from("perfiles").select("user_id,rol,maestro_id").eq("email", email).maybeSingle();
+      if (existente) {
+        if (existente.rol !== "admin") return responder(400, { error: "Ese correo ya es de otro docente. Usa otro correo." });
+        if (existente.maestro_id) return responder(400, { error: "Esa cuenta de administración ya está vinculada a otro maestro." });
+        const { error: eV } = await admin.from("perfiles").update({ maestro_id }).eq("user_id", existente.user_id);
+        if (eV) return responder(500, { error: `No se pudo vincular: ${eV.message}` });
+        return responder(200, { ok: true, email, vinculado: true });
+      }
 
       const { data: creado, error } = await admin.auth.admin.createUser({
         email, password, email_confirm: true, user_metadata: { nombre: maestro.nombre, rol: "docente" },
@@ -62,6 +74,7 @@ Deno.serve(async (req) => {
     if (accion === "contrasena") {
       const password = String(body.password || "");
       if (!actual) return responder(400, { error: "Este maestro todavía no tiene acceso." });
+      if (actual.rol === "admin") return responder(400, { error: "Es una cuenta de administración: su contraseña no se cambia desde aquí." });
       if (password.length < 8) return responder(400, { error: "La contraseña debe tener al menos 8 caracteres." });
       const { error } = await admin.auth.admin.updateUserById(actual.user_id, { password });
       if (error) return responder(400, { error: `No se pudo cambiar: ${error.message}` });
@@ -70,6 +83,12 @@ Deno.serve(async (req) => {
 
     if (accion === "quitar") {
       if (!actual) return responder(400, { error: "Este maestro no tiene acceso." });
+      if (actual.rol === "admin") {
+        // Cuenta de administración: solo se desvincula, la cuenta sigue igual
+        const { error: eD } = await admin.from("perfiles").update({ maestro_id: null }).eq("user_id", actual.user_id);
+        if (eD) return responder(400, { error: `No se pudo desvincular: ${eD.message}` });
+        return responder(200, { ok: true, desvinculado: true });
+      }
       const { error } = await admin.auth.admin.deleteUser(actual.user_id);
       if (error) return responder(400, { error: `No se pudo quitar: ${error.message}` });
       await admin.from("perfiles").delete().eq("user_id", actual.user_id);
