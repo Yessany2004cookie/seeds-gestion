@@ -140,7 +140,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
   const NAV = [
     { id: "inicio", label: "Inicio", icon: Home },
     { id: "grupos", label: "Mis grupos", icon: Users },
-    { id: "asistencia", label: "Asistencia", icon: UserCheck },
+    { id: "asistencia", label: "Libreta de asistencia", icon: UserCheck },
     { id: "reflections", label: "Reflections", icon: MessageSquare },
     { id: "reporte", label: "Reporte de clase", icon: ClipboardList },
     { id: "solicitudes", label: "Solicitudes", icon: Inbox },
@@ -215,7 +215,7 @@ export function PantallaMensaje({ titulo, texto, onSalir }) {
 function InicioDocente({ datos, setPage }) {
   const activos = datos.alumnos.filter((a) => a.estado === "activo");
   const accesos = [
-    { id: "asistencia", t: "Tomar asistencia", d: "Marca presentes, tardes y ausentes de hoy", icon: UserCheck },
+    { id: "asistencia", t: "Libreta de asistencia", d: "Pasa lista de hoy y revisa los días anteriores", icon: UserCheck },
     { id: "reporte", t: "Reporte de clase", d: "Llena el formulario de la clase de hoy", icon: ClipboardList },
     { id: "reflections", t: "Escribir reflection", d: "Anota el avance o la conducta de un alumno", icon: MessageSquare },
     { id: "solicitudes", t: "Hacer una solicitud", d: "Pide algo a administración", icon: Inbox },
@@ -278,100 +278,163 @@ function MisGrupos({ datos }) {
   </div>);
 }
 
-// ── Asistencia ──
-function Asistencia(props) {
-  const [tab, setTab] = useState("tomar");
-  const [error, setError] = useState("");
-  const tBtn = (a) => ({ padding: "9px 16px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", borderBottom: a ? `3px solid ${NAR}` : "3px solid transparent", background: "transparent", color: a ? NAR : "#64748B" });
-  return (<div>
-    <div style={{ display: "flex", borderBottom: "1px solid #E2E8F0", marginBottom: 14 }}>
-      <button onClick={() => setTab("tomar")} style={tBtn(tab === "tomar")}>Tomar asistencia</button>
-      <button onClick={() => setTab("historial")} style={tBtn(tab === "historial")}>Historial</button>
-    </div>
-    {error && <div style={{ ...card, background: "#FFF7ED", border: "1px solid #FDBA74", color: "#9A3412", fontSize: 13 }}>⚠ {error}</div>}
-    {tab === "tomar" ? <TomarAsistencia {...props} /> : <GridAsistencia secciones={props.datos.secciones} alumnos={props.datos.alumnos} setError={setError} />}
-  </div>);
-}
+// ── Asistencia: libreta (como el cuaderno de asistencia de papel) ──
+// Filas = alumnos, columnas = días de clase del mes. Se toca la casilla para
+// marcar: vacío → P → A → T → J → vacío. Los cambios se guardan con un botón.
+const CICLO = ["", "presente", "ausente", "tarde", "justificado"];
+const sumarMes = (mes, n) => { const [y, m] = mes.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
+const DIAS_SEM = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-function TomarAsistencia({ datos, maestroId, avisar }) {
+function Asistencia({ datos, maestroId, avisar }) {
+  const hoy = hoyISO();
   const [sec, setSec] = useState(datos.secciones[0]?.id || "");
-  const [fecha, setFecha] = useState(hoyISO());
-  const [marcas, setMarcas] = useState({}); // alumno_id -> estado
-  const [guardadas, setGuardadas] = useState({}); // lo que hay en la base
-  const [historial, setHistorial] = useState([]); // del mes
+  const [mes, setMes] = useState(hoy.slice(0, 7));
+  const [guardado, setGuardado] = useState({}); // "alumno|fecha" -> estado (lo que hay en la base)
+  const [marcas, setMarcas] = useState({});     // lo que se ve (con cambios sin guardar)
+  const [diasExtra, setDiasExtra] = useState([]); // días agregados a mano
+  const [nuevoDia, setNuevoDia] = useState("");
   const [guardando, setGuardando] = useState(false);
   const alumnos = datos.alumnos.filter((a) => a.seccion_id === sec && a.estado === "activo");
+  const s = datos.secciones.find((x) => x.id === sec);
 
   const cargar = useCallback(async () => {
     if (!sec) return;
-    const mes = fecha.slice(0, 7);
-    const { data, error } = await supabase.from("asistencias").select("*").eq("seccion_id", sec).gte("fecha", mes + "-01").lte("fecha", mes + "-31");
+    const { data, error } = await supabase.from("asistencias").select("alumno_id,fecha,estado").eq("seccion_id", sec).gte("fecha", mes + "-01").lte("fecha", mes + "-31");
     if (error) { avisar(mensajeError(error), "error"); return; }
-    setHistorial(data || []);
-    const delDia = {};
-    (data || []).filter((r) => r.fecha === fecha).forEach((r) => { delDia[r.alumno_id] = r.estado; });
-    setGuardadas(delDia);
-    setMarcas(delDia);
-  }, [sec, fecha]);
+    const m = {};
+    (data || []).forEach((r) => { m[`${r.alumno_id}|${r.fecha}`] = r.estado; });
+    setGuardado(m); setMarcas(m); setDiasExtra([]);
+  }, [sec, mes]);
   useEffect(() => { cargar(); }, [cargar]);
 
-  const todos = (estado) => { const m = {}; alumnos.forEach((a) => { m[a.id] = estado; }); setMarcas(m); };
-  const pendientes = alumnos.filter((a) => !marcas[a.id]).length;
-  const cambios = alumnos.some((a) => marcas[a.id] !== guardadas[a.id]);
+  // Columnas: días con registros + hoy (si es este mes) + días agregados
+  const dias = [...new Set([
+    ...Object.keys(guardado).map((k) => k.split("|")[1]),
+    ...(hoy.slice(0, 7) === mes ? [hoy] : []),
+    ...diasExtra,
+  ])].sort();
+  const cambios = Object.keys({ ...guardado, ...marcas }).filter((k) => (guardado[k] || "") !== (marcas[k] || ""));
 
-  const guardar = async () => {
-    const filas = alumnos.filter((a) => marcas[a.id]).map((a) => ({ id: `${sec}_${a.id}_${fecha}`, seccion_id: sec, alumno_id: a.id, maestro_id: maestroId, fecha, estado: marcas[a.id] }));
-    if (!filas.length) { avisar("Marca al menos un alumno", "error"); return; }
-    setGuardando(true);
-    const { error } = await supabase.from("asistencias").upsert(filas, { onConflict: "seccion_id,alumno_id,fecha" });
-    setGuardando(false);
-    if (error) { avisar("No se guardó: " + mensajeError(error), "error"); return; }
-    avisar(`✓ Asistencia guardada (${filas.length} alumnos)`);
-    cargar();
+  const tocar = (aid, d) => {
+    const k = `${aid}|${d}`; const i = CICLO.indexOf(marcas[k] || "");
+    setMarcas({ ...marcas, [k]: CICLO[(i + 1) % CICLO.length] });
+  };
+  const todosPresentes = (d) => { const m = { ...marcas }; alumnos.forEach((a) => { if (!m[`${a.id}|${d}`]) m[`${a.id}|${d}`] = "presente"; }); setMarcas(m); };
+  const agregarDia = () => {
+    if (!nuevoDia) return;
+    if (nuevoDia.slice(0, 7) !== mes) setMes(nuevoDia.slice(0, 7));
+    setDiasExtra((x) => [...new Set([...x, nuevoDia])]);
+    setNuevoDia("");
+  };
+  const cambiarMes = (n) => {
+    if (cambios.length && !confirm("Tienes cambios sin guardar en esta libreta. ¿Cambiar de mes sin guardar?")) return;
+    setMes(sumarMes(mes, n));
+  };
+  const cambiarGrupo = (v) => {
+    if (cambios.length && !confirm("Tienes cambios sin guardar. ¿Cambiar de grupo sin guardar?")) return;
+    setSec(v);
   };
 
-  // Resumen del mes por alumno
-  const diasMes = [...new Set(historial.map((r) => r.fecha))].sort();
-  const resumen = (aid) => { const r = historial.filter((x) => x.alumno_id === aid); const asistio = r.filter((x) => x.estado === "presente" || x.estado === "tarde").length; return { total: r.length, asistio, ausencias: r.filter((x) => x.estado === "ausente").length, pct: r.length ? Math.round((asistio / r.length) * 100) : null }; };
+  const guardar = async () => {
+    const poner = cambios.filter((k) => marcas[k]).map((k) => { const [aid, f] = k.split("|"); return { id: `${sec}_${aid}_${f}`, seccion_id: sec, alumno_id: aid, maestro_id: maestroId, fecha: f, estado: marcas[k] }; });
+    const quitar = cambios.filter((k) => !marcas[k]);
+    setGuardando(true);
+    try {
+      if (poner.length) { const { error } = await supabase.from("asistencias").upsert(poner, { onConflict: "seccion_id,alumno_id,fecha" }); if (error) throw error; }
+      for (const k of quitar) { const [aid, f] = k.split("|"); const { error } = await supabase.from("asistencias").delete().eq("seccion_id", sec).eq("alumno_id", aid).eq("fecha", f); if (error) throw error; }
+      avisar(`✓ Libreta guardada (${cambios.length} ${cambios.length === 1 ? "cambio" : "cambios"})`);
+      await cargar();
+    } catch (e) { avisar("No se guardó: " + mensajeError(e), "error"); }
+    setGuardando(false);
+  };
+
+  const totales = (aid) => {
+    const v = dias.map((d) => marcas[`${aid}|${d}`]).filter(Boolean);
+    const asis = v.filter((e) => e === "presente" || e === "tarde").length;
+    return { asis, faltas: v.filter((e) => e === "ausente").length, pct: v.length ? Math.round((asis / v.length) * 100) : null };
+  };
+  const nombreMes = (() => { const t = new Date(mes + "-15T12:00:00").toLocaleDateString("es-HN", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); })();
+  const celdaBase = { borderRight: "1px solid #E2E8F0", borderBottom: "1px solid #E2E8F0", textAlign: "center", padding: 0 };
 
   return (<div>
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12, alignItems: "center" }}>
-      <SelectorGrupo secciones={datos.secciones} value={sec} onChange={setSec} />
-      <input type="date" value={fecha} max={hoyISO()} onChange={(e) => setFecha(e.target.value)} style={{ ...input, width: 170 }} />
-      <span style={{ fontSize: 12, color: "#64748B" }}>{fechaLarga(fecha)}</span>
+    {/* Controles */}
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+      <SelectorGrupo secciones={datos.secciones} value={sec} onChange={cambiarGrupo} />
+      <div style={{ display: "flex", alignItems: "center", border: "1px solid #D1D5DB", borderRadius: 7, background: "#fff" }}>
+        <button onClick={() => cambiarMes(-1)} title="Mes anterior" style={{ background: "none", border: "none", cursor: "pointer", padding: "8px 10px", fontSize: 14, color: "#475569" }}>‹</button>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#1E293B", minWidth: 130, textAlign: "center" }}>{nombreMes}</span>
+        <button onClick={() => cambiarMes(1)} disabled={mes >= hoy.slice(0, 7)} title="Mes siguiente" style={{ background: "none", border: "none", cursor: mes >= hoy.slice(0, 7) ? "default" : "pointer", padding: "8px 10px", fontSize: 14, color: mes >= hoy.slice(0, 7) ? "#CBD5E1" : "#475569" }}>›</button>
+      </div>
+      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+        <input type="date" value={nuevoDia} max={hoy} onChange={(e) => setNuevoDia(e.target.value)} style={{ ...input, width: 150, padding: "7px 8px" }} />
+        <button onClick={agregarDia} disabled={!nuevoDia} style={{ ...btnO, padding: "7px 10px", fontSize: 12, opacity: nuevoDia ? 1 : 0.5 }}><Plus size={12} />Agregar día</button>
+      </div>
     </div>
-    <div style={card}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-        <div style={{ fontSize: 13, color: "#475569" }}>{alumnos.length} alumnos{pendientes > 0 && alumnos.length > 0 ? ` · ${pendientes} sin marcar` : ""}</div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => todos("presente")} style={{ ...btnO, padding: "5px 10px", fontSize: 12 }}><Check size={12} />Todos presentes</button>
+
+    {/* Libreta */}
+    <div style={{ ...card, padding: 0, overflow: "hidden", background: "#FFFDF8", border: "1px solid #E7DCC8" }}>
+      <div style={{ padding: "12px 16px", borderBottom: "2px solid #EA580C", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6, background: "#fff" }}>
+        <div>
+          <div style={{ fontSize: 11, color: "#94A3B8", textTransform: "uppercase", letterSpacing: 1, fontWeight: 700 }}>Registro de asistencia</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#1E293B" }}>{s?.nombre || "—"} <span style={{ fontWeight: 400, color: "#64748B", fontSize: 13 }}>{s?.horario ? `· ${s.horario}` : ""}</span></div>
+        </div>
+        <div style={{ textAlign: "right", fontSize: 12, color: "#64748B" }}>
+          <div>Docente: <strong style={{ color: "#1E293B" }}>{datos.maestro?.nombre}</strong></div>
+          <div>{nombreMes} · {alumnos.length} alumnos</div>
         </div>
       </div>
-      {alumnos.length === 0 ? <Vacio>No hay alumnos en este grupo.</Vacio> : alumnos.map((a) => { const r = resumen(a.id); return (
-        <div key={a.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 0", borderBottom: "1px solid #F1F5F9", flexWrap: "wrap" }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#1E293B" }}>{a.nombre}</div>
-            {r.total > 0 && <div style={{ fontSize: 11, color: r.pct < 75 ? "#DC2626" : "#94A3B8" }}>Este mes: {r.pct}% asistencia · {r.ausencias} {r.ausencias === 1 ? "ausencia" : "ausencias"}</div>}
-          </div>
-          <div style={{ display: "flex", gap: 4 }}>
-            {ESTADOS_ASIS.map((e) => { const on = marcas[a.id] === e.v; return (
-              <button key={e.v} title={e.l} onClick={() => setMarcas({ ...marcas, [a.id]: e.v })} style={{ width: window.innerWidth > 520 ? "auto" : 38, minWidth: 38, padding: "6px 10px", borderRadius: 7, border: `1px solid ${on ? e.c : "#E2E8F0"}`, background: on ? e.c : "#fff", color: on ? "#fff" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{window.innerWidth > 520 ? e.l : e.k}</button>
-            ); })}
-          </div>
+      {alumnos.length === 0 ? <Vacio>No hay alumnos en este grupo.</Vacio> : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 13, minWidth: "100%" }}>
+            <thead>
+              <tr>
+                <th style={{ position: "sticky", left: 0, zIndex: 2, background: "#FFF7ED", textAlign: "left", padding: "8px 10px", borderRight: "2px solid #E7DCC8", borderBottom: "2px solid #E7DCC8", minWidth: window.innerWidth > 600 ? 190 : 130, fontSize: 11, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.5 }}>N.º · Alumno</th>
+                {dias.map((d) => { const dt = new Date(d + "T12:00:00"); const esHoy = d === hoy; return (
+                  <th key={d} style={{ ...celdaBase, borderBottom: "2px solid #E7DCC8", background: esHoy ? "#FFEDD5" : "#FFF7ED", minWidth: 44, padding: "4px 2px" }}>
+                    <div style={{ fontSize: 10, color: "#9A3412", fontWeight: 600 }}>{DIAS_SEM[dt.getDay()]}</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: esHoy ? NAR : "#1E293B" }}>{dt.getDate()}</div>
+                    <button onClick={() => todosPresentes(d)} title="Marcar presentes a los que faltan" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10, color: "#059669", fontWeight: 700, padding: 0 }}>✓ todos</button>
+                  </th>
+                ); })}
+                {dias.length === 0 && <th style={{ ...celdaBase, borderBottom: "2px solid #E7DCC8", background: "#FFF7ED", padding: "8px 12px", fontSize: 12, color: "#9A3412", fontWeight: 400 }}>Agrega un día de clase con “Agregar día”</th>}
+                {["Asist.", "Faltas", "%"].map((h) => <th key={h} style={{ ...celdaBase, borderBottom: "2px solid #E7DCC8", background: "#F1F5F9", padding: "8px 8px", fontSize: 11, color: "#475569", minWidth: 48 }}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {alumnos.map((a, i) => { const t = totales(a.id); return (
+                <tr key={a.id}>
+                  <td style={{ position: "sticky", left: 0, zIndex: 1, background: i % 2 ? "#FFFBF2" : "#FFFDF8", padding: "0 10px", height: 38, borderRight: "2px solid #E7DCC8", borderBottom: "1px solid #E2E8F0", whiteSpace: "nowrap" }}>
+                    <span style={{ color: "#94A3B8", fontSize: 11, display: "inline-block", width: 22 }}>{i + 1}.</span><span style={{ fontWeight: 600, color: "#1E293B" }}>{a.nombre}</span>
+                  </td>
+                  {dias.map((d) => { const k = `${a.id}|${d}`; const e = ESTADOS_ASIS.find((x) => x.v === marcas[k]); const cambiado = (guardado[k] || "") !== (marcas[k] || ""); return (
+                    <td key={d} style={{ ...celdaBase, background: d === hoy ? "#FFF7ED" : "transparent" }}>
+                      <button onClick={() => tocar(a.id, d)} title={e ? e.l : "Sin marcar (toca para marcar)"} style={{ width: "100%", height: 37, border: "none", background: cambiado ? "#FEF3C7" : "transparent", cursor: "pointer", fontFamily: "'Segoe UI',system-ui,sans-serif", fontSize: 15, fontWeight: 800, color: e ? e.c : "#E2E8F0" }}>{e ? e.k : "·"}</button>
+                    </td>
+                  ); })}
+                  {dias.length === 0 && <td style={celdaBase} />}
+                  <td style={{ ...celdaBase, fontWeight: 700, color: "#059669" }}>{t.asis}</td>
+                  <td style={{ ...celdaBase, fontWeight: 700, color: t.faltas ? "#DC2626" : "#94A3B8" }}>{t.faltas}</td>
+                  <td style={{ ...celdaBase, fontWeight: 800, color: t.pct !== null && t.pct < 75 ? "#DC2626" : "#1E293B" }}>{t.pct === null ? "—" : t.pct}</td>
+                </tr>
+              ); })}
+              <tr>
+                <td style={{ position: "sticky", left: 0, zIndex: 1, background: "#F1F5F9", padding: "6px 10px", borderRight: "2px solid #E7DCC8", fontSize: 11, fontWeight: 700, color: "#475569" }}>Presentes del día</td>
+                {dias.map((d) => <td key={d} style={{ ...celdaBase, background: "#F1F5F9", fontSize: 12, fontWeight: 700, color: "#475569", padding: "6px 0" }}>{alumnos.filter((a) => ["presente", "tarde"].includes(marcas[`${a.id}|${d}`])).length}</td>)}
+                {dias.length === 0 && <td style={{ ...celdaBase, background: "#F1F5F9" }} />}
+                <td colSpan={3} style={{ ...celdaBase, background: "#F1F5F9" }} />
+              </tr>
+            </tbody>
+          </table>
         </div>
-      ); })}
-      {alumnos.length > 0 && <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
-        <button onClick={guardar} disabled={guardando || !cambios} style={{ ...btn(), opacity: guardando || !cambios ? 0.5 : 1 }}><Save size={15} />{guardando ? "Guardando…" : !cambios && Object.keys(guardadas).length ? "✓ Guardada" : "Guardar asistencia"}</button>
-      </div>}
-    </div>
-    {diasMes.length > 0 && <div style={card}>
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", margin: "0 0 8px" }}>Clases registradas este mes</h3>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {diasMes.map((d) => { const r = historial.filter((x) => x.fecha === d); const pres = r.filter((x) => x.estado === "presente" || x.estado === "tarde").length; return (
-          <button key={d} onClick={() => setFecha(d)} style={{ ...btnO, padding: "5px 10px", fontSize: 12, borderColor: d === fecha ? NAR : "#D1D5DB", color: d === fecha ? NAR : "#64748B" }}>{fechaLarga(d)} · {pres}/{r.length}</button>
-        ); })}
+      )}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 16px", background: "#fff", borderTop: "1px solid #E7DCC8", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 12, fontSize: 11, color: "#64748B", flexWrap: "wrap" }}>
+          {ESTADOS_ASIS.map((e) => <span key={e.v}><strong style={{ color: e.c, fontSize: 13 }}>{e.k}</strong> {e.l}</span>)}
+          <span>· Toca una casilla para cambiarla</span>
+        </div>
+        <button onClick={guardar} disabled={guardando || !cambios.length} style={{ ...btn(), opacity: guardando || !cambios.length ? 0.5 : 1 }}><Save size={15} />{guardando ? "Guardando…" : cambios.length ? `Guardar (${cambios.length})` : "✓ Guardado"}</button>
       </div>
-    </div>}
+    </div>
   </div>);
 }
 
@@ -852,8 +915,8 @@ const leerIgnorados = () => { try { return JSON.parse(localStorage.getItem("seed
 
 export function AlertasInactividad({ data, loadData, showToast }) {
   const [regs, setRegs] = useState(null); // null = sin datos (módulo no activo o cargando)
+  const [ultimas, setUltimas] = useState({}); // alumno_id -> última fecha que asistió (de cualquier época)
   const [ignorados, setIgnorados] = useState(leerIgnorados);
-  const [abierto, setAbierto] = useState(false);
   const [ocupado, setOcupado] = useState(null);
   const desde = new Date(Date.now() - DIAS_SIN_ASISTENCIA * 86400000).toLocaleDateString("en-CA");
 
@@ -869,32 +932,42 @@ export function AlertasInactividad({ data, loadData, showToast }) {
     setRegs(todas);
   })(); }, [desde]);
 
-  if (!regs) return null;
-  // Solo grupos donde el docente sí está tomando asistencia en este periodo
-  const gruposConLista = new Set(regs.map((r) => r.seccion_id));
-  const asistio = new Set(regs.filter((r) => r.estado === "presente" || r.estado === "tarde").map((r) => r.alumno_id));
   const hoyMs = Date.now();
-  const candidatos = data.alumnos.filter((a) =>
+  const gruposConLista = new Set((regs || []).map((r) => r.seccion_id));
+  const asistio = new Set((regs || []).filter((r) => r.estado === "presente" || r.estado === "tarde").map((r) => r.alumno_id));
+  const faltas = {};
+  (regs || []).filter((r) => r.estado === "ausente").forEach((r) => { faltas[r.alumno_id] = (faltas[r.alumno_id] || 0) + 1; });
+  // Alumnos activos, matriculados hace más de 2 meses, sin beca, que el docente
+  // marcó ausente al menos 2 veces y que no asistieron ninguna vez en 2 meses
+  // (si la casilla quedó en blanco no se cuenta como falta)
+  const candidatos = regs ? data.alumnos.filter((a) =>
     a.estado === "activo" && a.beca !== true &&
-    gruposConLista.has(a.seccion_id) &&
-    !asistio.has(a.id) &&
+    gruposConLista.has(a.seccion_id) && !asistio.has(a.id) && (faltas[a.id] || 0) >= 2 &&
     (!a.fecha_ingreso || a.fecha_ingreso <= desde) &&
     !(ignorados[a.id] && ignorados[a.id] > hoyMs)
-  ).map((a) => {
-    const r = regs.filter((x) => x.alumno_id === a.id);
-    const pend = data.facturas.filter((f) => f.alumno_id === a.id && (f.tipo_factura || "cobro") === "cobro" && (f.estado === "pendiente" || f.estado === "parcial"));
-    return { a, ausencias: r.filter((x) => x.estado === "ausente").length, justificadas: r.filter((x) => x.estado === "justificado").length, clases: new Set(regs.filter((x) => x.seccion_id === a.seccion_id).map((x) => x.fecha)).size, pendientes: pend.length, debe: pend.reduce((t, f) => t + (Number(f.saldo) > 0 ? Number(f.saldo) : Number(f.monto_total) || 0), 0) };
-  });
-  if (candidatos.length === 0) return null;
+  ) : [];
+  const claveCand = candidatos.map((a) => a.id).join(",");
+
+  // Última vez que asistió cada uno (puede ser antes de los 2 meses)
+  useEffect(() => { (async () => {
+    if (!claveCand) return;
+    const { data: d } = await supabase.from("asistencias").select("alumno_id,fecha").in("alumno_id", claveCand.split(",")).in("estado", ["presente", "tarde"]).order("fecha", { ascending: false }).limit(1000);
+    const m = {};
+    (d || []).forEach((r) => { if (!m[r.alumno_id]) m[r.alumno_id] = r.fecha; });
+    setUltimas(m);
+  })(); }, [claveCand]);
+
+  if (!regs || candidatos.length === 0) return null;
 
   const grupo = (id) => data.secciones.find((s) => s.id === id)?.nombre || "—";
+  const pendientes = (aid) => data.facturas.filter((f) => f.alumno_id === aid && (f.tipo_factura || "cobro") === "cobro" && (f.estado === "pendiente" || f.estado === "parcial")).length;
   const inactivar = async (a) => {
-    if (!confirm(`¿Cambiar a ${a.nombre} a INACTIVO?\n\nYa no se le crearán cobros nuevos. Sus cobros pendientes y su historial se conservan. Puedes reactivarlo en Matrícula cuando quieras.`)) return;
+    if (!confirm(`¿Pasar a ${a.nombre} a INACTIVO?\n\nYa no se le crearán cobros nuevos. Sus cobros pendientes y su historial se conservan. Puedes reactivarlo en Matrícula cuando quieras.`)) return;
     setOcupado(a.id);
     const { error } = await supabase.from("alumnos").update({ estado: "inactivo" }).eq("id", a.id);
     setOcupado(null);
     if (error) { showToast("Error: " + mensajeError(error), "error"); return; }
-    showToast(`✓ ${a.nombre} ahora está inactivo`);
+    showToast(`✓ ${a.nombre} pasó a inactivo`);
     loadData();
   };
   const ignorar = (a) => {
@@ -902,34 +975,31 @@ export function AlertasInactividad({ data, loadData, showToast }) {
     try { localStorage.setItem("seeds_inactividad_ignorados", JSON.stringify(n)); } catch (e) { /* sin almacenamiento */ }
     setIgnorados(n);
   };
-  const visibles = abierto ? candidatos : candidatos.slice(0, 5);
+  const th = { textAlign: "left", padding: "8px 10px", fontSize: 11, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.4, borderBottom: "1px solid #FED7AA" };
+  const td = { padding: "10px", borderBottom: "1px solid #FFEDD5", fontSize: 13, verticalAlign: "middle" };
 
   return (
-    <div style={{ ...card, border: "1px solid #FDBA74", borderLeft: `4px solid ${NAR}`, padding: 18 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: "#9A3412" }}>⚠ {candidatos.length} {candidatos.length === 1 ? "alumno activo sin asistir" : "alumnos activos sin asistir"} en los últimos 2 meses</div>
-          <div style={{ fontSize: 12, color: "#9A3412", marginTop: 2 }}>Según las listas de asistencia de los docentes. Si ya no vienen, cámbialos a inactivo para no seguir generándoles cobros.</div>
-        </div>
+    <div style={{ ...card, border: "1px solid #FDBA74", borderLeft: `4px solid ${NAR}`, padding: 0, overflow: "hidden" }}>
+      <div style={{ padding: "14px 18px", background: "#FFF7ED" }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#9A3412" }}>⚠ Alumnos que llevan 2 meses sin asistir ({candidatos.length})</div>
+        <div style={{ fontSize: 12, color: "#9A3412", marginTop: 2 }}>Según las libretas de asistencia de los docentes. Te sugerimos pasarlos a inactivo para no seguir generándoles cobros.</div>
       </div>
-      <div style={{ marginTop: 12 }}>
-        {visibles.map(({ a, ausencias, justificadas, clases, pendientes, debe }) => (
-          <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: "1px solid #FED7AA", flexWrap: "wrap" }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#1E293B" }}>{a.nombre} <span style={{ fontWeight: 400, color: "#94A3B8" }}>· {grupo(a.seccion_id)}</span></div>
-              <div style={{ fontSize: 11, color: "#64748B" }}>
-                {clases} {clases === 1 ? "clase registrada" : "clases registradas"} en el grupo · {ausencias} {ausencias === 1 ? "ausencia" : "ausencias"}{justificadas ? ` · ${justificadas} justificadas` : ""}
-                {pendientes > 0 && <span style={{ color: "#DC2626", fontWeight: 600 }}> · {pendientes} {pendientes === 1 ? "cobro pendiente" : "cobros pendientes"} (L {debe.toLocaleString()})</span>}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => ignorar(a)} title="No mostrar por 30 días" style={{ ...btnO, padding: "5px 10px", fontSize: 12 }}>Sigue activo</button>
-              <button onClick={() => inactivar(a)} disabled={ocupado === a.id} style={{ ...btn(), padding: "5px 12px", fontSize: 12, opacity: ocupado === a.id ? 0.6 : 1 }}>Marcar inactivo</button>
-            </div>
-          </div>
-        ))}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr><th style={th}>Alumno</th><th style={th}>Grupo</th><th style={th}>Última asistencia</th><th style={th}>Sugerencia</th></tr></thead>
+          <tbody>{candidatos.map((a) => { const u = ultimas[a.id]; const p = pendientes(a.id); return (
+            <tr key={a.id}>
+              <td style={{ ...td, fontWeight: 700, color: "#1E293B" }}>{a.nombre}{p > 0 && <div style={{ fontSize: 11, fontWeight: 400, color: "#DC2626" }}>{p} {p === 1 ? "cobro pendiente" : "cobros pendientes"}</div>}</td>
+              <td style={td}><span style={badge(NAR)}>{grupo(a.seccion_id)}</span></td>
+              <td style={{ ...td, color: "#64748B" }}>{u ? fechaLarga(u) : "Nunca ha asistido"}<div style={{ fontSize: 11, color: "#DC2626" }}>{faltas[a.id]} faltas en 2 meses</div></td>
+              <td style={{ ...td, whiteSpace: "nowrap" }}>
+                <button onClick={() => inactivar(a)} disabled={ocupado === a.id} style={{ ...btn(), padding: "6px 12px", fontSize: 12, opacity: ocupado === a.id ? 0.6 : 1 }}>Pasar a inactivo</button>
+                <button onClick={() => ignorar(a)} title="No mostrar por 30 días" style={{ ...btnO, padding: "5px 10px", fontSize: 12, marginLeft: 6 }}>Sigue activo</button>
+              </td>
+            </tr>
+          ); })}</tbody>
+        </table>
       </div>
-      {candidatos.length > 5 && <button onClick={() => setAbierto(!abierto)} style={{ background: "none", border: "none", color: NAR, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginTop: 6 }}>{abierto ? "Ver menos" : `Ver los ${candidatos.length}`}</button>}
     </div>
   );
 }
