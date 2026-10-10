@@ -231,7 +231,7 @@ export const ESTILOS_LIBRO = `
     radial-gradient(ellipse at 80% 90%, rgba(0,0,0,.35), transparent 60%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .32 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.045' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .1 0 0 0 0 .05 0 0 0 0 0 0 0 0 .5 -.1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)'/%3E%3C/svg%3E"),
-    linear-gradient(135deg, #7A4526 0%, #6A3A1F 45%, #55301A 100%);
+    linear-gradient(135deg, var(--cuero1, #7A4526) 0%, var(--cuero2, #6A3A1F) 45%, var(--cuero3, #55301A) 100%);
   box-shadow: inset 0 0 40px rgba(0,0,0,.45), inset 0 0 4px rgba(0,0,0,.6), 0 26px 50px rgba(30,15,5,.45), 0 4px 10px rgba(0,0,0,.3) }
 .bt-cuero:hover { filter: brightness(1.03) }
 .bt-cuero.abriendo { animation: bt-abrir .75s cubic-bezier(.5,0,.4,1) forwards }
@@ -393,10 +393,15 @@ export function useVueltaHoja(escritorio) {
   return { marcoRef, libroRef, pasarHoja, capa };
 }
 
-export function PortadaCuero({ titulo = "Bitácora de clases", nombre, anio, abriendo, onAbrir, etiqueta }) {
+// Tonos de cuero: café (bitácora) y naranja (libreta de asistencia)
+const CUEROS = {
+  cafe: { "--cuero1": "#7A4526", "--cuero2": "#6A3A1F", "--cuero3": "#55301A" },
+  naranja: { "--cuero1": "#D2701F", "--cuero2": "#B65814", "--cuero3": "#8E400C" },
+};
+export function PortadaCuero({ titulo = "Bitácora de clases", nombre, anio, abriendo, onAbrir, etiqueta, tono = "cafe" }) {
   return (
     <div style={{ maxWidth: 420, margin: "6px auto 0", perspective: 1800 }}>
-      <div className={"bt-cuero" + (abriendo ? " abriendo" : "")} onClick={onAbrir} role="button" title={etiqueta}>
+      <div className={"bt-cuero" + (abriendo ? " abriendo" : "")} style={CUEROS[tono] || CUEROS.cafe} onClick={onAbrir} role="button" title={etiqueta}>
         <div className="bt-lomo" />
         <div className="bt-liga" />
         <div className="bt-costura" />

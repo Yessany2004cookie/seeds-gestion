@@ -373,7 +373,7 @@ function Asistencia({ datos, maestroId, avisar }) {
   };
   if (cerrada) return (<div>
     <style>{ESTILOS_LIBRO}</style>
-    <PortadaCuero titulo="Libreta de asistencia" nombre={datos.maestro?.nombre || ""} anio={new Date().getFullYear()} abriendo={abriendo} onAbrir={abrir}
+    <PortadaCuero titulo="Libreta de asistencia" tono="naranja" nombre={datos.maestro?.nombre || ""} anio={new Date().getFullYear()} abriendo={abriendo} onAbrir={abrir}
       etiqueta={`Abrir libreta · ${datos.secciones.length} ${datos.secciones.length === 1 ? "grupo" : "grupos"}`} />
   </div>);
 
