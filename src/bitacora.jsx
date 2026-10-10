@@ -222,7 +222,7 @@ function PanelStickers({ onAgregar, onCerrar }) {
 const falta = (e) => /relation .*bitacora.* does not exist|Could not find the table .*bitacora|schema cache/i.test(String(e?.message || e || ""));
 const EDITOR_SQL = (() => { const ref = (String(supabase.supabaseUrl || "").match(/https:\/\/([^.]+)\.supabase\.co/) || [])[1]; return ref ? `https://supabase.com/dashboard/project/${ref}/sql/new` : "https://supabase.com/dashboard"; })();
 
-const ESTILOS = `
+export const ESTILOS_LIBRO = `
 @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap');
 @keyframes bt-abrir { 0% { transform: rotateY(0) } 100% { transform: rotateY(-115deg); opacity: 0 } }
 .bt-cuero { position: relative; aspect-ratio: 3 / 4; border-radius: 6px 16px 16px 6px; overflow: hidden; cursor: pointer; transform-origin: left center;
@@ -328,7 +328,72 @@ function documentoBitacora(paginas, maestroNombre, secciones) {
 // ════════════════════════════════════════════════════════════
 //  FLIPBOOK
 // ════════════════════════════════════════════════════════════
-function PortadaCuero({ nombre, anio, abriendo, onAbrir, etiqueta }) {
+// ════════════════════════════════════════════════════════════
+//  HOJA DANDO VUELTA (compartido: bitácora y libreta de asistencia)
+//  El libro (libroRef) tiene la hoja izquierda como primer hijo y la derecha
+//  como último. Se llama pasarHoja() justo ANTES de cambiar de página.
+// ════════════════════════════════════════════════════════════
+export function useVueltaHoja(escritorio) {
+  const [vuelta, setVuelta] = useState(null);   // hoja que se está dando vuelta
+  const marcoRef = useRef(null), libroRef = useRef(null), dorsoRef = useRef(null), frenteRef = useRef(null), tVuelta = useRef([]);
+  useEffect(() => () => tVuelta.current.forEach(clearTimeout), []);
+  // Animación de hoja dando vuelta: se copia la hoja actual, se gira sobre el lomo
+  // y por detrás aparece la hoja nueva (se copia cuando la hoja va de canto).
+  const copia = (el) => {
+    if (!el) return "";
+    const c = el.cloneNode(true);
+    c.querySelectorAll("[contenteditable]").forEach((n) => n.removeAttribute("contenteditable"));
+    const orig = el.querySelectorAll("input,select,textarea");
+    c.querySelectorAll("input,select,textarea").forEach((n, i) => {
+      if (n.tagName === "SELECT") [...n.options].forEach((o) => o.toggleAttribute("selected", o.value === orig[i]?.value));
+      else n.setAttribute("value", orig[i]?.value || "");
+    });
+    return c.outerHTML;
+  };
+  const pasarHoja = (hacia) => {
+    const libro = libroRef.current, marco = marcoRef.current;
+    if (!libro || !marco || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    tVuelta.current.forEach(clearTimeout);
+    const m = marco.getBoundingClientRect();
+    const rel = (el) => { const r = el.getBoundingClientRect(); return { left: r.left - m.left, top: r.top - m.top, width: r.width, height: r.height }; };
+    const adelante = hacia !== "atras", izq = libro.firstElementChild, der = libro.lastElementChild;
+    const DUR = 950;
+    let v;
+    // El dorso cae sobre la otra hoja (que es de otro ancho): se ubica reflejado respecto al lomo
+    const ri = rel(izq), rd = rel(der), lomo = rd.left - (ri.left + ri.width);
+    if (escritorio) v = adelante
+      ? { hoja: rd, frente: copia(der), fijo: { ...ri, html: copia(izq) }, origen: "left center", anim: "bt-vuelta", dorso: { left: lomo, width: ri.width } }
+      : { hoja: ri, frente: copia(izq), fijo: { ...rd, html: copia(der) }, origen: "right center", anim: "bt-vuelta-atras", dorso: { left: ri.width - lomo - rd.width, width: rd.width } };
+    else v = adelante
+      ? { hoja: rel(libro), frente: copia(libro), origen: "left center", anim: "bt-vuelta" }
+      : { hoja: rel(libro), frente: "", fijo: { ...rel(libro), html: copia(libro), queda: true }, origen: "left center", anim: "bt-entra" };
+    setVuelta({ ...v, id: Date.now(), adelante, dur: DUR });
+    tVuelta.current = [
+      setTimeout(() => {
+        const nuevo = libroRef.current; if (!nuevo) return;
+        if (v.dorso && dorsoRef.current) dorsoRef.current.innerHTML = copia(adelante ? nuevo.firstElementChild : nuevo.lastElementChild);
+        if (!escritorio && !adelante && frenteRef.current) frenteRef.current.innerHTML = copia(nuevo);
+      }, DUR * 0.42),
+      setTimeout(() => setVuelta(null), DUR + 40),
+    ];
+  };
+  const capa = (<>
+      {vuelta?.fijo && <div key={`f${vuelta.id}`} className="bt-cara" style={{ inset: "auto", left: vuelta.fijo.left, top: vuelta.fijo.top, width: vuelta.fijo.width, height: vuelta.fijo.height, zIndex: 5, boxShadow: "none", animation: vuelta.fijo.queda ? "none" : `bt-fuera ${vuelta.dur}ms linear forwards` }} dangerouslySetInnerHTML={{ __html: vuelta.fijo.html }} />}
+      {vuelta && <div key={vuelta.id} className="bt-hoja-giro" style={{ ...vuelta.hoja, transformOrigin: vuelta.origen, animation: `${vuelta.anim} ${vuelta.dur}ms cubic-bezier(.45,.05,.35,1) forwards` }}>
+        <div className="bt-cara">
+          <div ref={frenteRef} className="bt-copia" style={{ display: "flex", width: "100%", height: "100%" }} dangerouslySetInnerHTML={{ __html: vuelta.frente }} />
+          <div className="bt-sombra" style={{ background: `linear-gradient(${vuelta.origen.startsWith("left") ? "to left" : "to right"}, rgba(0,0,0,.35), rgba(0,0,0,0) 70%)`, animation: `${vuelta.anim === "bt-entra" ? "bt-sombra-dorso" : "bt-sombra-frente"} ${vuelta.dur}ms ease-in forwards` }} />
+        </div>
+        <div className="bt-cara bt-cara-dorso" style={vuelta.dorso ? { inset: "auto", top: 0, height: "100%", ...vuelta.dorso } : undefined}>
+          <div ref={dorsoRef} className="bt-copia" style={{ display: "flex", width: "100%", height: "100%" }} />
+          <div className="bt-sombra" style={{ background: `linear-gradient(${vuelta.origen.startsWith("left") ? "to left" : "to right"}, rgba(0,0,0,.35), rgba(0,0,0,0) 70%)`, animation: `bt-sombra-dorso ${vuelta.dur}ms ease-out forwards` }} />
+        </div>
+      </div>}
+  </>);
+  return { marcoRef, libroRef, pasarHoja, capa };
+}
+
+export function PortadaCuero({ titulo = "Bitácora de clases", nombre, anio, abriendo, onAbrir, etiqueta }) {
   return (
     <div style={{ maxWidth: 420, margin: "6px auto 0", perspective: 1800 }}>
       <div className={"bt-cuero" + (abriendo ? " abriendo" : "")} onClick={onAbrir} role="button" title={etiqueta}>
@@ -336,7 +401,7 @@ function PortadaCuero({ nombre, anio, abriendo, onAbrir, etiqueta }) {
         <div className="bt-liga" />
         <div className="bt-costura" />
         <div style={{ position: "absolute", inset: "34px 40px 34px 64px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", textAlign: "center" }}>
-          <div className="bt-quemado" style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: "clamp(12px, 3.4vw, 15px)", letterSpacing: "clamp(2px, 1vw, 6px)", fontWeight: 700, textTransform: "uppercase", marginTop: 6 }}>Bitácora de clases</div>
+          <div className="bt-quemado" style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: "clamp(12px, 3.4vw, 15px)", letterSpacing: "clamp(2px, .8vw, 4px)", fontWeight: 700, textTransform: "uppercase", marginTop: 6 }}>{titulo}</div>
           <div className="bt-sello"><img src={LOGO_SEEDS} alt="Seeds" /></div>
           <div>
             <div className="bt-quemado" style={{ fontFamily: "Caveat, 'Segoe Print', cursive", fontSize: "clamp(34px, 9vw, 50px)", fontWeight: 700, lineHeight: 1.05 }}>{nombre}</div>
@@ -359,9 +424,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   const [borrador, setBorrador] = useState({ titulo: "", contenido: "", stickers: [], seccion_id: "" });
   const [cerrada, setCerrada] = useState(true);   // se ve la portada de cuero
   const [abriendo, setAbriendo] = useState(false);
-  const [vuelta, setVuelta] = useState(null);   // hoja que se está dando vuelta
-  const marcoRef = useRef(null), libroRef = useRef(null), dorsoRef = useRef(null), frenteRef = useRef(null), tVuelta = useRef([]);
-  useEffect(() => () => tVuelta.current.forEach(clearTimeout), []);
+  const { marcoRef, libroRef, pasarHoja, capa } = useVueltaHoja(escritorio);
   const [guardando, setGuardando] = useState(false);
   const [pdf, setPdf] = useState(null);
   const [generando, setGenerando] = useState(false);
@@ -416,46 +479,6 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     if (cambios && !confirm("Esta página tiene cambios sin guardar. ¿Pasar de página sin guardar?")) return;
     pasarHoja(hacia || (f > fecha ? "adelante" : "atras"));
     setFecha(f);
-  };
-  // Animación de hoja dando vuelta: se copia la hoja actual, se gira sobre el lomo
-  // y por detrás aparece la hoja nueva (se copia cuando la hoja va de canto).
-  const copia = (el) => {
-    if (!el) return "";
-    const c = el.cloneNode(true);
-    c.querySelectorAll("[contenteditable]").forEach((n) => n.removeAttribute("contenteditable"));
-    const orig = el.querySelectorAll("input,select,textarea");
-    c.querySelectorAll("input,select,textarea").forEach((n, i) => {
-      if (n.tagName === "SELECT") [...n.options].forEach((o) => o.toggleAttribute("selected", o.value === orig[i]?.value));
-      else n.setAttribute("value", orig[i]?.value || "");
-    });
-    return c.outerHTML;
-  };
-  const pasarHoja = (hacia) => {
-    const libro = libroRef.current, marco = marcoRef.current;
-    if (!libro || !marco || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    tVuelta.current.forEach(clearTimeout);
-    const m = marco.getBoundingClientRect();
-    const rel = (el) => { const r = el.getBoundingClientRect(); return { left: r.left - m.left, top: r.top - m.top, width: r.width, height: r.height }; };
-    const adelante = hacia !== "atras", izq = libro.firstElementChild, der = libro.lastElementChild;
-    const DUR = 950;
-    let v;
-    // El dorso cae sobre la otra hoja (que es de otro ancho): se ubica reflejado respecto al lomo
-    const ri = rel(izq), rd = rel(der), lomo = rd.left - (ri.left + ri.width);
-    if (escritorio) v = adelante
-      ? { hoja: rd, frente: copia(der), fijo: { ...ri, html: copia(izq) }, origen: "left center", anim: "bt-vuelta", dorso: { left: lomo, width: ri.width } }
-      : { hoja: ri, frente: copia(izq), fijo: { ...rd, html: copia(der) }, origen: "right center", anim: "bt-vuelta-atras", dorso: { left: ri.width - lomo - rd.width, width: rd.width } };
-    else v = adelante
-      ? { hoja: rel(libro), frente: copia(libro), origen: "left center", anim: "bt-vuelta" }
-      : { hoja: rel(libro), frente: "", fijo: { ...rel(libro), html: copia(libro), queda: true }, origen: "left center", anim: "bt-entra" };
-    setVuelta({ ...v, id: Date.now(), adelante, dur: DUR });
-    tVuelta.current = [
-      setTimeout(() => {
-        const nuevo = libroRef.current; if (!nuevo) return;
-        if (v.dorso && dorsoRef.current) dorsoRef.current.innerHTML = copia(adelante ? nuevo.firstElementChild : nuevo.lastElementChild);
-        if (!escritorio && !adelante && frenteRef.current) frenteRef.current.innerHTML = copia(nuevo);
-      }, DUR * 0.42),
-      setTimeout(() => setVuelta(null), DUR + 40),
-    ];
   };
   const guardar = async () => {
     if (!textoPlano(borrador.contenido) && !borrador.titulo.trim() && !(borrador.stickers || []).length) { avisar("Escribe algo en la página antes de guardar", "error"); return; }
@@ -535,7 +558,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     setTimeout(() => { setCerrada(false); setAbriendo(false); if (!fecha) setFecha(hoyISO()); }, 720);
   };
   if (cerrada || !fecha) return (<div>
-    <style>{ESTILOS}</style>
+    <style>{ESTILOS_LIBRO}</style>
     {barra}
     <PortadaCuero nombre={maestro?.nombre || ""} anio={new Date().getFullYear()} abriendo={abriendo} onAbrir={abrir}
       etiqueta={fecha ? `Abrir bitácora · ${guardadas.length} ${guardadas.length === 1 ? "página" : "páginas"}` : editable ? "Escribir la primera página" : null} />
@@ -607,21 +630,11 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   );
 
   return (<div>
-    <style>{ESTILOS}</style>
+    <style>{ESTILOS_LIBRO}</style>
     {barra}
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <div ref={marcoRef} style={{ flex: 1, minWidth: 0, background: "#1E293B", borderRadius: 14, padding: escritorio ? 12 : 6, boxShadow: "0 24px 50px rgba(15,23,42,.25)", position: "relative", perspective: 2400 }}>
-        {vuelta?.fijo && <div key={`f${vuelta.id}`} className="bt-cara" style={{ inset: "auto", left: vuelta.fijo.left, top: vuelta.fijo.top, width: vuelta.fijo.width, height: vuelta.fijo.height, zIndex: 5, boxShadow: "none", animation: vuelta.fijo.queda ? "none" : `bt-fuera ${vuelta.dur}ms linear forwards` }} dangerouslySetInnerHTML={{ __html: vuelta.fijo.html }} />}
-        {vuelta && <div key={vuelta.id} className="bt-hoja-giro" style={{ ...vuelta.hoja, transformOrigin: vuelta.origen, animation: `${vuelta.anim} ${vuelta.dur}ms cubic-bezier(.45,.05,.35,1) forwards` }}>
-          <div className="bt-cara">
-            <div ref={frenteRef} className="bt-copia" style={{ display: "flex", width: "100%", height: "100%" }} dangerouslySetInnerHTML={{ __html: vuelta.frente }} />
-            <div className="bt-sombra" style={{ background: `linear-gradient(${vuelta.origen.startsWith("left") ? "to left" : "to right"}, rgba(0,0,0,.35), rgba(0,0,0,0) 70%)`, animation: `${vuelta.anim === "bt-entra" ? "bt-sombra-dorso" : "bt-sombra-frente"} ${vuelta.dur}ms ease-in forwards` }} />
-          </div>
-          <div className="bt-cara bt-cara-dorso" style={vuelta.dorso ? { inset: "auto", top: 0, height: "100%", ...vuelta.dorso } : undefined}>
-            <div ref={dorsoRef} className="bt-copia" style={{ display: "flex", width: "100%", height: "100%" }} />
-            <div className="bt-sombra" style={{ background: `linear-gradient(${vuelta.origen.startsWith("left") ? "to left" : "to right"}, rgba(0,0,0,.35), rgba(0,0,0,0) 70%)`, animation: `bt-sombra-dorso ${vuelta.dur}ms ease-out forwards` }} />
-          </div>
-        </div>}
+        {capa}
         <div ref={libroRef} style={{ display: "flex", flexDirection: escritorio ? "row" : "column", borderRadius: 8, overflow: "hidden", boxShadow: escritorio ? "inset 0 0 0 1px #E7DCC8" : "none", background: "#FFFEF9", position: "relative" }}>
           {hojaIzq}
           {escritorio && <div style={{ width: 18, background: "linear-gradient(to right, rgba(0,0,0,.12), rgba(0,0,0,0) 40%, rgba(0,0,0,0) 60%, rgba(0,0,0,.10))", flexShrink: 0 }} />}

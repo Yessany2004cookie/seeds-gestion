@@ -5,10 +5,10 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
 import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
-import { Bitacora, AdminBitacoras } from "./bitacora";
+import { Bitacora, AdminBitacoras, PortadaCuero, useVueltaHoja, ESTILOS_LIBRO } from "./bitacora";
 import {
   LogOut, Users, BookOpen, Check, X, Menu, Send, Home, ClipboardList,
-  MessageSquare, FileText, Phone, Plus, Trash2, RefreshCw, Save, Inbox, KeyRound, UserCheck,
+  MessageSquare, FileText, Phone, Plus, Trash2, RefreshCw, Save, Inbox, KeyRound, UserCheck, ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 // ── Estilos (mismos del sistema) ──
@@ -298,6 +298,10 @@ function Asistencia({ datos, maestroId, avisar }) {
   const [diasExtra, setDiasExtra] = useState([]); // días agregados a mano
   const [nuevoDia, setNuevoDia] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [cerrada, setCerrada] = useState(true);   // se ve la portada de cuero
+  const [abriendo, setAbriendo] = useState(false);
+  const escritorio = window.innerWidth > 860;
+  const { marcoRef, libroRef, pasarHoja, capa } = useVueltaHoja(escritorio);
   const alumnos = datos.alumnos.filter((a) => a.seccion_id === sec && a.estado === "activo");
   const s = datos.secciones.find((x) => x.id === sec);
 
@@ -332,10 +336,12 @@ function Asistencia({ datos, maestroId, avisar }) {
   };
   const cambiarMes = (n) => {
     if (cambios.length && !confirm("Tienes cambios sin guardar en esta libreta. ¿Cambiar de mes sin guardar?")) return;
+    pasarHoja(n > 0 ? "adelante" : "atras");
     setMes(sumarMes(mes, n));
   };
   const cambiarGrupo = (v) => {
     if (cambios.length && !confirm("Tienes cambios sin guardar. ¿Cambiar de grupo sin guardar?")) return;
+    pasarHoja("adelante");
     setSec(v);
   };
 
@@ -360,39 +366,68 @@ function Asistencia({ datos, maestroId, avisar }) {
   const nombreMes = (() => { const t = new Date(mes + "-15T12:00:00").toLocaleDateString("es-HN", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); })();
   const celdaBase = { borderRight: "1px solid #E2E8F0", borderBottom: "1px solid #E2E8F0", textAlign: "center", padding: 0 };
 
-  return (<div>
-    {/* Controles */}
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-      <SelectorGrupo secciones={datos.secciones} value={sec} onChange={cambiarGrupo} />
-      <div style={{ display: "flex", alignItems: "center", border: "1px solid #D1D5DB", borderRadius: 7, background: "#fff" }}>
-        <button onClick={() => cambiarMes(-1)} title="Mes anterior" style={{ background: "none", border: "none", cursor: "pointer", padding: "8px 10px", fontSize: 14, color: "#475569" }}>‹</button>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#1E293B", minWidth: 130, textAlign: "center" }}>{nombreMes}</span>
-        <button onClick={() => cambiarMes(1)} disabled={mes >= hoy.slice(0, 7)} title="Mes siguiente" style={{ background: "none", border: "none", cursor: mes >= hoy.slice(0, 7) ? "default" : "pointer", padding: "8px 10px", fontSize: 14, color: mes >= hoy.slice(0, 7) ? "#CBD5E1" : "#475569" }}>›</button>
+  const abrir = () => {
+    if (abriendo) return;
+    setAbriendo(true);
+    setTimeout(() => { setCerrada(false); setAbriendo(false); }, 720);
+  };
+  if (cerrada) return (<div>
+    <style>{ESTILOS_LIBRO}</style>
+    <PortadaCuero titulo="Libreta de asistencia" nombre={datos.maestro?.nombre || ""} anio={new Date().getFullYear()} abriendo={abriendo} onAbrir={abrir}
+      etiqueta={`Abrir libreta · ${datos.secciones.length} ${datos.secciones.length === 1 ? "grupo" : "grupos"}`} />
+  </div>);
+
+  const enMesActual = mes >= hoy.slice(0, 7);
+  const redondo = (deshab) => ({ ...btnO, width: 34, height: 34, padding: 0, justifyContent: "center", borderRadius: "50%", opacity: deshab ? 0.35 : 1, cursor: deshab ? "default" : "pointer" });
+  const rotulo = { ...label, color: "#9A3412", textTransform: "uppercase", fontSize: 11, letterSpacing: 0.5 };
+
+  // Hoja izquierda: grupo, mes y leyenda
+  const hojaIzq = (
+    <div style={{ flex: escritorio ? "0 0 27%" : "none", minWidth: 0, background: "#FBF7EF", padding: "24px 20px", borderRight: escritorio ? "1px solid #E7DCC8" : "none", borderBottom: escritorio ? "none" : "1px solid #E7DCC8", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div>
+        <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>Libreta de asistencia · {datos.maestro?.nombre}</div>
+        <div className="bt-titulo" style={{ fontSize: 36, marginTop: 6 }}>{nombreMes}</div>
       </div>
-      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-        <input type="date" value={nuevoDia} max={hoy} onChange={(e) => setNuevoDia(e.target.value)} style={{ ...input, width: 150, padding: "7px 8px" }} />
-        <button onClick={agregarDia} disabled={!nuevoDia} style={{ ...btnO, padding: "7px 10px", fontSize: 12, opacity: nuevoDia ? 1 : 0.5 }}><Plus size={12} />Agregar día</button>
+      <div>
+        <label style={rotulo}>Grupo</label>
+        <select value={sec} onChange={(e) => cambiarGrupo(e.target.value)} style={{ ...input, background: "#fff", cursor: "pointer", fontWeight: 600 }}>
+          {datos.secciones.length === 0 && <option value="">Sin grupos asignados</option>}
+          {datos.secciones.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+        </select>
+        {s?.horario && <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>{s.horario}</div>}
+      </div>
+      <div>
+        <label style={rotulo}>Agregar día de clase</label>
+        <div style={{ display: "flex", gap: 4 }}>
+          <input type="date" value={nuevoDia} max={hoy} onChange={(e) => setNuevoDia(e.target.value)} style={{ ...input, background: "#fff", padding: "7px 8px" }} />
+          <button onClick={agregarDia} disabled={!nuevoDia} style={{ ...btnO, background: "#fff", padding: "7px 10px", fontSize: 12, opacity: nuevoDia ? 1 : 0.5 }}><Plus size={12} />Agregar</button>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {[["Alumnos", alumnos.length], ["Clases", dias.length]].map(([t, v]) => (
+          <div key={t} style={{ flex: 1, background: "#fff", border: "1px solid #E7DCC8", borderRadius: 8, padding: "8px 10px" }}>
+            <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" }}>{t}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#1E293B" }}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 12, color: "#475569", display: "grid", gap: 4 }}>
+        {ESTADOS_ASIS.map((e) => <div key={e.v}><strong style={{ color: e.c, fontSize: 14, display: "inline-block", width: 18 }}>{e.k}</strong>{e.l}</div>)}
+        <div style={{ color: "#94A3B8", fontSize: 11, marginTop: 2 }}>Toca una casilla para cambiarla. “✓ todos” marca presentes a los que faltan.</div>
       </div>
     </div>
+  );
 
-    {/* Libreta */}
-    <div style={{ ...card, padding: 0, overflow: "hidden", background: "#FFFDF8", border: "1px solid #E7DCC8" }}>
-      <div style={{ padding: "12px 16px", borderBottom: "2px solid #EA580C", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6, background: "#fff" }}>
-        <div>
-          <div style={{ fontSize: 11, color: "#94A3B8", textTransform: "uppercase", letterSpacing: 1, fontWeight: 700 }}>Registro de asistencia</div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: "#1E293B" }}>{s?.nombre || "—"} <span style={{ fontWeight: 400, color: "#64748B", fontSize: 13 }}>{s?.horario ? `· ${s.horario}` : ""}</span></div>
-        </div>
-        <div style={{ textAlign: "right", fontSize: 12, color: "#64748B" }}>
-          <div>Docente: <strong style={{ color: "#1E293B" }}>{datos.maestro?.nombre}</strong></div>
-          <div>{nombreMes} · {alumnos.length} alumnos</div>
-        </div>
-      </div>
+  // Hoja derecha: la cuadrícula de la libreta
+  const hojaDer = (
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "#FFFEF9" }}>
+      <div style={{ flex: 1, minHeight: escritorio ? 440 : 260 }}>
       {alumnos.length === 0 ? <Vacio>No hay alumnos en este grupo.</Vacio> : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 13, minWidth: "100%" }}>
             <thead>
               <tr>
-                <th style={{ position: "sticky", left: 0, zIndex: 2, background: "#FFF7ED", textAlign: "left", padding: "8px 10px", borderRight: "2px solid #E7DCC8", borderBottom: "2px solid #E7DCC8", minWidth: window.innerWidth > 600 ? 190 : 130, fontSize: 11, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.5 }}>N.º · Alumno</th>
+                <th style={{ position: "sticky", left: 0, zIndex: 2, background: "#FFF7ED", textAlign: "left", padding: "8px 10px", borderRight: "2px solid #E7DCC8", borderBottom: "2px solid #E7DCC8", minWidth: window.innerWidth > 600 ? 180 : 130, fontSize: 11, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.5 }}>N.º · Alumno</th>
                 {dias.map((d) => { const dt = new Date(d + "T12:00:00"); const esHoy = d === hoy; return (
                   <th key={d} style={{ ...celdaBase, borderBottom: "2px solid #E7DCC8", background: esHoy ? "#FFEDD5" : "#FFF7ED", minWidth: 44, padding: "4px 2px" }}>
                     <div style={{ fontSize: 10, color: "#9A3412", fontWeight: 600 }}>{DIAS_SEM[dt.getDay()]}</div>
@@ -430,12 +465,30 @@ function Asistencia({ datos, maestroId, avisar }) {
           </table>
         </div>
       )}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 16px", background: "#fff", borderTop: "1px solid #E7DCC8", flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: 12, fontSize: 11, color: "#64748B", flexWrap: "wrap" }}>
-          {ESTADOS_ASIS.map((e) => <span key={e.v}><strong style={{ color: e.c, fontSize: 13 }}>{e.k}</strong> {e.l}</span>)}
-          <span>· Toca una casilla para cambiarla</span>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 16px", background: "rgba(255,255,255,.85)", borderTop: "1px solid #E7DCC8", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, color: "#94A3B8", minWidth: 70 }}>{cambios.length ? `${cambios.length} sin guardar` : ""}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button onClick={() => cambiarMes(-1)} title="Mes anterior" style={redondo(false)}><ChevronLeft size={18} /></button>
+          <span style={{ fontSize: 12, color: "#64748B", minWidth: 110, textAlign: "center", fontWeight: 600 }}>{nombreMes}</span>
+          <button onClick={() => !enMesActual && cambiarMes(1)} disabled={enMesActual} title="Mes siguiente" style={redondo(enMesActual)}><ChevronRight size={18} /></button>
         </div>
-        <button onClick={guardar} disabled={guardando || !cambios.length} style={{ ...btn(), opacity: guardando || !cambios.length ? 0.5 : 1 }}><Save size={15} />{guardando ? "Guardando…" : cambios.length ? `Guardar (${cambios.length})` : "✓ Guardado"}</button>
+        <button onClick={guardar} disabled={guardando || !cambios.length} style={{ ...btn(), opacity: guardando || !cambios.length ? 0.5 : 1 }}><Save size={15} />{guardando ? "Guardando…" : cambios.length ? `Guardar (${cambios.length})` : "✓ Guardada"}</button>
+      </div>
+    </div>
+  );
+
+  return (<div>
+    <style>{ESTILOS_LIBRO}</style>
+    <div style={{ display: "flex", marginBottom: 14 }}>
+      <button onClick={() => { if (cambios.length && !confirm("Tienes cambios sin guardar. ¿Cerrar la libreta sin guardar?")) return; setMarcas(guardado); setCerrada(true); }} style={btnO}><BookOpen size={14} />Cerrar (ver portada)</button>
+    </div>
+    <div ref={marcoRef} style={{ background: "#1E293B", borderRadius: 14, padding: escritorio ? 12 : 6, boxShadow: "0 24px 50px rgba(15,23,42,.25)", position: "relative", perspective: 2400 }}>
+      {capa}
+      <div ref={libroRef} style={{ display: "flex", flexDirection: escritorio ? "row" : "column", borderRadius: 8, overflow: "hidden", background: "#FFFEF9", position: "relative" }}>
+        {hojaIzq}
+        {escritorio && <div style={{ width: 18, background: "linear-gradient(to right, rgba(0,0,0,.12), rgba(0,0,0,0) 40%, rgba(0,0,0,0) 60%, rgba(0,0,0,.10))", flexShrink: 0 }} />}
+        {hojaDer}
       </div>
     </div>
   </div>);
