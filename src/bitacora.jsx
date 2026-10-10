@@ -224,6 +224,23 @@ const EDITOR_SQL = (() => { const ref = (String(supabase.supabaseUrl || "").matc
 
 const ESTILOS = `
 @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap');
+@keyframes bt-abrir { 0% { transform: rotateY(0) } 100% { transform: rotateY(-115deg); opacity: 0 } }
+.bt-cuero { position: relative; aspect-ratio: 3 / 4; border-radius: 6px 16px 16px 6px; overflow: hidden; cursor: pointer; transform-origin: left center;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(255,214,170,.20), transparent 55%),
+    radial-gradient(ellipse at 80% 90%, rgba(0,0,0,.35), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .32 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.045' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .1 0 0 0 0 .05 0 0 0 0 0 0 0 0 .5 -.1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)'/%3E%3C/svg%3E"),
+    linear-gradient(135deg, #7A4526 0%, #6A3A1F 45%, #55301A 100%);
+  box-shadow: inset 0 0 40px rgba(0,0,0,.45), inset 0 0 4px rgba(0,0,0,.6), 0 26px 50px rgba(30,15,5,.45), 0 4px 10px rgba(0,0,0,.3) }
+.bt-cuero:hover { filter: brightness(1.03) }
+.bt-cuero.abriendo { animation: bt-abrir .75s cubic-bezier(.5,0,.4,1) forwards }
+.bt-lomo { position: absolute; left: 0; top: 0; bottom: 0; width: 34px; background: linear-gradient(to right, rgba(0,0,0,.45), rgba(0,0,0,.15) 60%, rgba(255,220,180,.10) 85%, rgba(0,0,0,.35)); box-shadow: 2px 0 3px rgba(0,0,0,.25) }
+.bt-costura { position: absolute; inset: 16px 16px 16px 48px; border: 2px dashed rgba(236,200,150,.55); border-radius: 4px 10px 10px 4px; pointer-events: none }
+.bt-quemado { color: #2A1206; text-shadow: 0 1px 0 rgba(255,215,170,.22), 0 0 2px rgba(40,12,2,.9), 0 0 7px rgba(110,45,10,.55); }
+.bt-sello { width: 46%; aspect-ratio: 1; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 3px 8px rgba(0,0,0,.55), inset 0 -2px 3px rgba(255,215,170,.18), 0 1px 0 rgba(255,215,170,.15) }
+.bt-sello img { width: 82%; height: 82%; object-fit: contain; filter: grayscale(1) contrast(1.8) sepia(1) saturate(1.6) brightness(1.08); mix-blend-mode: multiply; opacity: .92; border-radius: 50% }
+.bt-liga { position: absolute; right: 30px; top: -2px; bottom: -2px; width: 12px; background: linear-gradient(to right, #1B0F08, #3A2416 50%, #1B0F08); box-shadow: -2px 0 4px rgba(0,0,0,.35), 2px 0 4px rgba(0,0,0,.35) }
 @keyframes bt-vuelta { from { transform: rotateY(0) } to { transform: rotateY(-180deg) } }
 @keyframes bt-vuelta-atras { from { transform: rotateY(0) } to { transform: rotateY(180deg) } }
 @keyframes bt-entra { from { transform: rotateY(-180deg) } to { transform: rotateY(0) } }
@@ -311,11 +328,37 @@ function documentoBitacora(paginas, maestroNombre, secciones) {
 // ════════════════════════════════════════════════════════════
 //  FLIPBOOK
 // ════════════════════════════════════════════════════════════
+function PortadaCuero({ nombre, anio, abriendo, onAbrir, etiqueta }) {
+  return (
+    <div style={{ maxWidth: 420, margin: "6px auto 0", perspective: 1800 }}>
+      <div className={"bt-cuero" + (abriendo ? " abriendo" : "")} onClick={onAbrir} role="button" title={etiqueta}>
+        <div className="bt-lomo" />
+        <div className="bt-liga" />
+        <div className="bt-costura" />
+        <div style={{ position: "absolute", inset: "34px 40px 34px 64px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", textAlign: "center" }}>
+          <div className="bt-quemado" style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: "clamp(12px, 3.4vw, 15px)", letterSpacing: "clamp(2px, 1vw, 6px)", fontWeight: 700, textTransform: "uppercase", marginTop: 6 }}>Bitácora de clases</div>
+          <div className="bt-sello"><img src={LOGO_SEEDS} alt="Seeds" /></div>
+          <div>
+            <div className="bt-quemado" style={{ fontFamily: "Caveat, 'Segoe Print', cursive", fontSize: "clamp(34px, 9vw, 50px)", fontWeight: 700, lineHeight: 1.05 }}>{nombre}</div>
+            <div className="bt-quemado" style={{ width: 120, height: 2, margin: "10px auto 8px", background: "#2A1206", opacity: 0.75 }} />
+            <div className="bt-quemado" style={{ fontFamily: "Georgia, serif", fontSize: "clamp(10px, 2.8vw, 12px)", letterSpacing: "clamp(1px, .6vw, 3px)", textTransform: "uppercase", fontWeight: 700 }}>Seeds English School · {anio}</div>
+          </div>
+        </div>
+      </div>
+      {etiqueta && <div style={{ textAlign: "center", marginTop: 16 }}>
+        <button onClick={onAbrir} style={{ ...btn(), padding: "10px 18px" }}><BookOpen size={15} />{etiqueta}</button>
+      </div>}
+    </div>
+  );
+}
+
 export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   const [paginas, setPaginas] = useState(null); // null = cargando
   const [noActivada, setNoActivada] = useState(false);
   const [fecha, setFecha] = useState(null);      // página abierta
   const [borrador, setBorrador] = useState({ titulo: "", contenido: "", stickers: [], seccion_id: "" });
+  const [cerrada, setCerrada] = useState(true);   // se ve la portada de cuero
+  const [abriendo, setAbriendo] = useState(false);
   const [vuelta, setVuelta] = useState(null);   // hoja que se está dando vuelta
   const marcoRef = useRef(null), libroRef = useRef(null), dorsoRef = useRef(null), frenteRef = useRef(null), tVuelta = useRef([]);
   useEffect(() => () => tVuelta.current.forEach(clearTimeout), []);
@@ -336,7 +379,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     const ultima = (data || []).at(-1)?.fecha;
     setFecha((f) => abrir || f || (editable ? hoyISO() : ultima) || null);
   }, [maestro?.id, editable]);
-  useEffect(() => { setFecha(null); setPaginas(null); cargar(); }, [maestro?.id]);
+  useEffect(() => { setFecha(null); setPaginas(null); setCerrada(true); setAbriendo(false); cargar(); }, [maestro?.id]);
 
   const actual = paginas?.find((p) => p.fecha === fecha) || null;
   useEffect(() => {
@@ -477,23 +520,26 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   // ── Barra superior ──
   const barra = (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
+      {!cerrada && <button onClick={() => { setAbriendo(false); setCerrada(true); }} style={btnO}><BookOpen size={14} />Cerrar (ver portada)</button>}
       <span style={{ flex: 1 }} />
       <button onClick={descargarPDF} disabled={generando} style={{ ...btn(), opacity: generando ? 0.6 : 1 }}><Download size={14} />{generando ? "Generando…" : "Descargar PDF"}</button>
       <button onClick={imprimir} style={btnO}><Printer size={14} />Imprimir</button>
     </div>
   );
 
-  // ── Sin páginas: portada ──
-  if (!fecha) return (<div>
+  // ── Portada de cuero (cerrada o sin páginas) ──
+  const abrir = () => {
+    if (abriendo) return;
+    if (!fecha && !editable) return;
+    setAbriendo(true);
+    setTimeout(() => { setCerrada(false); setAbriendo(false); if (!fecha) setFecha(hoyISO()); }, 720);
+  };
+  if (cerrada || !fecha) return (<div>
     <style>{ESTILOS}</style>
     {barra}
-    <div style={{ maxWidth: 520, margin: "0 auto", background: "linear-gradient(135deg,#1E293B,#334155)", borderRadius: "6px 18px 18px 6px", padding: "48px 30px", textAlign: "center", color: "#fff", boxShadow: "inset 10px 0 0 #0F172A, 0 20px 40px rgba(15,23,42,.25)" }}>
-      <div style={{ background: "#fff", borderRadius: 16, width: 120, height: 120, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center" }}><img src={LOGO_SEEDS} alt="Seeds" style={{ width: 100, height: 100, objectFit: "contain" }} /></div>
-      <div className="bt-titulo" style={{ color: "#FDBA74", fontSize: 44, marginTop: 18 }}>Bitácora de clases</div>
-      <div style={{ fontSize: 17, fontWeight: 700, marginTop: 4 }}>{maestro?.nombre}</div>
-      <div style={{ fontSize: 13, color: "#CBD5E1", marginTop: 14 }}>{editable ? "Todavía no hay páginas. Elige la fecha de tu clase arriba para escribir la primera." : "Este docente todavía no ha escrito en su bitácora."}</div>
-      {editable && <button onClick={() => ir(hoyISO())} style={{ ...btn(), marginTop: 18 }}><BookOpen size={15} />Escribir la página de hoy</button>}
-    </div>
+    <PortadaCuero nombre={maestro?.nombre || ""} anio={new Date().getFullYear()} abriendo={abriendo} onAbrir={abrir}
+      etiqueta={fecha ? `Abrir bitácora · ${guardadas.length} ${guardadas.length === 1 ? "página" : "páginas"}` : editable ? "Escribir la primera página" : null} />
+    {!fecha && !editable && <div style={{ textAlign: "center", fontSize: 13, color: "#64748B", marginTop: 14 }}>Este docente todavía no ha escrito en su bitácora.</div>}
   </div>);
 
   // ── Página abierta ──
