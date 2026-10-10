@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
 import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
-import { Bitacora, AdminBitacoras, PortadaCuero, useVueltaHoja, ESTILOS_LIBRO } from "./bitacora";
+import { Bitacora, AdminBitacoras, PortadaCuero, useVueltaHoja, ESTILOS_LIBRO, ComboMaestros } from "./bitacora";
 import {
   LogOut, Users, BookOpen, Check, X, Menu, Send, Home, ClipboardList,
   MessageSquare, FileText, Phone, Plus, Trash2, RefreshCw, Save, Inbox, KeyRound, UserCheck, ChevronLeft, ChevronRight,
@@ -290,7 +290,7 @@ const ORDEN_ASIS = ["presente", "ausente", "tarde", "justificado"];
 const fechaClase = (f) => { if (!f) return ""; const t = new Date(f + "T12:00:00").toLocaleDateString("es-HN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 const diaAntes = (f) => { const d = new Date(f + "T12:00:00"); d.setDate(d.getDate() - 1); return d.toLocaleDateString("en-CA"); };
 
-function Asistencia({ datos, maestroId, avisar }) {
+function Asistencia({ datos, maestroId, avisar, editable = true }) {
   const hoy = hoyISO();
   const [sec, setSec] = useState(datos.secciones[0]?.id || "");
   const [registros, setRegistros] = useState(null); // fecha -> { alumno_id: estado } (lo guardado)
@@ -316,6 +316,7 @@ function Asistencia({ datos, maestroId, avisar }) {
     const r = {};
     todos.forEach((x) => { (r[x.fecha] = r[x.fecha] || {})[x.alumno_id] = x.estado; });
     setRegistros(r);
+    if (!editable) setFecha((f) => (r[f] ? f : Object.keys(r).sort().at(-1) || hoy));
   }, [sec]);
   useEffect(() => { setRegistros(null); cargar(); }, [cargar]);
 
@@ -344,7 +345,7 @@ function Asistencia({ datos, maestroId, avisar }) {
     pasarHoja("adelante");
     setSec(v); setFecha(hoy);
   };
-  const marcar = (aid, est) => setMarcas((m) => ({ ...m, [aid]: m[aid] === est ? "" : est }));
+  const marcar = (aid, est) => editable && setMarcas((m) => ({ ...m, [aid]: m[aid] === est ? "" : est }));
   const todosPresentes = () => setMarcas((m) => { const n = { ...m }; alumnos.forEach((a) => { if (!n[a.id]) n[a.id] = "presente"; }); return n; });
 
   const guardar = async () => {
@@ -388,7 +389,8 @@ function Asistencia({ datos, maestroId, avisar }) {
   if (cerrada) return (<div>
     <style>{ESTILOS_LIBRO}</style>
     <PortadaCuero titulo="Libreta de asistencia" tono="naranja" nombre={datos.maestro?.nombre || ""} anio={new Date().getFullYear()} abriendo={abriendo} onAbrir={abrir}
-      etiqueta={`Abrir libreta · ${datos.secciones.length} ${datos.secciones.length === 1 ? "grupo" : "grupos"}`} />
+      etiqueta={datos.secciones.length ? `Abrir libreta · ${datos.secciones.length} ${datos.secciones.length === 1 ? "grupo" : "grupos"}` : null} />
+    {!datos.secciones.length && <div style={{ textAlign: "center", fontSize: 13, color: "#64748B", marginTop: 14 }}>Este docente no tiene grupos asignados.</div>}
   </div>);
 
   const cuenta = (e) => alumnos.filter((a) => marcas[a.id] === e).length;
@@ -403,11 +405,11 @@ function Asistencia({ datos, maestroId, avisar }) {
         <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>Libreta de asistencia · {datos.maestro?.nombre}</div>
         <div className="bt-titulo" style={{ fontSize: 32, marginTop: 6 }}>{fechaClase(fechaPag || fecha)}</div>
       </div>
-      <div>
+      {editable && <div>
         <label style={rotulo}>Fecha de la clase *</label>
         <input type="date" required value={fechaPag} max={hoy} onChange={(e) => setFechaPag(e.target.value || fecha)} style={{ ...input, background: "#fff", fontWeight: 600 }} />
         {fechaPag !== fecha && <div style={{ fontSize: 11, color: "#9A3412", marginTop: 3 }}>Al guardar, esta clase quedará en la nueva fecha.</div>}
-      </div>
+      </div>}
       <div>
         <label style={rotulo}>Grupo</label>
         <select value={sec} onChange={(e) => cambiarGrupo(e.target.value)} style={{ ...input, background: "#fff", cursor: "pointer", fontWeight: 600 }}>
@@ -425,7 +427,7 @@ function Asistencia({ datos, maestroId, avisar }) {
         ); })}
       </div>
       <div style={{ fontSize: 12, color: sinMarcar ? "#9A3412" : "#059669", fontWeight: 600 }}>{sinMarcar ? `Faltan ${sinMarcar} por marcar` : alumnos.length ? "✓ Todos marcados" : ""}</div>
-      <div style={{ fontSize: 11, color: "#94A3B8" }}>{registros === null ? "Cargando…" : hojaGuardada ? `Clase ${pos + 1} de ${fechas.length}` : "Clase nueva (sin guardar)"}</div>
+      <div style={{ fontSize: 11, color: "#94A3B8" }}>{registros === null ? "Cargando…" : hojaGuardada ? `Clase ${pos + 1} de ${fechas.length}` : editable ? "Clase nueva (sin guardar)" : "Este grupo no tiene asistencia registrada."}</div>
     </div>
   );
 
@@ -434,10 +436,10 @@ function Asistencia({ datos, maestroId, avisar }) {
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "#FFFEF9" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: "2px solid #E7DCC8", background: "rgba(255,247,237,.9)", flexWrap: "wrap" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.5 }}>{alumnos.length} {alumnos.length === 1 ? "alumno" : "alumnos"}</div>
-        {alumnos.length > 0 && <button onClick={todosPresentes} disabled={!sinMarcar} style={{ ...btnO, background: "#fff", padding: "6px 12px", fontSize: 12, color: "#059669", borderColor: "#A7F3D0", fontWeight: 700, opacity: sinMarcar ? 1 : 0.5 }}><Check size={13} />Todos presentes</button>}
+        {editable && alumnos.length > 0 && <button onClick={todosPresentes} disabled={!sinMarcar} style={{ ...btnO, background: "#fff", padding: "6px 12px", fontSize: 12, color: "#059669", borderColor: "#A7F3D0", fontWeight: 700, opacity: sinMarcar ? 1 : 0.5 }}><Check size={13} />Todos presentes</button>}
       </div>
       <div style={{ flex: 1, minHeight: escritorio ? 400 : 240 }}>
-        {alumnos.length === 0 ? <Vacio>No hay alumnos en este grupo.</Vacio> : alumnos.map((a, i) => {
+        {!editable && registros !== null && !hojaGuardada ? <Vacio>Este grupo todavía no tiene asistencia registrada.</Vacio> : alumnos.length === 0 ? <Vacio>No hay alumnos en este grupo.</Vacio> : alumnos.map((a, i) => {
           const actual = marcas[a.id] || ""; const cambiado = (guardadoHoja[a.id] || "") !== actual;
           return (
             <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 16px", borderBottom: "1px solid #EDE4D3", flexWrap: escritorio ? "nowrap" : "wrap", background: cambiado ? "rgba(254,243,199,.6)" : "transparent" }}>
@@ -448,8 +450,8 @@ function Asistencia({ datos, maestroId, avisar }) {
               </div>
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                 {ORDEN_ASIS.map((v) => { const e = ESTADOS_ASIS.find((x) => x.v === v); const on = actual === v; return (
-                  <button key={v} onClick={() => marcar(a.id, v)} title={on ? "Toca otra vez para quitar" : e.l}
-                    style={{ padding: "6px 11px", borderRadius: 20, border: `1.5px solid ${on ? e.c : "#E2E8F0"}`, background: on ? e.c : "#fff", color: on ? "#fff" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minWidth: 74 }}>{e.l}</button>
+                  <button key={v} onClick={() => marcar(a.id, v)} disabled={!editable} title={!editable ? e.l : on ? "Toca otra vez para quitar" : e.l}
+                    style={{ cursor: editable ? "pointer" : "default", opacity: !editable && !on ? 0.45 : 1, padding: "6px 11px", borderRadius: 20, border: `1.5px solid ${on ? e.c : "#E2E8F0"}`, background: on ? e.c : "#fff", color: on ? "#fff" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minWidth: 74 }}>{e.l}</button>
                 ); })}
               </div>
             </div>
@@ -457,15 +459,15 @@ function Asistencia({ datos, maestroId, avisar }) {
         })}
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 16px", background: "rgba(255,255,255,.85)", borderTop: "1px solid #E7DCC8", flexWrap: "wrap" }}>
-        <button onClick={borrarClase} style={{ ...btnO, color: "#DC2626", borderColor: "#FECACA", padding: "6px 10px", fontSize: 12 }}><Trash2 size={13} />{hojaGuardada ? "Borrar clase" : "Limpiar"}</button>
+        {editable ? <button onClick={borrarClase} style={{ ...btnO, color: "#DC2626", borderColor: "#FECACA", padding: "6px 10px", fontSize: 12 }}><Trash2 size={13} />{hojaGuardada ? "Borrar clase" : "Limpiar"}</button> : <span />}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <button onClick={() => ir(fechas[pos - 1], "atras")} disabled={pos <= 0} title="Clase anterior" style={redondo(pos <= 0)}><ChevronLeft size={18} /></button>
           <span style={{ fontSize: 12, color: "#64748B", minWidth: 54, textAlign: "center" }}>{pos + 1} / {fechas.length}</span>
-          {enUltima && hojaGuardada
+          {editable && enUltima && hojaGuardada
             ? <button onClick={() => ir(fechaNueva(), "adelante")} title="Clase nueva" style={{ ...btnO, height: 34, padding: "0 12px", borderRadius: 17, borderColor: NAR, color: NAR, fontWeight: 700 }}><Plus size={15} />Nueva<ChevronRight size={16} /></button>
             : <button onClick={() => ir(fechas[pos + 1], "adelante")} disabled={enUltima} title="Clase siguiente" style={redondo(enUltima)}><ChevronRight size={18} /></button>}
         </div>
-        <button onClick={guardar} disabled={guardando || !cambios} style={{ ...btn(), opacity: guardando || !cambios ? 0.5 : 1 }}><Save size={15} />{guardando ? "Guardando…" : cambios ? "Guardar" : "✓ Guardada"}</button>
+        {editable ? <button onClick={guardar} disabled={guardando || !cambios} style={{ ...btn(), opacity: guardando || !cambios ? 0.5 : 1 }}><Save size={15} />{guardando ? "Guardando…" : cambios ? "Guardar" : "✓ Guardada"}</button> : <span />}
       </div>
     </div>
   );
@@ -809,8 +811,41 @@ function GridAsistencia({ secciones, alumnos: todos, setError }) {
   </div>);
 }
 
-function AdminAsistencia({ data, setError }) {
-  return <GridAsistencia secciones={data.secciones.filter((s) => s.activa !== false)} alumnos={data.alumnos} setError={setError} />;
+// Administración: la libreta de cada docente (solo lectura, como la bitácora)
+// o la tabla del mes por grupo.
+function AdminAsistencia({ data, setError, showToast }) {
+  const maestros = [...data.maestros].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const [vista, setVista] = useState("libreta");
+  const [mid, setMid] = useState(maestros[0]?.id || "");
+  const [conteo, setConteo] = useState({});
+  useEffect(() => { (async () => {
+    const { data: d, error } = await supabase.from("asistencias").select("maestro_id,seccion_id,fecha").order("fecha", { ascending: false }).limit(20000);
+    if (error) return;
+    const c = {}, visto = new Set();
+    (d || []).forEach((r) => {
+      const k = `${r.maestro_id}|${r.seccion_id}|${r.fecha}`; if (!r.maestro_id || visto.has(k)) return; visto.add(k);
+      if (!c[r.maestro_id]) c[r.maestro_id] = { n: 0, ultima: r.fecha }; c[r.maestro_id].n++;
+    });
+    setConteo(c);
+  })(); }, []);
+  const maestro = data.maestros.find((m) => m.id === mid);
+  const secciones = data.secciones.filter((s) => (maestro?.secciones_ids || []).includes(s.id));
+  const tab = (a) => ({ ...btnO, background: a ? "#FFF7ED" : "#fff", color: a ? NAR : "#64748B", borderColor: a ? "#FDBA74" : "#D1D5DB", fontWeight: a ? 700 : 400 });
+  return (<div>
+    <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+      <button onClick={() => setVista("libreta")} style={tab(vista === "libreta")}><BookOpen size={14} />Libretas de los docentes</button>
+      <button onClick={() => setVista("tabla")} style={tab(vista === "tabla")}><ClipboardList size={14} />Tabla del mes por grupo</button>
+    </div>
+    {vista === "tabla" ? <GridAsistencia secciones={data.secciones.filter((s) => s.activa !== false)} alumnos={data.alumnos} setError={setError} /> : (<>
+      <div style={{ marginBottom: 14, maxWidth: 420 }}>
+        <label style={label}>Docente</label>
+        <ComboMaestros maestros={maestros} conteo={conteo} valor={mid} onElegir={setMid} unidad={["clase", "clases", "Sin clases registradas"]} />
+      </div>
+      {maestro
+        ? <Asistencia key={mid} datos={{ maestro, secciones, alumnos: data.alumnos }} maestroId={mid} avisar={showToast} editable={false} />
+        : <div style={card}>No hay maestros registrados.</div>}
+    </>)}
+  </div>);
 }
 
 function AdminReflections({ data, setError }) {

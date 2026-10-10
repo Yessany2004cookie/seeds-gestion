@@ -663,7 +663,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
 
 // Cajita para buscar un docente escribiendo su nombre
 const sinTildes = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-function ComboMaestros({ maestros, conteo, valor, onElegir }) {
+export function ComboMaestros({ maestros, conteo, valor, onElegir, unidad = ["página", "páginas", "Sin páginas"] }) {
   const elegido = maestros.find((m) => m.id === valor);
   const [texto, setTexto] = useState(elegido?.nombre || "");
   const [abierto, setAbierto] = useState(false);
@@ -672,7 +672,7 @@ function ComboMaestros({ maestros, conteo, valor, onElegir }) {
   const busqueda = abierto && texto !== (elegido?.nombre || "") ? sinTildes(texto) : "";
   const lista = maestros.filter((m) => sinTildes(m.nombre).includes(busqueda));
   const elegir = (m) => { onElegir(m.id); setTexto(m.nombre); setAbierto(false); };
-  const info = (m) => { const c = conteo[m.id]; return c ? `${c.n} ${c.n === 1 ? "página" : "páginas"} · última ${fechaCorta(c.ultima)}` : "Sin páginas"; };
+  const info = (m) => { const c = conteo[m.id]; return c ? `${c.n} ${c.n === 1 ? unidad[0] : unidad[1]} · última ${fechaCorta(c.ultima)}` : unidad[2]; };
   return (
     <div style={{ position: "relative" }}>
       <div style={{ position: "relative" }}>
