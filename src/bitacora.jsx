@@ -333,7 +333,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   const actual = paginas?.find((p) => p.fecha === fecha) || null;
   useEffect(() => {
     const html = limpiarHtml(actual?.contenido || "");
-    setBorrador({ titulo: actual?.titulo || "", contenido: html, stickers: stickersValidos(actual?.stickers), seccion_id: actual?.seccion_id || (secciones.length === 1 ? secciones[0].id : "") });
+    setBorrador({ fecha, titulo: actual?.titulo || "", contenido: html, stickers: stickersValidos(actual?.stickers), seccion_id: actual?.seccion_id || (secciones.length === 1 ? secciones[0].id : "") });
     setSelSticker(null);
     if (editorRef.current) editorRef.current.innerHTML = html;
   }, [fecha, actual?.id, actual?.updated_at]);
@@ -344,7 +344,8 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   if (noActivada) return <AvisoActivar esAdmin={esAdmin} avisar={avisar} />;
   if (paginas === null) return <div style={{ ...card, textAlign: "center", color: "#94A3B8", fontSize: 13 }}>Cargando bitácora…</div>;
 
-  const cambios = editable && ((actual?.titulo || "") !== borrador.titulo || limpiarHtml(actual?.contenido || "") !== borrador.contenido || (actual?.seccion_id || "") !== (borrador.seccion_id || "") || JSON.stringify(stickersValidos(actual?.stickers)) !== JSON.stringify(borrador.stickers || [])) && (actual || borrador.titulo.trim() || borrador.contenido.trim() || (borrador.stickers || []).length);
+  const fechaPagina = borrador.fecha || fecha;
+  const cambios = editable && (fechaPagina !== fecha || (actual?.titulo || "") !== borrador.titulo || limpiarHtml(actual?.contenido || "") !== borrador.contenido || (actual?.seccion_id || "") !== (borrador.seccion_id || "") || JSON.stringify(stickersValidos(actual?.stickers)) !== JSON.stringify(borrador.stickers || [])) && (actual || borrador.titulo.trim() || borrador.contenido.trim() || (borrador.stickers || []).length);
   const fechas = [...new Set([...paginas.map((p) => p.fecha), ...(fecha ? [fecha] : [])])].sort();
   const pos = fechas.indexOf(fecha);
   const grupo = (id) => secciones.find((s) => s.id === id)?.nombre || "";
@@ -358,16 +359,22 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   };
   const guardar = async () => {
     if (!textoPlano(borrador.contenido) && !borrador.titulo.trim() && !(borrador.stickers || []).length) { avisar("Escribe algo en la página antes de guardar", "error"); return; }
+    const destino = fechaPagina;
+    if (!destino) { avisar("Elige la fecha de la página", "error"); return; }
+    if (destino !== fecha && paginas.some((p) => p.fecha === destino)) { avisar(`Ya hay una página el ${fechaTitulo(destino)}. Ábrela desde el índice o elige otra fecha.`, "error"); return; }
     setGuardando(true);
-    const fila = { id: `${maestro.id}_${fecha}`, maestro_id: maestro.id, seccion_id: borrador.seccion_id || null, fecha, titulo: borrador.titulo.trim() || null, contenido: limpiarHtml(borrador.contenido), stickers: stickersValidos(borrador.stickers), updated_at: new Date().toISOString() };
+    const fila = { id: `${maestro.id}_${destino}`, maestro_id: maestro.id, seccion_id: borrador.seccion_id || null, fecha: destino, titulo: borrador.titulo.trim() || null, contenido: limpiarHtml(borrador.contenido), stickers: stickersValidos(borrador.stickers), updated_at: new Date().toISOString() };
     const { error } = await supabase.from("bitacora").upsert(fila, { onConflict: "maestro_id,fecha" });
+    // Si se cambió la fecha de una página ya guardada, se quita la de la fecha anterior
+    if (!error && actual && destino !== fecha) await supabase.from("bitacora").delete().eq("id", actual.id);
     setGuardando(false);
     if (error) { avisar("No se guardó: " + error.message, "error"); return; }
-    avisar("✓ Página guardada");
-    cargar(fecha);
+    avisar(destino !== fecha ? `✓ Página guardada en ${fechaTitulo(destino)}` : "✓ Página guardada");
+    setFecha(destino);
+    cargar(destino);
   };
   const borrar = async () => {
-    if (!actual) { setBorrador({ titulo: "", contenido: "", stickers: [], seccion_id: borrador.seccion_id }); if (editorRef.current) editorRef.current.innerHTML = ""; return; }
+    if (!actual) { setBorrador({ fecha: fechaPagina, titulo: "", contenido: "", stickers: [], seccion_id: borrador.seccion_id }); if (editorRef.current) editorRef.current.innerHTML = ""; return; }
     if (!confirm(`¿Borrar la página del ${fechaTitulo(fecha)}?`)) return;
     const { error } = await supabase.from("bitacora").delete().eq("id", actual.id);
     if (error) { avisar("No se borró: " + error.message, "error"); return; }
@@ -413,11 +420,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   // ── Barra superior ──
   const barra = (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
-      {editable && <>
-        <label style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>Fecha de la clase</label>
-        <input type="date" value={fecha || ""} max={hoyISO()} onChange={(e) => ir(e.target.value)} style={{ ...input, width: 160 }} />
-        {fecha !== hoyISO() && <button onClick={() => ir(hoyISO())} style={btnO}><Plus size={13} />Hoy</button>}
-      </>}
+      {editable && fecha !== hoyISO() && <button onClick={() => ir(hoyISO())} style={btnO}><Plus size={13} />Página de hoy</button>}
       <span style={{ flex: 1 }} />
       <button onClick={descargarPDF} disabled={generando} style={{ ...btn(), opacity: generando ? 0.6 : 1 }}><Download size={14} />{generando ? "Generando…" : "Descargar PDF"}</button>
       <button onClick={imprimir} style={btnO}><Printer size={14} />Imprimir</button>
@@ -441,7 +444,12 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   const hojaIzq = (
     <div style={{ flex: escritorio ? "0 0 38%" : "none", background: "#FBF7EF", padding: "26px 22px", borderRight: escritorio ? "1px solid #E7DCC8" : "none", borderBottom: escritorio ? "none" : "1px solid #E7DCC8", display: "flex", flexDirection: "column", minWidth: 0 }}>
       <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>Bitácora · {maestro?.nombre}</div>
-      <div className="bt-titulo" style={{ fontSize: 34, marginTop: 6 }}>{fechaTitulo(fecha)}</div>
+      <div className="bt-titulo" style={{ fontSize: 34, marginTop: 6 }}>{fechaTitulo(fechaPagina)}</div>
+      {editable && <div style={{ marginTop: 8 }}>
+        <label style={{ fontSize: 11, fontWeight: 700, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.5 }}>Fecha de la clase *</label>
+        <input type="date" required value={fechaPagina} max={hoyISO()} onChange={(e) => setBorrador({ ...borrador, fecha: e.target.value || fecha })} style={{ ...input, background: "#fff", marginTop: 3, fontWeight: 600 }} />
+        {fechaPagina !== fecha && <div style={{ fontSize: 11, color: "#9A3412", marginTop: 3 }}>Al guardar, esta página quedará en la nueva fecha.</div>}
+      </div>}
       <div style={{ marginTop: 10 }}>
         {editable ? (
           <select value={borrador.seccion_id || ""} onChange={(e) => setBorrador({ ...borrador, seccion_id: e.target.value })} style={{ ...input, background: "#fff", cursor: "pointer" }}>
@@ -482,10 +490,15 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
           </>
         : (borrador.contenido ? <div className="bt-texto" style={{ flex: 1, minHeight: escritorio ? 440 : 300, whiteSpace: "normal" }} dangerouslySetInnerHTML={{ __html: borrador.contenido }} /> : <div className="bt-texto" style={{ flex: 1, minHeight: escritorio ? 440 : 300 }}><span style={{ color: "#94A3B8", fontStyle: "italic" }}>{(borrador.stickers || []).length ? "" : "Página en blanco."}</span></div>)}
       </div>
-      {editable && <div style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 16px", background: "rgba(255,255,255,.85)", borderTop: "1px solid #E7DCC8", flexWrap: "wrap" }}>
-        <button onClick={borrar} style={{ ...btnO, color: "#DC2626", borderColor: "#FECACA", padding: "6px 10px", fontSize: 12 }}><Trash2 size={13} />{actual ? "Borrar página" : "Limpiar"}</button>
-        <button onClick={guardar} disabled={guardando || !cambios} style={{ ...btn(), opacity: guardando || !cambios ? 0.5 : 1 }}><Save size={14} />{guardando ? "Guardando…" : cambios ? "Guardar página" : "✓ Guardada"}</button>
-      </div>}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 16px", background: "rgba(255,255,255,.85)", borderTop: "1px solid #E7DCC8", flexWrap: "wrap" }}>
+        {editable ? <button onClick={borrar} style={{ ...btnO, color: "#DC2626", borderColor: "#FECACA", padding: "6px 10px", fontSize: 12 }}><Trash2 size={13} />{actual ? "Borrar página" : "Limpiar"}</button> : <span />}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button onClick={() => ir(fechas[pos - 1], "atras")} disabled={pos <= 0} title="Página anterior" style={{ ...btnO, width: 34, height: 34, padding: 0, justifyContent: "center", borderRadius: "50%", opacity: pos <= 0 ? 0.35 : 1, cursor: pos <= 0 ? "default" : "pointer" }}><ChevronLeft size={18} /></button>
+          <span style={{ fontSize: 12, color: "#64748B", minWidth: 54, textAlign: "center" }}>{pos + 1} / {fechas.length}</span>
+          <button onClick={() => ir(fechas[pos + 1], "adelante")} disabled={pos >= fechas.length - 1} title="Página siguiente" style={{ ...btnO, width: 34, height: 34, padding: 0, justifyContent: "center", borderRadius: "50%", opacity: pos >= fechas.length - 1 ? 0.35 : 1, cursor: pos >= fechas.length - 1 ? "default" : "pointer" }}><ChevronRight size={18} /></button>
+        </div>
+        {editable ? <button onClick={guardar} disabled={guardando || !cambios} style={{ ...btn(), opacity: guardando || !cambios ? 0.5 : 1 }}><Save size={14} />{guardando ? "Guardando…" : cambios ? "Guardar página" : "✓ Guardada"}</button> : <span />}
+      </div>
     </div>
   );
 
@@ -493,7 +506,6 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     <style>{ESTILOS}</style>
     {barra}
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      {escritorio && <button onClick={() => ir(fechas[pos - 1], "atras")} disabled={pos <= 0} title="Página anterior" style={{ ...btnO, borderRadius: "50%", width: 42, height: 42, justifyContent: "center", padding: 0, opacity: pos <= 0 ? 0.3 : 1 }}><ChevronLeft size={20} /></button>}
       <div style={{ flex: 1, minWidth: 0, background: "#1E293B", borderRadius: 14, padding: escritorio ? 12 : 6, boxShadow: "0 24px 50px rgba(15,23,42,.25)" }}>
         <div key={`${fecha}-${giro}`} className={giro ? (dir === "atras" ? "bt-pasar-atras" : "bt-pasar") : ""} style={{ display: "flex", flexDirection: escritorio ? "row" : "column", borderRadius: 8, overflow: "hidden", boxShadow: escritorio ? "inset 0 0 0 1px #E7DCC8" : "none", background: "#FFFEF9", position: "relative" }}>
           {hojaIzq}
@@ -501,12 +513,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
           {hojaDer}
         </div>
       </div>
-      {escritorio && <button onClick={() => ir(fechas[pos + 1], "adelante")} disabled={pos >= fechas.length - 1} title="Página siguiente" style={{ ...btnO, borderRadius: "50%", width: 42, height: 42, justifyContent: "center", padding: 0, opacity: pos >= fechas.length - 1 ? 0.3 : 1 }}><ChevronRight size={20} /></button>}
     </div>
-    {!escritorio && <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10 }}>
-      <button onClick={() => ir(fechas[pos - 1], "atras")} disabled={pos <= 0} style={{ ...btnO, opacity: pos <= 0 ? 0.4 : 1 }}><ChevronLeft size={16} />Anterior</button>
-      <button onClick={() => ir(fechas[pos + 1], "adelante")} disabled={pos >= fechas.length - 1} style={{ ...btnO, opacity: pos >= fechas.length - 1 ? 0.4 : 1 }}>Siguiente<ChevronRight size={16} /></button>
-    </div>}
 
     {pdf && <div onClick={() => { setTimeout(() => URL.revokeObjectURL(pdf.url), 60000); setPdf(null); }} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 24, width: "100%", maxWidth: 380, textAlign: "center" }}>
