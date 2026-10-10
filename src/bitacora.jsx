@@ -348,6 +348,16 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   const cambios = editable && (fechaPagina !== fecha || (actual?.titulo || "") !== borrador.titulo || limpiarHtml(actual?.contenido || "") !== borrador.contenido || (actual?.seccion_id || "") !== (borrador.seccion_id || "") || JSON.stringify(stickersValidos(actual?.stickers)) !== JSON.stringify(borrador.stickers || [])) && (actual || borrador.titulo.trim() || borrador.contenido.trim() || (borrador.stickers || []).length);
   const fechas = [...new Set([...paginas.map((p) => p.fecha), ...(fecha ? [fecha] : [])])].sort();
   const pos = fechas.indexOf(fecha);
+  // Hoja nueva al final del cuaderno: hoy, o el día siguiente a la última página
+  const ultimaGuardada = paginas.at(-1)?.fecha;
+  const fechaNueva = () => {
+    const hoy = hoyISO();
+    if (!ultimaGuardada || hoy > ultimaGuardada) return hoy;
+    const d = new Date(ultimaGuardada + "T12:00:00"); d.setDate(d.getDate() + 1);
+    return d.toLocaleDateString("en-CA");
+  };
+  const enUltima = pos >= fechas.length - 1;
+  const puedeNueva = editable && enUltima && !!actual;
   const grupo = (id) => secciones.find((s) => s.id === id)?.nombre || "";
 
   const ir = (f, hacia) => {
@@ -420,7 +430,6 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   // ── Barra superior ──
   const barra = (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
-      {editable && fecha !== hoyISO() && <button onClick={() => ir(hoyISO())} style={btnO}><Plus size={13} />Página de hoy</button>}
       <span style={{ flex: 1 }} />
       <button onClick={descargarPDF} disabled={generando} style={{ ...btn(), opacity: generando ? 0.6 : 1 }}><Download size={14} />{generando ? "Generando…" : "Descargar PDF"}</button>
       <button onClick={imprimir} style={btnO}><Printer size={14} />Imprimir</button>
@@ -447,7 +456,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
       <div className="bt-titulo" style={{ fontSize: 34, marginTop: 6 }}>{fechaTitulo(fechaPagina)}</div>
       {editable && <div style={{ marginTop: 8 }}>
         <label style={{ fontSize: 11, fontWeight: 700, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.5 }}>Fecha de la clase *</label>
-        <input type="date" required value={fechaPagina} max={hoyISO()} onChange={(e) => setBorrador({ ...borrador, fecha: e.target.value || fecha })} style={{ ...input, background: "#fff", marginTop: 3, fontWeight: 600 }} />
+        <input type="date" required value={fechaPagina} onChange={(e) => setBorrador({ ...borrador, fecha: e.target.value || fecha })} style={{ ...input, background: "#fff", marginTop: 3, fontWeight: 600 }} />
         {fechaPagina !== fecha && <div style={{ fontSize: 11, color: "#9A3412", marginTop: 3 }}>Al guardar, esta página quedará en la nueva fecha.</div>}
       </div>}
       <div style={{ marginTop: 10 }}>
@@ -495,7 +504,9 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <button onClick={() => ir(fechas[pos - 1], "atras")} disabled={pos <= 0} title="Página anterior" style={{ ...btnO, width: 34, height: 34, padding: 0, justifyContent: "center", borderRadius: "50%", opacity: pos <= 0 ? 0.35 : 1, cursor: pos <= 0 ? "default" : "pointer" }}><ChevronLeft size={18} /></button>
           <span style={{ fontSize: 12, color: "#64748B", minWidth: 54, textAlign: "center" }}>{pos + 1} / {fechas.length}</span>
-          <button onClick={() => ir(fechas[pos + 1], "adelante")} disabled={pos >= fechas.length - 1} title="Página siguiente" style={{ ...btnO, width: 34, height: 34, padding: 0, justifyContent: "center", borderRadius: "50%", opacity: pos >= fechas.length - 1 ? 0.35 : 1, cursor: pos >= fechas.length - 1 ? "default" : "pointer" }}><ChevronRight size={18} /></button>
+          {puedeNueva
+            ? <button onClick={() => ir(fechaNueva(), "adelante")} title="Página nueva" style={{ ...btnO, height: 34, padding: "0 12px", borderRadius: 17, borderColor: "#EA580C", color: "#EA580C", fontWeight: 700 }}><Plus size={15} />Nueva<ChevronRight size={16} /></button>
+            : <button onClick={() => ir(fechas[pos + 1], "adelante")} disabled={enUltima} title="Página siguiente" style={{ ...btnO, width: 34, height: 34, padding: 0, justifyContent: "center", borderRadius: "50%", opacity: enUltima ? 0.35 : 1, cursor: enUltima ? "default" : "pointer" }}><ChevronRight size={18} /></button>}
         </div>
         {editable ? <button onClick={guardar} disabled={guardando || !cambios} style={{ ...btn(), opacity: guardando || !cambios ? 0.5 : 1 }}><Save size={14} />{guardando ? "Guardando…" : cambios ? "Guardar página" : "✓ Guardada"}</button> : <span />}
       </div>
