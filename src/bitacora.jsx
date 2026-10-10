@@ -62,7 +62,7 @@ const COLORES = ["#1E293B", "#2563EB", "#DC2626", "#059669", "#EA580C", "#7C3AED
 const RESALTES = ["#FEF08A", "#BBF7D0", "#BFDBFE", "#FBCFE8", "#FED7AA"];
 
 // Barra de formato (usa el editor del navegador sobre el texto seleccionado)
-function BarraFormato({ editorRef, onCambio }) {
+function BarraFormato({ editorRef, onCambio, extra }) {
   const aplicar = (cmd, valor = null) => {
     editorRef.current?.focus();
     try { document.execCommand("styleWithCSS", false, true); } catch (e) { /* navegadores viejos */ }
@@ -103,6 +103,118 @@ function BarraFormato({ editorRef, onCambio }) {
       {boton("Lista con viñetas", <List size={15} />, "insertUnorderedList")}
       {boton("Lista numerada", <ListOrdered size={15} />, "insertOrderedList")}
       {boton("Quitar formato", <RemoveFormatting size={15} />, "removeFormat")}
+      {extra && <><span style={{ flex: 1 }} />{extra}</>}
+    </div>
+  );
+}
+
+// ── Stickers ──
+const CATEGORIAS_STICKERS = [
+  { n: "Escuela", e: ["📚", "✏️", "📝", "🎒", "🖍️", "📐", "📏", "🔬", "🧪", "🌍", "🧮", "📓", "✂️", "🖊️", "🎨", "💡", "🏫", "🔔"] },
+  { n: "¡Bien hecho!", e: ["⭐", "🌟", "✨", "🏆", "🥇", "🎖️", "🏅", "💯", "✅", "👏", "👍", "🙌", "💪", "🎯", "🚀", "🔥", "👑", "💎"] },
+  { n: "Caritas", e: ["😀", "😊", "🥰", "😍", "😎", "🤩", "🤓", "😂", "🥳", "😇", "🤗", "😴", "🤔", "😮", "🥺", "😜", "🤭", "😺"] },
+  { n: "Animalitos", e: ["🐶", "🐱", "🐼", "🐨", "🦊", "🦁", "🐯", "🐸", "🐵", "🐰", "🐻", "🐧", "🦄", "🐝", "🦋", "🐞", "🐢", "🐙", "🦉", "🐳", "🐬", "🦒", "🐘", "🦖"] },
+  { n: "Naturaleza", e: ["🌸", "🌻", "🌷", "🌺", "🌼", "🌈", "☀️", "🌙", "☁️", "❄️", "🍀", "🌵", "🌳", "🍁", "🍎", "🍓", "🍉", "🍭"] },
+  { n: "Inglés", e: ["🇺🇸", "🇬🇧", "🇨🇦", "💬", "🗣️", "🎧", "📖", "🔤", "🔠", "🎤", "🎬", "🎵", "🌎", "✈️", "🗽", "🎡"] },
+  { n: "Corazones", e: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🩷", "🤍", "💖", "💗", "💝", "💕", "💞", "💫", "🌟", "🫶"] },
+  { n: "Fiestas", e: ["🎉", "🎊", "🎈", "🎁", "🎂", "🧁", "🍰", "🎄", "🎃", "👻", "🎅", "🪅", "🎆", "🎇", "🕯️", "🍬"] },
+];
+const FRASES_STICKERS = ["Great job!", "Well done!", "Awesome!", "Excellent!", "Super!", "Keep going!", "Amazing!", "You rock!", "Good work!", "Perfect!", "Star student", "Homework", "Important!", "Remember!", "Test day", "Fun day!", "¡Bien hecho!", "¡Excelente!"];
+const ESTILOS_FRASE = [
+  { bg: "#FDE68A", c: "#92400E" }, { bg: "#BBF7D0", c: "#166534" }, { bg: "#BFDBFE", c: "#1E3A8A" },
+  { bg: "#FBCFE8", c: "#9D174D" }, { bg: "#DDD6FE", c: "#5B21B6" }, { bg: "#FED7AA", c: "#9A3412" },
+];
+// Borde blanco "recortado" + sombra (funciona en pantalla y en el PDF)
+const BORDE_STICKER = "0 0 0 #fff, 2px 2px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 0 2px 0 #fff, 0 -2px 0 #fff, 2px 0 0 #fff, -2px 0 0 #fff, 0 4px 6px rgba(0,0,0,.28)";
+const azar = (a, b) => a + Math.random() * (b - a);
+const stickersValidos = (lista) => (Array.isArray(lista) ? lista : []).filter((k) => k && (k.t === "e" || k.t === "x") && typeof k.v === "string").slice(0, 60).map((k) => ({
+  id: String(k.id || Math.random().toString(36).slice(2)), t: k.t, v: k.v.slice(0, 30), e: Math.max(0, Math.min(ESTILOS_FRASE.length - 1, Number(k.e) || 0)),
+  x: Math.max(8, Math.min(92, Number(k.x) || 50)), y: Math.max(4, Math.min(96, Number(k.y) || 50)), s: Math.max(20, Math.min(140, Number(k.s) || 46)), r: Math.max(-180, Math.min(180, Number(k.r) || 0)),
+}));
+
+// Cómo se ve un sticker (mismo diseño en pantalla y en el PDF)
+function estiloSticker(k) {
+  if (k.t === "e") return { fontSize: k.s, lineHeight: 1, textShadow: BORDE_STICKER, fontFamily: "'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif" };
+  const e = ESTILOS_FRASE[k.e] || ESTILOS_FRASE[0];
+  return { fontSize: Math.round(k.s * 0.42), fontFamily: "Caveat, 'Segoe Print', 'Comic Sans MS', cursive", fontWeight: 700, color: e.c, background: e.bg, padding: "0.15em 0.6em", borderRadius: 999, border: "3px solid #fff", boxShadow: "0 3px 8px rgba(0,0,0,.22)", whiteSpace: "nowrap" };
+}
+const htmlSticker = (k) => {
+  const st = estiloSticker(k);
+  const css = Object.entries(st).map(([a, v]) => `${a.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())}:${typeof v === "number" && a !== "lineHeight" ? v + "px" : v}`).join(";");
+  return `<span style="position:absolute;left:${k.x}%;top:${k.y}%;transform:translate(-50%,-50%) rotate(${k.r}deg);${css}">${esc(k.v)}</span>`;
+};
+
+// Capa de stickers sobre la hoja: se arrastran, crecen, giran y se quitan
+function CapaStickers({ stickers, editable, onChange, sel, setSel }) {
+  const capaRef = useRef(null);
+  const arrastrar = (e, k) => {
+    if (!editable) return;
+    e.preventDefault(); e.stopPropagation();
+    setSel(k.id);
+    const rect = capaRef.current.getBoundingClientRect();
+    const mover = (ev) => {
+      const x = Math.max(8, Math.min(92, ((ev.clientX - rect.left) / rect.width) * 100));
+      const y = Math.max(4, Math.min(96, ((ev.clientY - rect.top) / rect.height) * 100));
+      onChange((lista) => lista.map((s) => (s.id === k.id ? { ...s, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 } : s)));
+    };
+    const soltar = () => { window.removeEventListener("pointermove", mover); window.removeEventListener("pointerup", soltar); };
+    window.addEventListener("pointermove", mover);
+    window.addEventListener("pointerup", soltar);
+  };
+  const cambiar = (id, f) => onChange((lista) => lista.map((s) => (s.id === id ? f(s) : s)));
+  const mini = { width: 26, height: 26, borderRadius: "50%", border: "1px solid #E2E8F0", background: "#fff", cursor: "pointer", fontSize: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0, boxShadow: "0 2px 6px rgba(0,0,0,.15)" };
+  return (
+    <div ref={capaRef} style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 3 }}>
+      {stickers.map((k) => (
+        <div key={k.id} style={{ position: "absolute", left: `${k.x}%`, top: `${k.y}%`, transform: "translate(-50%,-50%)", pointerEvents: editable ? "auto" : "none", touchAction: "none" }}>
+          <div onPointerDown={(e) => arrastrar(e, k)} style={{ transform: `rotate(${k.r}deg)`, cursor: editable ? "grab" : "default", userSelect: "none", outline: sel === k.id ? "2px dashed #EA580C" : "none", outlineOffset: 6, borderRadius: 8, ...estiloSticker(k) }}>{k.v}</div>
+          {editable && sel === k.id && (
+            <div onPointerDown={(e) => e.stopPropagation()} style={{ position: "absolute", left: "50%", top: "100%", transform: "translateX(-50%)", marginTop: 10, display: "flex", gap: 4, background: "rgba(255,255,255,.95)", padding: 4, borderRadius: 20, boxShadow: "0 4px 12px rgba(0,0,0,.18)", whiteSpace: "nowrap" }}>
+              <button type="button" title="Más pequeño" onClick={() => cambiar(k.id, (s) => ({ ...s, s: Math.max(20, s.s - 8) }))} style={mini}>−</button>
+              <button type="button" title="Más grande" onClick={() => cambiar(k.id, (s) => ({ ...s, s: Math.min(140, s.s + 8) }))} style={mini}>+</button>
+              <button type="button" title="Girar a la izquierda" onClick={() => cambiar(k.id, (s) => ({ ...s, r: s.r - 15 }))} style={mini}>↺</button>
+              <button type="button" title="Girar a la derecha" onClick={() => cambiar(k.id, (s) => ({ ...s, r: s.r + 15 }))} style={mini}>↻</button>
+              <button type="button" title="Quitar sticker" onClick={() => { onChange((lista) => lista.filter((s) => s.id !== k.id)); setSel(null); }} style={{ ...mini, color: "#DC2626" }}>✕</button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Panel para elegir stickers
+function PanelStickers({ onAgregar, onCerrar }) {
+  const [cat, setCat] = useState(0);
+  const [estilo, setEstilo] = useState(0);
+  const frases = cat === CATEGORIAS_STICKERS.length;
+  const tab = (on) => ({ padding: "5px 10px", borderRadius: 20, border: `1px solid ${on ? NAR : "#E7DCC8"}`, background: on ? "#FFF7ED" : "#fff", color: on ? "#9A3412" : "#64748B", fontSize: 12, fontWeight: on ? 700 : 500, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" });
+  return (
+    <div style={{ position: "absolute", right: 10, top: 48, zIndex: 20, width: "min(420px, calc(100% - 20px))", background: "#fff", borderRadius: 14, boxShadow: "0 18px 40px rgba(15,23,42,.25)", border: "1px solid #E7DCC8", overflow: "hidden" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderBottom: "1px solid #F1F5F9" }}>
+        <strong style={{ fontSize: 14, color: "#1E293B" }}>✨ Stickers</strong>
+        <button type="button" onClick={onCerrar} title="Cerrar" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex" }}><X size={16} color="#64748B" /></button>
+      </div>
+      <div style={{ display: "flex", gap: 6, padding: "8px 10px", overflowX: "auto" }}>
+        {CATEGORIAS_STICKERS.map((c, i) => <button type="button" key={c.n} onClick={() => setCat(i)} style={tab(cat === i)}>{c.e[0]} {c.n}</button>)}
+        <button type="button" onClick={() => setCat(CATEGORIAS_STICKERS.length)} style={tab(frases)}>💬 Frases</button>
+      </div>
+      <div style={{ maxHeight: 230, overflowY: "auto", padding: "6px 10px 12px" }}>
+        {!frases ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(44px, 1fr))", gap: 4 }}>
+            {CATEGORIAS_STICKERS[cat].e.map((em) => <button type="button" key={em} onClick={() => onAgregar({ t: "e", v: em })} title="Pegar en la página" style={{ fontSize: 28, height: 46, border: "none", background: "transparent", borderRadius: 10, cursor: "pointer", textShadow: BORDE_STICKER }} onMouseEnter={(e) => (e.currentTarget.style.background = "#FFF7ED")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>{em}</button>)}
+          </div>
+        ) : (<>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: "#94A3B8" }}>Color:</span>
+            {ESTILOS_FRASE.map((e, i) => <button type="button" key={i} onClick={() => setEstilo(i)} style={{ width: 20, height: 20, borderRadius: "50%", background: e.bg, border: estilo === i ? `2px solid ${e.c}` : "2px solid #fff", boxShadow: "0 0 0 1px #E2E8F0", cursor: "pointer", padding: 0 }} />)}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {FRASES_STICKERS.map((f) => <button type="button" key={f} onClick={() => onAgregar({ t: "x", v: f, e: estilo })} style={{ border: "none", background: "none", cursor: "pointer", padding: 2 }}><span style={estiloSticker({ t: "x", v: f, e: estilo, s: 44 })}>{f}</span></button>)}
+          </div>
+        </>)}
+      </div>
+      <div style={{ fontSize: 11, color: "#94A3B8", padding: "0 12px 10px" }}>Toca un sticker para pegarlo. Luego arrástralo a donde quieras.</div>
     </div>
   );
 }
@@ -159,7 +271,7 @@ function documentoBitacora(paginas, maestroNombre, secciones) {
     .bt-portada h1{font-family:'Caveat','Segoe Print',cursive;font-size:56px;color:#9A3412;margin-top:18px}
     .bt-portada h2{font-size:22px;margin-top:8px}
     .bt-portada p{font-size:13px;color:#64748B;margin-top:6px}
-    .bt-pag{page-break-before:always;break-before:page;padding:6mm 2mm}
+    .bt-pag{page-break-before:always;break-before:page;padding:6mm 2mm;overflow:hidden}
     .bt-cab{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #EA580C;padding-bottom:8px;margin-bottom:12px}
     .bt-cab .f{font-size:17px;font-weight:800}
     .bt-cab .g{font-size:12px;color:#64748B}
@@ -179,8 +291,11 @@ function documentoBitacora(paginas, maestroNombre, secciones) {
     ${paginas.map((p, i) => `
       <div class="bt-pag">
         <div class="bt-cab"><div><div class="f">${esc(fechaTitulo(p.fecha))}</div>${p.seccion_id ? `<div class="g">${esc(grupo(p.seccion_id))}</div>` : ""}</div><div class="n">Página ${i + 1} de ${paginas.length}</div></div>
-        ${p.titulo ? `<div class="bt-tit">${esc(p.titulo)}</div>` : ""}
-        <div class="bt-cont">${limpiarHtml(p.contenido) || "&nbsp;"}</div>
+        <div style="position:relative">
+          ${p.titulo ? `<div class="bt-tit">${esc(p.titulo)}</div>` : ""}
+          <div class="bt-cont">${limpiarHtml(p.contenido) || "&nbsp;"}</div>
+          ${stickersValidos(p.stickers).map(htmlSticker).join("")}
+        </div>
         <div class="bt-pie">Bitácora de ${esc(maestroNombre)} · Seeds English School</div>
       </div>`).join("")}`;
   return { css, cuerpo };
@@ -193,7 +308,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   const [paginas, setPaginas] = useState(null); // null = cargando
   const [noActivada, setNoActivada] = useState(false);
   const [fecha, setFecha] = useState(null);      // página abierta
-  const [borrador, setBorrador] = useState({ titulo: "", contenido: "", seccion_id: "" });
+  const [borrador, setBorrador] = useState({ titulo: "", contenido: "", stickers: [], seccion_id: "" });
   const [dir, setDir] = useState("adelante");
   const [giro, setGiro] = useState(0);
   const [guardando, setGuardando] = useState(false);
@@ -201,6 +316,8 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   const [generando, setGenerando] = useState(false);
   const escritorio = window.innerWidth > 860;
   const editorRef = useRef(null);
+  const [panelStickers, setPanelStickers] = useState(false);
+  const [selSticker, setSelSticker] = useState(null);
 
   const cargar = useCallback(async (abrir) => {
     if (!maestro?.id) return;
@@ -216,7 +333,8 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   const actual = paginas?.find((p) => p.fecha === fecha) || null;
   useEffect(() => {
     const html = limpiarHtml(actual?.contenido || "");
-    setBorrador({ titulo: actual?.titulo || "", contenido: html, seccion_id: actual?.seccion_id || (secciones.length === 1 ? secciones[0].id : "") });
+    setBorrador({ titulo: actual?.titulo || "", contenido: html, stickers: stickersValidos(actual?.stickers), seccion_id: actual?.seccion_id || (secciones.length === 1 ? secciones[0].id : "") });
+    setSelSticker(null);
     if (editorRef.current) editorRef.current.innerHTML = html;
   }, [fecha, actual?.id, actual?.updated_at]);
   // El editor se monta después (la primera vez): ponerle el contenido
@@ -226,7 +344,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   if (noActivada) return <AvisoActivar esAdmin={esAdmin} avisar={avisar} />;
   if (paginas === null) return <div style={{ ...card, textAlign: "center", color: "#94A3B8", fontSize: 13 }}>Cargando bitácora…</div>;
 
-  const cambios = editable && ((actual?.titulo || "") !== borrador.titulo || limpiarHtml(actual?.contenido || "") !== borrador.contenido || (actual?.seccion_id || "") !== (borrador.seccion_id || "")) && (actual || borrador.titulo.trim() || borrador.contenido.trim());
+  const cambios = editable && ((actual?.titulo || "") !== borrador.titulo || limpiarHtml(actual?.contenido || "") !== borrador.contenido || (actual?.seccion_id || "") !== (borrador.seccion_id || "") || JSON.stringify(stickersValidos(actual?.stickers)) !== JSON.stringify(borrador.stickers || [])) && (actual || borrador.titulo.trim() || borrador.contenido.trim() || (borrador.stickers || []).length);
   const fechas = [...new Set([...paginas.map((p) => p.fecha), ...(fecha ? [fecha] : [])])].sort();
   const pos = fechas.indexOf(fecha);
   const grupo = (id) => secciones.find((s) => s.id === id)?.nombre || "";
@@ -239,9 +357,9 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     setFecha(f);
   };
   const guardar = async () => {
-    if (!textoPlano(borrador.contenido) && !borrador.titulo.trim()) { avisar("Escribe algo en la página antes de guardar", "error"); return; }
+    if (!textoPlano(borrador.contenido) && !borrador.titulo.trim() && !(borrador.stickers || []).length) { avisar("Escribe algo en la página antes de guardar", "error"); return; }
     setGuardando(true);
-    const fila = { id: `${maestro.id}_${fecha}`, maestro_id: maestro.id, seccion_id: borrador.seccion_id || null, fecha, titulo: borrador.titulo.trim() || null, contenido: limpiarHtml(borrador.contenido), updated_at: new Date().toISOString() };
+    const fila = { id: `${maestro.id}_${fecha}`, maestro_id: maestro.id, seccion_id: borrador.seccion_id || null, fecha, titulo: borrador.titulo.trim() || null, contenido: limpiarHtml(borrador.contenido), stickers: stickersValidos(borrador.stickers), updated_at: new Date().toISOString() };
     const { error } = await supabase.from("bitacora").upsert(fila, { onConflict: "maestro_id,fecha" });
     setGuardando(false);
     if (error) { avisar("No se guardó: " + error.message, "error"); return; }
@@ -249,7 +367,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     cargar(fecha);
   };
   const borrar = async () => {
-    if (!actual) { setBorrador({ titulo: "", contenido: "", seccion_id: borrador.seccion_id }); if (editorRef.current) editorRef.current.innerHTML = ""; return; }
+    if (!actual) { setBorrador({ titulo: "", contenido: "", stickers: [], seccion_id: borrador.seccion_id }); if (editorRef.current) editorRef.current.innerHTML = ""; return; }
     if (!confirm(`¿Borrar la página del ${fechaTitulo(fecha)}?`)) return;
     const { error } = await supabase.from("bitacora").delete().eq("id", actual.id);
     if (error) { avisar("No se borró: " + error.message, "error"); return; }
@@ -257,7 +375,13 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     cargar();
   };
 
-  const guardadas = paginas.filter((p) => textoPlano(p.contenido) || p.titulo);
+  const guardadas = paginas.filter((p) => textoPlano(p.contenido) || p.titulo || stickersValidos(p.stickers).length);
+  const setStickers = (f) => setBorrador((b) => ({ ...b, stickers: typeof f === "function" ? f(b.stickers || []) : f }));
+  const agregarSticker = (k) => {
+    const nuevo = { id: Math.random().toString(36).slice(2, 9), e: 0, s: k.t === "e" ? 52 : 46, ...k, x: Math.round(azar(55, 88)), y: Math.round(azar(12, 45)), r: Math.round(azar(-14, 14)) };
+    setStickers((l) => [...l, nuevo].slice(0, 60));
+    setSelSticker(nuevo.id);
+  };
   const descargarPDF = async () => {
     if (!guardadas.length) { avisar("Todavía no hay páginas guardadas", "error"); return; }
     setGenerando(true);
@@ -341,6 +465,12 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   );
   const hojaDer = (
     <div className="bt-renglones" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, position: "relative" }}>
+      {editable && <div style={{ position: "relative" }}>
+        <BarraFormato editorRef={editorRef} onCambio={leerEditor} extra={<button type="button" onClick={() => setPanelStickers(!panelStickers)} style={{ ...btn(panelStickers ? "#9A3412" : NAR), padding: "5px 12px", fontSize: 12, whiteSpace: "nowrap", height: 30 }}>✨ Stickers</button>} />
+        {panelStickers && <PanelStickers onAgregar={agregarSticker} onCerrar={() => setPanelStickers(false)} />}
+      </div>}
+      <div onPointerDown={() => setSelSticker(null)} style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column" }}>
+      <CapaStickers stickers={borrador.stickers || []} editable={editable} onChange={setStickers} sel={selSticker} setSel={setSelSticker} />
       <div style={{ padding: "18px 18px 0 60px" }}>
         {editable
           ? <input value={borrador.titulo} onChange={(e) => setBorrador({ ...borrador, titulo: e.target.value })} placeholder="Título de la clase…" maxLength={120} className="bt-titulo" style={{ width: "100%", border: "none", background: "transparent", outline: "none", padding: 0 }} />
@@ -348,10 +478,10 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
       </div>
       {editable
         ? <>
-            <BarraFormato editorRef={editorRef} onCambio={leerEditor} />
             <div ref={montarEditor} contentEditable suppressContentEditableWarning onInput={leerEditor} onBlur={leerEditor} data-placeholder="¿Qué hiciste hoy en clase? Temas, actividades, cómo respondieron los alumnos, tareas, pendientes…" className="bt-texto bt-renglones" style={{ flex: 1, minHeight: escritorio ? 400 : 340, outline: "none", width: "100%", boxSizing: "border-box", whiteSpace: "normal" }} />
           </>
-        : (borrador.contenido ? <div className="bt-texto" style={{ flex: 1, minHeight: escritorio ? 440 : 300, whiteSpace: "normal" }} dangerouslySetInnerHTML={{ __html: borrador.contenido }} /> : <div className="bt-texto" style={{ flex: 1, minHeight: escritorio ? 440 : 300 }}><span style={{ color: "#94A3B8", fontStyle: "italic" }}>Página en blanco.</span></div>)}
+        : (borrador.contenido ? <div className="bt-texto" style={{ flex: 1, minHeight: escritorio ? 440 : 300, whiteSpace: "normal" }} dangerouslySetInnerHTML={{ __html: borrador.contenido }} /> : <div className="bt-texto" style={{ flex: 1, minHeight: escritorio ? 440 : 300 }}><span style={{ color: "#94A3B8", fontStyle: "italic" }}>{(borrador.stickers || []).length ? "" : "Página en blanco."}</span></div>)}
+      </div>
       {editable && <div style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 16px", background: "rgba(255,255,255,.85)", borderTop: "1px solid #E7DCC8", flexWrap: "wrap" }}>
         <button onClick={borrar} style={{ ...btnO, color: "#DC2626", borderColor: "#FECACA", padding: "6px 10px", fontSize: 12 }}><Trash2 size={13} />{actual ? "Borrar página" : "Limpiar"}</button>
         <button onClick={guardar} disabled={guardando || !cambios} style={{ ...btn(), opacity: guardando || !cambios ? 0.5 : 1 }}><Save size={14} />{guardando ? "Guardando…" : cambios ? "Guardar página" : "✓ Guardada"}</button>

@@ -18,6 +18,7 @@ create table if not exists public.bitacora (
   updated_at timestamptz not null default now(),
   unique (maestro_id, fecha)
 );
+alter table public.bitacora add column if not exists stickers jsonb not null default '[]'::jsonb;
 create index if not exists idx_bitacora_maestro_fecha on public.bitacora(maestro_id, fecha);
 alter table public.bitacora enable row level security;
 
