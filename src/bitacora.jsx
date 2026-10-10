@@ -429,11 +429,11 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   const [borrador, setBorrador] = useState({ titulo: "", contenido: "", stickers: [], seccion_id: "" });
   const [cerrada, setCerrada] = useState(true);   // se ve la portada de cuero
   const [abriendo, setAbriendo] = useState(false);
-  const { marcoRef, libroRef, pasarHoja, capa } = useVueltaHoja(escritorio);
   const [guardando, setGuardando] = useState(false);
   const [pdf, setPdf] = useState(null);
   const [generando, setGenerando] = useState(false);
   const escritorio = window.innerWidth > 860;
+  const { marcoRef, libroRef, pasarHoja, capa } = useVueltaHoja(escritorio);
   const editorRef = useRef(null);
   const [panelStickers, setPanelStickers] = useState(false);
   const [selSticker, setSelSticker] = useState(null);
