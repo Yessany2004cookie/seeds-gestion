@@ -2,11 +2,11 @@
 // Cada docente tiene una página por fecha. Se puede hojear como un libro,
 // escribir lo que se hizo en clase, y descargar o imprimir todo en PDF.
 // Administración ve (sin editar) la bitácora de cada docente.
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
 import SCRIPT_BITACORA from "../supabase/bitacora.sql?raw";
-import { ChevronLeft, ChevronRight, Save, Trash2, Download, Printer, Plus, BookOpen, Eye, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Save, Trash2, Download, Printer, Plus, BookOpen, Eye, X, Bold, Italic, Underline, Strikethrough, List, ListOrdered, Highlighter, RemoveFormatting } from "lucide-react";
 
 const NAR = "#EA580C";
 const card = { background: "#fff", borderRadius: 10, border: "1px solid #E2E8F0", padding: 20, marginBottom: 16 };
@@ -17,6 +17,96 @@ const hoyISO = () => new Date().toLocaleDateString("en-CA");
 const fechaTitulo = (f) => { const t = new Date(f + "T12:00:00").toLocaleDateString("es-HN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 const fechaCorta = (f) => new Date(f + "T12:00:00").toLocaleDateString("es-HN", { day: "numeric", month: "short" });
 const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// ── Texto con formato ──
+// El contenido se guarda como HTML sencillo. Antes de mostrarlo o imprimirlo
+// se limpia: solo se permiten etiquetas y estilos de formato de texto.
+const ETIQUETAS = new Set(["B", "STRONG", "I", "EM", "U", "S", "STRIKE", "SPAN", "FONT", "BR", "DIV", "P", "MARK", "UL", "OL", "LI"]);
+const ESTILOS_OK = ["color", "background-color", "font-family", "font-size", "font-weight", "font-style", "text-decoration", "text-decoration-line"];
+const esHtml = (t) => /<[a-z][\s\S]*>/i.test(String(t || ""));
+const textoAHtml = (t) => esc(t).replace(/\n/g, "<br>");
+function limpiarHtml(html) {
+  if (!html) return "";
+  if (!esHtml(html)) return textoAHtml(html);
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  const recorrer = (nodo) => {
+    [...nodo.childNodes].forEach((n) => {
+      if (n.nodeType === 3) return;
+      if (n.nodeType !== 1 || !ETIQUETAS.has(n.tagName)) {
+        if (n.nodeType === 1 && !["SCRIPT", "STYLE", "IFRAME", "OBJECT"].includes(n.tagName)) { recorrer(n); n.replaceWith(...n.childNodes); } else n.remove();
+        return;
+      }
+      [...n.attributes].forEach((a) => {
+        if (a.name === "style") {
+          const ok = a.value.split(";").map((x) => x.trim()).filter((x) => ESTILOS_OK.includes(x.split(":")[0].trim().toLowerCase()) && !/url\(|expression/i.test(x));
+          if (ok.length) n.setAttribute("style", ok.join("; ")); else n.removeAttribute("style");
+        } else if (!(n.tagName === "FONT" && ["color", "face", "size"].includes(a.name))) n.removeAttribute(a.name);
+      });
+      recorrer(n);
+    });
+  };
+  const raiz = doc.body.firstChild;
+  recorrer(raiz);
+  return raiz.innerHTML;
+}
+const textoPlano = (html) => { if (!esHtml(html)) return String(html || ""); const d = new DOMParser().parseFromString(html, "text/html"); return (d.body.innerText || d.body.textContent || "").trim(); };
+
+const FUENTES = [
+  { l: "Clásica", v: "Georgia, 'Times New Roman', serif" },
+  { l: "Moderna", v: "'Segoe UI', Arial, sans-serif" },
+  { l: "A mano", v: "Caveat, 'Segoe Print', cursive" },
+  { l: "Escolar", v: "'Comic Sans MS', 'Comic Neue', cursive" },
+  { l: "Máquina", v: "'Courier New', Courier, monospace" },
+];
+const TAMANOS = [{ l: "Pequeña", v: "2" }, { l: "Normal", v: "3" }, { l: "Grande", v: "5" }, { l: "Muy grande", v: "6" }];
+const COLORES = ["#1E293B", "#2563EB", "#DC2626", "#059669", "#EA580C", "#7C3AED", "#DB2777", "#92400E"];
+const RESALTES = ["#FEF08A", "#BBF7D0", "#BFDBFE", "#FBCFE8", "#FED7AA"];
+
+// Barra de formato (usa el editor del navegador sobre el texto seleccionado)
+function BarraFormato({ editorRef, onCambio }) {
+  const aplicar = (cmd, valor = null) => {
+    editorRef.current?.focus();
+    try { document.execCommand("styleWithCSS", false, true); } catch (e) { /* navegadores viejos */ }
+    document.execCommand(cmd, false, valor);
+    onCambio();
+  };
+  const b = { background: "#fff", border: "1px solid #E7DCC8", borderRadius: 6, width: 30, height: 30, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#475569", padding: 0 };
+  const sel = { ...input, width: "auto", padding: "5px 6px", fontSize: 12, height: 30, cursor: "pointer", background: "#fff", borderColor: "#E7DCC8" };
+  const sep = <span style={{ width: 1, height: 22, background: "#E7DCC8", margin: "0 2px" }} />;
+  // onMouseDown + preventDefault: así no se pierde el texto seleccionado al tocar un botón
+  const boton = (titulo, icono, cmd, valor) => <button type="button" title={titulo} onMouseDown={(e) => { e.preventDefault(); aplicar(cmd, valor); }} style={b}>{icono}</button>;
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center", padding: "8px 12px", background: "#FBF7EF", borderBottom: "1px solid #E7DCC8" }}>
+      {boton("Negrita (Ctrl+B)", <Bold size={15} />, "bold")}
+      {boton("Cursiva (Ctrl+I)", <Italic size={15} />, "italic")}
+      {boton("Subrayar (Ctrl+U)", <Underline size={15} />, "underline")}
+      {boton("Tachar", <Strikethrough size={15} />, "strikeThrough")}
+      {sep}
+      <select title="Tipo de letra" defaultValue="" onChange={(e) => { if (e.target.value) aplicar("fontName", e.target.value); e.target.value = ""; }} style={sel}>
+        <option value="">Letra…</option>
+        {FUENTES.map((f) => <option key={f.l} value={f.v} style={{ fontFamily: f.v }}>{f.l}</option>)}
+      </select>
+      <select title="Tamaño de letra" defaultValue="" onChange={(e) => { if (e.target.value) aplicar("fontSize", e.target.value); e.target.value = ""; }} style={sel}>
+        <option value="">Tamaño…</option>
+        {TAMANOS.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
+      </select>
+      {sep}
+      <span title="Color de letra" style={{ display: "inline-flex", gap: 3, alignItems: "center" }}>
+        <span style={{ fontSize: 11, color: "#94A3B8", fontWeight: 700 }}>A</span>
+        {COLORES.map((c) => <button key={c} type="button" title="Color de letra" onMouseDown={(e) => { e.preventDefault(); aplicar("foreColor", c); }} style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid #fff", boxShadow: "0 0 0 1px #E2E8F0", background: c, cursor: "pointer", padding: 0 }} />)}
+      </span>
+      {sep}
+      <span title="Resaltar" style={{ display: "inline-flex", gap: 3, alignItems: "center" }}>
+        <Highlighter size={14} color="#94A3B8" />
+        {RESALTES.map((c) => <button key={c} type="button" title="Resaltar" onMouseDown={(e) => { e.preventDefault(); aplicar("hiliteColor", c); }} style={{ width: 18, height: 18, borderRadius: 4, border: "1px solid #E2E8F0", background: c, cursor: "pointer", padding: 0 }} />)}
+      </span>
+      {sep}
+      {boton("Lista con viñetas", <List size={15} />, "insertUnorderedList")}
+      {boton("Lista numerada", <ListOrdered size={15} />, "insertOrderedList")}
+      {boton("Quitar formato", <RemoveFormatting size={15} />, "removeFormat")}
+    </div>
+  );
+}
+
 const falta = (e) => /relation .*bitacora.* does not exist|Could not find the table .*bitacora|schema cache/i.test(String(e?.message || e || ""));
 const EDITOR_SQL = (() => { const ref = (String(supabase.supabaseUrl || "").match(/https:\/\/([^.]+)\.supabase\.co/) || [])[1]; return ref ? `https://supabase.com/dashboard/project/${ref}/sql/new` : "https://supabase.com/dashboard"; })();
 
@@ -29,6 +119,9 @@ const ESTILOS = `
 .bt-renglones { background-color: #FFFEF9; background-image: linear-gradient(to right, transparent 46px, #F4A9A8 46px, #F4A9A8 48px, transparent 48px), repeating-linear-gradient(to bottom, transparent 0, transparent 31px, #D6E4F0 31px, #D6E4F0 32px); background-attachment: local }
 .bt-texto { font-family: Georgia, 'Times New Roman', serif; font-size: 16px; line-height: 32px; color: #1E293B; padding: 4px 18px 16px 60px; white-space: pre-wrap; word-break: break-word }
 .bt-texto::placeholder { color: #94A3B8; font-style: italic }
+.bt-texto[contenteditable]:empty:before { content: attr(data-placeholder); color: #94A3B8; font-style: italic; pointer-events: none }
+.bt-texto ul, .bt-texto ol { padding-left: 24px; margin: 0 }
+.bt-texto p, .bt-texto div { margin: 0 }
 .bt-titulo { font-family: 'Caveat', 'Segoe Print', cursive; font-size: 30px; font-weight: 700; color: #9A3412; line-height: 1.15 }
 .bt-indice button:hover { background: #FFEDD5 }
 `;
@@ -72,6 +165,7 @@ function documentoBitacora(paginas, maestroNombre, secciones) {
     .bt-cab .g{font-size:12px;color:#64748B}
     .bt-cab .n{font-size:11px;color:#94A3B8}
     .bt-tit{font-family:'Caveat','Segoe Print',cursive;font-size:30px;font-weight:700;color:#9A3412;margin-bottom:6px}
+    .bt-cont ul,.bt-cont ol{padding-left:24px}
     .bt-cont{font-family:Georgia,'Times New Roman',serif;font-size:14px;line-height:28px;white-space:pre-wrap;word-break:break-word;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,#E2E8F0 27px,#E2E8F0 28px);min-height:200mm}
     .bt-pie{font-size:10px;color:#94A3B8;text-align:center;margin-top:10px}`;
   const cuerpo = `
@@ -86,7 +180,7 @@ function documentoBitacora(paginas, maestroNombre, secciones) {
       <div class="bt-pag">
         <div class="bt-cab"><div><div class="f">${esc(fechaTitulo(p.fecha))}</div>${p.seccion_id ? `<div class="g">${esc(grupo(p.seccion_id))}</div>` : ""}</div><div class="n">Página ${i + 1} de ${paginas.length}</div></div>
         ${p.titulo ? `<div class="bt-tit">${esc(p.titulo)}</div>` : ""}
-        <div class="bt-cont">${esc(p.contenido) || "&nbsp;"}</div>
+        <div class="bt-cont">${limpiarHtml(p.contenido) || "&nbsp;"}</div>
         <div class="bt-pie">Bitácora de ${esc(maestroNombre)} · Seeds English School</div>
       </div>`).join("")}`;
   return { css, cuerpo };
@@ -106,6 +200,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   const [pdf, setPdf] = useState(null);
   const [generando, setGenerando] = useState(false);
   const escritorio = window.innerWidth > 860;
+  const editorRef = useRef(null);
 
   const cargar = useCallback(async (abrir) => {
     if (!maestro?.id) return;
@@ -120,13 +215,18 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
 
   const actual = paginas?.find((p) => p.fecha === fecha) || null;
   useEffect(() => {
-    setBorrador({ titulo: actual?.titulo || "", contenido: actual?.contenido || "", seccion_id: actual?.seccion_id || (secciones.length === 1 ? secciones[0].id : "") });
+    const html = limpiarHtml(actual?.contenido || "");
+    setBorrador({ titulo: actual?.titulo || "", contenido: html, seccion_id: actual?.seccion_id || (secciones.length === 1 ? secciones[0].id : "") });
+    if (editorRef.current) editorRef.current.innerHTML = html;
   }, [fecha, actual?.id, actual?.updated_at]);
+  // El editor se monta después (la primera vez): ponerle el contenido
+  const montarEditor = (el) => { if (el && el !== editorRef.current) { editorRef.current = el; el.innerHTML = borrador.contenido; } };
+  const leerEditor = () => { const el = editorRef.current; if (!el) return; const html = textoPlano(el.innerHTML) || /<(ul|ol|li)/i.test(el.innerHTML) ? el.innerHTML : ""; setBorrador((b) => ({ ...b, contenido: html })); };
 
   if (noActivada) return <AvisoActivar esAdmin={esAdmin} avisar={avisar} />;
   if (paginas === null) return <div style={{ ...card, textAlign: "center", color: "#94A3B8", fontSize: 13 }}>Cargando bitácora…</div>;
 
-  const cambios = editable && ((actual?.titulo || "") !== borrador.titulo || (actual?.contenido || "") !== borrador.contenido || (actual?.seccion_id || "") !== (borrador.seccion_id || "")) && (actual || borrador.titulo.trim() || borrador.contenido.trim());
+  const cambios = editable && ((actual?.titulo || "") !== borrador.titulo || limpiarHtml(actual?.contenido || "") !== borrador.contenido || (actual?.seccion_id || "") !== (borrador.seccion_id || "")) && (actual || borrador.titulo.trim() || borrador.contenido.trim());
   const fechas = [...new Set([...paginas.map((p) => p.fecha), ...(fecha ? [fecha] : [])])].sort();
   const pos = fechas.indexOf(fecha);
   const grupo = (id) => secciones.find((s) => s.id === id)?.nombre || "";
@@ -139,9 +239,9 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     setFecha(f);
   };
   const guardar = async () => {
-    if (!borrador.contenido.trim() && !borrador.titulo.trim()) { avisar("Escribe algo en la página antes de guardar", "error"); return; }
+    if (!textoPlano(borrador.contenido) && !borrador.titulo.trim()) { avisar("Escribe algo en la página antes de guardar", "error"); return; }
     setGuardando(true);
-    const fila = { id: `${maestro.id}_${fecha}`, maestro_id: maestro.id, seccion_id: borrador.seccion_id || null, fecha, titulo: borrador.titulo.trim() || null, contenido: borrador.contenido, updated_at: new Date().toISOString() };
+    const fila = { id: `${maestro.id}_${fecha}`, maestro_id: maestro.id, seccion_id: borrador.seccion_id || null, fecha, titulo: borrador.titulo.trim() || null, contenido: limpiarHtml(borrador.contenido), updated_at: new Date().toISOString() };
     const { error } = await supabase.from("bitacora").upsert(fila, { onConflict: "maestro_id,fecha" });
     setGuardando(false);
     if (error) { avisar("No se guardó: " + error.message, "error"); return; }
@@ -149,7 +249,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     cargar(fecha);
   };
   const borrar = async () => {
-    if (!actual) { setBorrador({ titulo: "", contenido: "", seccion_id: borrador.seccion_id }); return; }
+    if (!actual) { setBorrador({ titulo: "", contenido: "", seccion_id: borrador.seccion_id }); if (editorRef.current) editorRef.current.innerHTML = ""; return; }
     if (!confirm(`¿Borrar la página del ${fechaTitulo(fecha)}?`)) return;
     const { error } = await supabase.from("bitacora").delete().eq("id", actual.id);
     if (error) { avisar("No se borró: " + error.message, "error"); return; }
@@ -157,7 +257,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     cargar();
   };
 
-  const guardadas = paginas.filter((p) => (p.contenido || "").trim() || p.titulo);
+  const guardadas = paginas.filter((p) => textoPlano(p.contenido) || p.titulo);
   const descargarPDF = async () => {
     if (!guardadas.length) { avisar("Todavía no hay páginas guardadas", "error"); return; }
     setGenerando(true);
@@ -231,7 +331,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
       <div className="bt-indice" style={{ overflowY: "auto", maxHeight: escritorio ? 300 : 130, borderTop: "1px dashed #E7DCC8" }}>
         {[...paginas].reverse().map((p) => (
           <button key={p.id} onClick={() => ir(p.fecha)} style={{ display: "flex", justifyContent: "space-between", gap: 8, width: "100%", padding: "6px 4px", border: "none", borderBottom: "1px dashed #E7DCC8", background: p.fecha === fecha ? "#FFEDD5" : "transparent", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
-            <span style={{ fontSize: 12, color: "#1E293B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.titulo || (p.contenido || "").slice(0, 40) || "Sin título"}</span>
+            <span style={{ fontSize: 12, color: "#1E293B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.titulo || textoPlano(p.contenido).slice(0, 40) || "Sin título"}</span>
             <span style={{ fontSize: 11, color: "#94A3B8", whiteSpace: "nowrap" }}>{fechaCorta(p.fecha)}</span>
           </button>
         ))}
@@ -247,8 +347,11 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
           : <div className="bt-titulo">{borrador.titulo || <span style={{ color: "#CBD5E1" }}>Sin título</span>}</div>}
       </div>
       {editable
-        ? <textarea value={borrador.contenido} onChange={(e) => setBorrador({ ...borrador, contenido: e.target.value })} placeholder="¿Qué hiciste hoy en clase? Temas, actividades, cómo respondieron los alumnos, tareas, pendientes…" className="bt-texto bt-renglones" style={{ flex: 1, minHeight: escritorio ? 440 : 360, border: "none", outline: "none", resize: "none", width: "100%" }} />
-        : <div className="bt-texto" style={{ flex: 1, minHeight: escritorio ? 440 : 300 }}>{borrador.contenido || <span style={{ color: "#94A3B8", fontStyle: "italic" }}>Página en blanco.</span>}</div>}
+        ? <>
+            <BarraFormato editorRef={editorRef} onCambio={leerEditor} />
+            <div ref={montarEditor} contentEditable suppressContentEditableWarning onInput={leerEditor} onBlur={leerEditor} data-placeholder="¿Qué hiciste hoy en clase? Temas, actividades, cómo respondieron los alumnos, tareas, pendientes…" className="bt-texto bt-renglones" style={{ flex: 1, minHeight: escritorio ? 400 : 340, outline: "none", width: "100%", boxSizing: "border-box", whiteSpace: "normal" }} />
+          </>
+        : (borrador.contenido ? <div className="bt-texto" style={{ flex: 1, minHeight: escritorio ? 440 : 300, whiteSpace: "normal" }} dangerouslySetInnerHTML={{ __html: borrador.contenido }} /> : <div className="bt-texto" style={{ flex: 1, minHeight: escritorio ? 440 : 300 }}><span style={{ color: "#94A3B8", fontStyle: "italic" }}>Página en blanco.</span></div>)}
       {editable && <div style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 16px", background: "rgba(255,255,255,.85)", borderTop: "1px solid #E7DCC8", flexWrap: "wrap" }}>
         <button onClick={borrar} style={{ ...btnO, color: "#DC2626", borderColor: "#FECACA", padding: "6px 10px", fontSize: 12 }}><Trash2 size={13} />{actual ? "Borrar página" : "Limpiar"}</button>
         <button onClick={guardar} disabled={guardando || !cambios} style={{ ...btn(), opacity: guardando || !cambios ? 0.5 : 1 }}><Save size={14} />{guardando ? "Guardando…" : cambios ? "Guardar página" : "✓ Guardada"}</button>
