@@ -214,7 +214,7 @@ function PanelStickers({ onAgregar, onCerrar }) {
           </div>
         </>)}
       </div>
-      <div style={{ fontSize: 11, color: "#94A3B8", padding: "0 12px 10px" }}>Toca un sticker para pegarlo. Luego arrástralo a donde quieras.</div>
+      <div style={{ fontSize: 11, color: "#94A3B8", padding: "0 12px 10px" }}>Toca un sticker para pegarlo en la página. Después puedes arrastrarlo a donde quieras.</div>
     </div>
   );
 }
@@ -467,7 +467,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     <div className="bt-renglones" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, position: "relative" }}>
       {editable && <div style={{ position: "relative" }}>
         <BarraFormato editorRef={editorRef} onCambio={leerEditor} extra={<button type="button" onClick={() => setPanelStickers(!panelStickers)} style={{ ...btn(panelStickers ? "#9A3412" : NAR), padding: "5px 12px", fontSize: 12, whiteSpace: "nowrap", height: 30 }}>✨ Stickers</button>} />
-        {panelStickers && <PanelStickers onAgregar={agregarSticker} onCerrar={() => setPanelStickers(false)} />}
+        {panelStickers && <PanelStickers onAgregar={(k) => { agregarSticker(k); setPanelStickers(false); }} onCerrar={() => setPanelStickers(false)} />}
       </div>}
       <div onPointerDown={() => setSelSticker(null)} style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column" }}>
       <CapaStickers stickers={borrador.stickers || []} editable={editable} onChange={setStickers} sel={selSticker} setSel={setSelSticker} />
