@@ -521,6 +521,53 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
   </div>);
 }
 
+// Cajita para buscar un docente escribiendo su nombre
+const sinTildes = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function ComboMaestros({ maestros, conteo, valor, onElegir }) {
+  const elegido = maestros.find((m) => m.id === valor);
+  const [texto, setTexto] = useState(elegido?.nombre || "");
+  const [abierto, setAbierto] = useState(false);
+  const [activo, setActivo] = useState(0);
+  useEffect(() => { if (!abierto) setTexto(elegido?.nombre || ""); }, [valor, abierto]);
+  const busqueda = abierto && texto !== (elegido?.nombre || "") ? sinTildes(texto) : "";
+  const lista = maestros.filter((m) => sinTildes(m.nombre).includes(busqueda));
+  const elegir = (m) => { onElegir(m.id); setTexto(m.nombre); setAbierto(false); };
+  const info = (m) => { const c = conteo[m.id]; return c ? `${c.n} ${c.n === 1 ? "página" : "páginas"} · última ${fechaCorta(c.ultima)}` : "Sin páginas"; };
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "relative" }}>
+        <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", fontSize: 15 }}>📖</span>
+        <input
+          value={texto}
+          onChange={(e) => { setTexto(e.target.value); setAbierto(true); setActivo(0); }}
+          onFocus={(e) => { setAbierto(true); e.target.select(); }}
+          onBlur={() => setTimeout(() => setAbierto(false), 150)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setAbierto(true); setActivo((i) => Math.min(i + 1, lista.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setActivo((i) => Math.max(i - 1, 0)); }
+            else if (e.key === "Enter" && lista[activo]) { e.preventDefault(); elegir(lista[activo]); e.target.blur(); }
+            else if (e.key === "Escape") { setAbierto(false); e.target.blur(); }
+          }}
+          placeholder="Escribe el nombre del docente…"
+          style={{ ...input, padding: "10px 34px 10px 36px", fontSize: 14, fontWeight: 600, background: "#fff" }}
+        />
+        <span onMouseDown={(e) => { e.preventDefault(); setAbierto(!abierto); }} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#94A3B8", cursor: "pointer", fontSize: 12 }}>▼</span>
+      </div>
+      {!abierto && elegido && <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 3, paddingLeft: 2 }}>{info(elegido)}</div>}
+      {abierto && (
+        <div style={{ position: "absolute", left: 0, right: 0, top: "100%", marginTop: 4, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, boxShadow: "0 12px 30px rgba(15,23,42,.15)", maxHeight: 280, overflowY: "auto", zIndex: 30 }}>
+          {lista.length === 0 ? <div style={{ padding: "10px 12px", fontSize: 13, color: "#94A3B8" }}>Ningún docente con ese nombre</div> : lista.map((m, i) => (
+            <div key={m.id} onMouseDown={(e) => { e.preventDefault(); elegir(m); }} onMouseEnter={() => setActivo(i)} style={{ padding: "8px 12px", cursor: "pointer", background: i === activo ? "#FFF7ED" : m.id === valor ? "#F8FAFC" : "#fff", borderBottom: "1px solid #F1F5F9" }}>
+              <div style={{ fontSize: 13, fontWeight: m.id === valor ? 700 : 500, color: m.id === valor ? "#9A3412" : "#1E293B" }}>{m.nombre}</div>
+              <div style={{ fontSize: 11, color: conteo[m.id] ? "#64748B" : "#94A3B8" }}>{info(m)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════
 //  ADMINISTRACIÓN: bitácoras de todos los docentes
 // ════════════════════════════════════════════════════════════
@@ -538,13 +585,9 @@ export function AdminBitacoras({ data, showToast }) {
   const maestro = data.maestros.find((m) => m.id === mid);
   const secciones = data.secciones.filter((s) => (maestro?.secciones_ids || []).includes(s.id)).concat(data.secciones.filter((s) => !(maestro?.secciones_ids || []).includes(s.id)));
   return (<div>
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-      {maestros.map((m) => { const c = conteo[m.id]; const on = m.id === mid; return (
-        <button key={m.id} onClick={() => setMid(m.id)} style={{ ...btnO, borderColor: on ? NAR : "#E2E8F0", background: on ? "#FFF7ED" : "#fff", color: on ? "#9A3412" : "#475569", fontWeight: on ? 700 : 500, flexDirection: "column", alignItems: "flex-start", gap: 1, padding: "8px 12px" }}>
-          <span>📖 {m.nombre}</span>
-          <span style={{ fontSize: 11, color: "#94A3B8", fontWeight: 400 }}>{c ? `${c.n} ${c.n === 1 ? "página" : "páginas"} · última ${fechaCorta(c.ultima)}` : "Sin páginas"}</span>
-        </button>
-      ); })}
+    <div style={{ marginBottom: 14, maxWidth: 420 }}>
+      <label style={{ fontSize: 12, fontWeight: 700, color: "#475569", display: "block", marginBottom: 4 }}>Docente</label>
+      <ComboMaestros maestros={maestros} conteo={conteo} valor={mid} onElegir={setMid} />
     </div>
     {maestro ? <Bitacora maestro={maestro} secciones={secciones} editable={false} avisar={showToast} esAdmin /> : <div style={card}>No hay maestros registrados.</div>}
   </div>);
