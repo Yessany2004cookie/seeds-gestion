@@ -57,7 +57,7 @@ const ESTADOS_ASIS = [
   { v: "presente", l: "Presente", c: "#059669", k: "P" },
   { v: "tarde", l: "Tarde", c: "#D97706", k: "T" },
   { v: "ausente", l: "Ausente", c: "#DC2626", k: "A" },
-  { v: "justificado", l: "Justificado", c: "#2563EB", k: "J" },
+  { v: "justificado", l: "Permiso", c: "#2563EB", k: "Pm" },
 ];
 const CATEGORIAS_REFLECTION = ["Académico", "Participación", "Conducta", "Logro", "Necesita apoyo", "Comunicación con padres", "Otro"];
 const TIPOS_SOLICITUD = ["Material didáctico", "Permiso / ausencia", "Pago / planilla", "Aula o equipo", "Alumno o padre de familia", "Otro"];
@@ -282,90 +282,104 @@ function MisGrupos({ datos }) {
   </div>);
 }
 
-// ── Asistencia: libreta (como el cuaderno de asistencia de papel) ──
-// Filas = alumnos, columnas = días de clase del mes. Se toca la casilla para
-// marcar: vacío → P → A → T → J → vacío. Los cambios se guardan con un botón.
-const CICLO = ["", "presente", "ausente", "tarde", "justificado"];
-const sumarMes = (mes, n) => { const [y, m] = mes.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
-const DIAS_SEM = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+// ── Asistencia: libreta por clase ──
+// Cada hoja es una clase (un día) de un grupo: la lista de alumnos con botones
+// Presente / Ausente / Tarde / Permiso. Se pasa de hoja con ‹ › como la bitácora,
+// y al final "+ Nueva" abre la hoja de la clase siguiente.
+const ORDEN_ASIS = ["presente", "ausente", "tarde", "justificado"];
+const fechaClase = (f) => { if (!f) return ""; const t = new Date(f + "T12:00:00").toLocaleDateString("es-HN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
+const diaAntes = (f) => { const d = new Date(f + "T12:00:00"); d.setDate(d.getDate() - 1); return d.toLocaleDateString("en-CA"); };
 
 function Asistencia({ datos, maestroId, avisar }) {
   const hoy = hoyISO();
   const [sec, setSec] = useState(datos.secciones[0]?.id || "");
-  const [mes, setMes] = useState(hoy.slice(0, 7));
-  const [guardado, setGuardado] = useState({}); // "alumno|fecha" -> estado (lo que hay en la base)
-  const [marcas, setMarcas] = useState({});     // lo que se ve (con cambios sin guardar)
-  const [diasExtra, setDiasExtra] = useState([]); // días agregados a mano
-  const [nuevoDia, setNuevoDia] = useState("");
+  const [registros, setRegistros] = useState(null); // fecha -> { alumno_id: estado } (lo guardado)
+  const [fecha, setFecha] = useState(hoy);           // hoja abierta
+  const [fechaPag, setFechaPag] = useState(hoy);     // fecha elegida dentro de la hoja
+  const [marcas, setMarcas] = useState({});          // alumno_id -> estado (lo que se ve)
   const [guardando, setGuardando] = useState(false);
-  const [cerrada, setCerrada] = useState(true);   // se ve la portada de cuero
+  const [cerrada, setCerrada] = useState(true);      // se ve la portada de cuero
   const [abriendo, setAbriendo] = useState(false);
   const escritorio = window.innerWidth > 860;
   const { marcoRef, libroRef, pasarHoja, capa } = useVueltaHoja(escritorio);
-  const alumnos = datos.alumnos.filter((a) => a.seccion_id === sec && a.estado === "activo");
   const s = datos.secciones.find((x) => x.id === sec);
 
   const cargar = useCallback(async () => {
-    if (!sec) return;
-    const { data, error } = await supabase.from("asistencias").select("alumno_id,fecha,estado").eq("seccion_id", sec).gte("fecha", mes + "-01").lte("fecha", mes + "-31");
-    if (error) { avisar(mensajeError(error), "error"); return; }
-    const m = {};
-    (data || []).forEach((r) => { m[`${r.alumno_id}|${r.fecha}`] = r.estado; });
-    setGuardado(m); setMarcas(m); setDiasExtra([]);
-  }, [sec, mes]);
-  useEffect(() => { cargar(); }, [cargar]);
+    if (!sec) { setRegistros({}); return; }
+    const todos = [];
+    for (let desde = 0; ; desde += 1000) { // de 1000 en 1000 (límite de Supabase)
+      const { data, error } = await supabase.from("asistencias").select("alumno_id,fecha,estado").eq("seccion_id", sec).order("fecha").order("alumno_id").range(desde, desde + 999);
+      if (error) { avisar(mensajeError(error), "error"); setRegistros({}); return; }
+      todos.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    const r = {};
+    todos.forEach((x) => { (r[x.fecha] = r[x.fecha] || {})[x.alumno_id] = x.estado; });
+    setRegistros(r);
+  }, [sec]);
+  useEffect(() => { setRegistros(null); cargar(); }, [cargar]);
 
-  // Columnas: días con registros + hoy (si es este mes) + días agregados
-  const dias = [...new Set([
-    ...Object.keys(guardado).map((k) => k.split("|")[1]),
-    ...(hoy.slice(0, 7) === mes ? [hoy] : []),
-    ...diasExtra,
-  ])].sort();
-  const cambios = Object.keys({ ...guardado, ...marcas }).filter((k) => (guardado[k] || "") !== (marcas[k] || ""));
+  const guardadoHoja = registros?.[fecha] || {};
+  useEffect(() => { setMarcas({ ...(registros?.[fecha] || {}) }); setFechaPag(fecha); }, [fecha, registros]);
 
-  const tocar = (aid, d) => {
-    const k = `${aid}|${d}`; const i = CICLO.indexOf(marcas[k] || "");
-    setMarcas({ ...marcas, [k]: CICLO[(i + 1) % CICLO.length] });
-  };
-  const todosPresentes = (d) => { const m = { ...marcas }; alumnos.forEach((a) => { if (!m[`${a.id}|${d}`]) m[`${a.id}|${d}`] = "presente"; }); setMarcas(m); };
-  const agregarDia = () => {
-    if (!nuevoDia) return;
-    if (nuevoDia.slice(0, 7) !== mes) setMes(nuevoDia.slice(0, 7));
-    setDiasExtra((x) => [...new Set([...x, nuevoDia])]);
-    setNuevoDia("");
-  };
-  const cambiarMes = (n) => {
-    if (cambios.length && !confirm("Tienes cambios sin guardar en esta libreta. ¿Cambiar de mes sin guardar?")) return;
-    pasarHoja(n > 0 ? "adelante" : "atras");
-    setMes(sumarMes(mes, n));
+  // Alumnos activos del grupo, y los que ya no están pero tienen marca ese día
+  const alumnos = datos.alumnos.filter((a) => a.seccion_id === sec && (a.estado === "activo" || guardadoHoja[a.id]));
+  const ids = [...new Set([...Object.keys(guardadoHoja), ...Object.keys(marcas)])];
+  const cambios = fechaPag !== fecha || ids.some((id) => (guardadoHoja[id] || "") !== (marcas[id] || ""));
+  const fechas = [...new Set([...Object.keys(registros || {}), fecha])].sort();
+  const pos = fechas.indexOf(fecha);
+  const enUltima = pos >= fechas.length - 1;
+  const hojaGuardada = Object.keys(guardadoHoja).length > 0;
+  const fechaNueva = () => { let f = hoy; while (registros?.[f]) f = diaAntes(f); return f; };
+
+  const confirmarSalir = (texto) => !cambios || confirm(texto);
+  const ir = (f, hacia) => {
+    if (!f || f === fecha) return;
+    if (!confirmarSalir("Esta clase tiene cambios sin guardar. ¿Pasar de hoja sin guardar?")) return;
+    pasarHoja(hacia || (f > fecha ? "adelante" : "atras"));
+    setFecha(f);
   };
   const cambiarGrupo = (v) => {
-    if (cambios.length && !confirm("Tienes cambios sin guardar. ¿Cambiar de grupo sin guardar?")) return;
+    if (!confirmarSalir("Tienes cambios sin guardar. ¿Cambiar de grupo sin guardar?")) return;
     pasarHoja("adelante");
-    setSec(v);
+    setSec(v); setFecha(hoy);
   };
+  const marcar = (aid, est) => setMarcas((m) => ({ ...m, [aid]: m[aid] === est ? "" : est }));
+  const todosPresentes = () => setMarcas((m) => { const n = { ...m }; alumnos.forEach((a) => { if (!n[a.id]) n[a.id] = "presente"; }); return n; });
 
   const guardar = async () => {
-    const poner = cambios.filter((k) => marcas[k]).map((k) => { const [aid, f] = k.split("|"); return { id: `${sec}_${aid}_${f}`, seccion_id: sec, alumno_id: aid, maestro_id: maestroId, fecha: f, estado: marcas[k] }; });
-    const quitar = cambios.filter((k) => !marcas[k]);
+    const destino = fechaPag;
+    if (!destino) { avisar("Elige la fecha de la clase", "error"); return; }
+    if (destino > hoy) { avisar("La fecha no puede ser futura", "error"); return; }
+    if (destino !== fecha && registros?.[destino]) { avisar(`Ya hay asistencia el ${fechaClase(destino)}. Ábrela con ‹ › o elige otra fecha.`, "error"); return; }
+    const poner = Object.entries(marcas).filter(([, e]) => e).map(([aid, e]) => ({ id: `${sec}_${aid}_${destino}`, seccion_id: sec, alumno_id: aid, maestro_id: maestroId, fecha: destino, estado: e }));
+    if (!poner.length && !hojaGuardada) { avisar("Marca la asistencia de al menos un alumno", "error"); return; }
     setGuardando(true);
     try {
       if (poner.length) { const { error } = await supabase.from("asistencias").upsert(poner, { onConflict: "seccion_id,alumno_id,fecha" }); if (error) throw error; }
-      for (const k of quitar) { const [aid, f] = k.split("|"); const { error } = await supabase.from("asistencias").delete().eq("seccion_id", sec).eq("alumno_id", aid).eq("fecha", f); if (error) throw error; }
-      avisar(`✓ Libreta guardada (${cambios.length} ${cambios.length === 1 ? "cambio" : "cambios"})`);
+      if (destino !== fecha) { // se cambió la fecha: se quita lo de la fecha anterior
+        if (hojaGuardada) { const { error } = await supabase.from("asistencias").delete().eq("seccion_id", sec).eq("fecha", fecha); if (error) throw error; }
+      } else {
+        for (const aid of Object.keys(guardadoHoja).filter((id) => !marcas[id])) {
+          const { error } = await supabase.from("asistencias").delete().eq("seccion_id", sec).eq("alumno_id", aid).eq("fecha", fecha); if (error) throw error;
+        }
+      }
+      avisar(destino !== fecha ? `✓ Asistencia guardada en ${fechaClase(destino)}` : "✓ Asistencia guardada");
+      setFecha(destino);
       await cargar();
     } catch (e) { avisar("No se guardó: " + mensajeError(e), "error"); }
     setGuardando(false);
   };
-
-  const totales = (aid) => {
-    const v = dias.map((d) => marcas[`${aid}|${d}`]).filter(Boolean);
-    const asis = v.filter((e) => e === "presente" || e === "tarde").length;
-    return { asis, faltas: v.filter((e) => e === "ausente").length };
+  const borrarClase = async () => {
+    if (!hojaGuardada) { setMarcas({}); return; }
+    if (!confirm(`¿Borrar la asistencia del ${fechaClase(fecha)}?`)) return;
+    const { error } = await supabase.from("asistencias").delete().eq("seccion_id", sec).eq("fecha", fecha);
+    if (error) { avisar("No se borró: " + mensajeError(error), "error"); return; }
+    avisar("Clase borrada", "error");
+    await cargar();
   };
-  const nombreMes = (() => { const t = new Date(mes + "-15T12:00:00").toLocaleDateString("es-HN", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); })();
-  const celdaBase = { borderRight: "1px solid #E2E8F0", borderBottom: "1px solid #E2E8F0", textAlign: "center", padding: 0 };
 
+  // ── Portada ──
   const abrir = () => {
     if (abriendo) return;
     setAbriendo(true);
@@ -377,16 +391,22 @@ function Asistencia({ datos, maestroId, avisar }) {
       etiqueta={`Abrir libreta · ${datos.secciones.length} ${datos.secciones.length === 1 ? "grupo" : "grupos"}`} />
   </div>);
 
-  const enMesActual = mes >= hoy.slice(0, 7);
-  const redondo = (deshab) => ({ ...btnO, width: 34, height: 34, padding: 0, justifyContent: "center", borderRadius: "50%", opacity: deshab ? 0.35 : 1, cursor: deshab ? "default" : "pointer" });
+  const cuenta = (e) => alumnos.filter((a) => marcas[a.id] === e).length;
+  const sinMarcar = alumnos.filter((a) => !marcas[a.id]).length;
   const rotulo = { ...label, color: "#9A3412", textTransform: "uppercase", fontSize: 11, letterSpacing: 0.5 };
+  const redondo = (deshab) => ({ ...btnO, width: 34, height: 34, padding: 0, justifyContent: "center", borderRadius: "50%", opacity: deshab ? 0.35 : 1, cursor: deshab ? "default" : "pointer" });
 
-  // Hoja izquierda: grupo, mes y leyenda
+  // Hoja izquierda: la clase (fecha, grupo y resumen)
   const hojaIzq = (
-    <div style={{ flex: escritorio ? "0 0 27%" : "none", minWidth: 0, background: "#FBF7EF", padding: "24px 20px", borderRight: escritorio ? "1px solid #E7DCC8" : "none", borderBottom: escritorio ? "none" : "1px solid #E7DCC8", display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{ flex: escritorio ? "0 0 34%" : "none", minWidth: 0, background: "#FBF7EF", padding: "24px 20px", borderRight: escritorio ? "1px solid #E7DCC8" : "none", borderBottom: escritorio ? "none" : "1px solid #E7DCC8", display: "flex", flexDirection: "column", gap: 12 }}>
       <div>
         <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>Libreta de asistencia · {datos.maestro?.nombre}</div>
-        <div className="bt-titulo" style={{ fontSize: 36, marginTop: 6 }}>{nombreMes}</div>
+        <div className="bt-titulo" style={{ fontSize: 32, marginTop: 6 }}>{fechaClase(fechaPag || fecha)}</div>
+      </div>
+      <div>
+        <label style={rotulo}>Fecha de la clase *</label>
+        <input type="date" required value={fechaPag} max={hoy} onChange={(e) => setFechaPag(e.target.value || fecha)} style={{ ...input, background: "#fff", fontWeight: 600 }} />
+        {fechaPag !== fecha && <div style={{ fontSize: 11, color: "#9A3412", marginTop: 3 }}>Al guardar, esta clase quedará en la nueva fecha.</div>}
       </div>
       <div>
         <label style={rotulo}>Grupo</label>
@@ -396,84 +416,56 @@ function Asistencia({ datos, maestroId, avisar }) {
         </select>
         {s?.horario && <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>{s.horario}</div>}
       </div>
-      <div>
-        <label style={rotulo}>Agregar día de clase</label>
-        <div style={{ display: "flex", gap: 4 }}>
-          <input type="date" value={nuevoDia} max={hoy} onChange={(e) => setNuevoDia(e.target.value)} style={{ ...input, background: "#fff", padding: "7px 8px" }} />
-          <button onClick={agregarDia} disabled={!nuevoDia} style={{ ...btnO, background: "#fff", padding: "7px 10px", fontSize: 12, opacity: nuevoDia ? 1 : 0.5 }}><Plus size={12} />Agregar</button>
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        {[["Alumnos", alumnos.length], ["Clases", dias.length]].map(([t, v]) => (
-          <div key={t} style={{ flex: 1, background: "#fff", border: "1px solid #E7DCC8", borderRadius: 8, padding: "8px 10px" }}>
-            <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" }}>{t}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: "#1E293B" }}>{v}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        {ORDEN_ASIS.map((v) => { const e = ESTADOS_ASIS.find((x) => x.v === v); return (
+          <div key={v} style={{ background: "#fff", border: "1px solid #E7DCC8", borderLeft: `4px solid ${e.c}`, borderRadius: 8, padding: "6px 10px" }}>
+            <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" }}>{e.l}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: e.c }}>{cuenta(v)}</div>
           </div>
-        ))}
+        ); })}
       </div>
-      <div style={{ fontSize: 12, color: "#475569", display: "grid", gap: 4 }}>
-        {ESTADOS_ASIS.map((e) => <div key={e.v}><strong style={{ color: e.c, fontSize: 14, display: "inline-block", width: 18 }}>{e.k}</strong>{e.l}</div>)}
-        <div style={{ color: "#94A3B8", fontSize: 11, marginTop: 2 }}>Toca una casilla para cambiarla. “✓ todos” marca presentes a los que faltan.</div>
-      </div>
+      <div style={{ fontSize: 12, color: sinMarcar ? "#9A3412" : "#059669", fontWeight: 600 }}>{sinMarcar ? `Faltan ${sinMarcar} por marcar` : alumnos.length ? "✓ Todos marcados" : ""}</div>
+      <div style={{ fontSize: 11, color: "#94A3B8" }}>{registros === null ? "Cargando…" : hojaGuardada ? `Clase ${pos + 1} de ${fechas.length}` : "Clase nueva (sin guardar)"}</div>
     </div>
   );
 
-  // Hoja derecha: la cuadrícula de la libreta
+  // Hoja derecha: la lista de alumnos con sus botones
   const hojaDer = (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "#FFFEF9" }}>
-      <div style={{ flex: 1, minHeight: escritorio ? 440 : 260 }}>
-      {alumnos.length === 0 ? <Vacio>No hay alumnos en este grupo.</Vacio> : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 13, minWidth: "100%" }}>
-            <thead>
-              <tr>
-                <th style={{ position: "sticky", left: 0, zIndex: 2, background: "#FFF7ED", textAlign: "left", padding: "8px 10px", borderRight: "2px solid #E7DCC8", borderBottom: "2px solid #E7DCC8", minWidth: window.innerWidth > 600 ? 180 : 130, fontSize: 11, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.5 }}>N.º · Alumno</th>
-                {dias.map((d) => { const dt = new Date(d + "T12:00:00"); const esHoy = d === hoy; return (
-                  <th key={d} style={{ ...celdaBase, borderBottom: "2px solid #E7DCC8", background: esHoy ? "#FFEDD5" : "#FFF7ED", minWidth: 44, padding: "4px 2px" }}>
-                    <div style={{ fontSize: 10, color: "#9A3412", fontWeight: 600 }}>{DIAS_SEM[dt.getDay()]}</div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: esHoy ? NAR : "#1E293B" }}>{dt.getDate()}</div>
-                    <button onClick={() => todosPresentes(d)} title="Marcar presentes a los que faltan" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10, color: "#059669", fontWeight: 700, padding: 0 }}>✓ todos</button>
-                  </th>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: "2px solid #E7DCC8", background: "rgba(255,247,237,.9)", flexWrap: "wrap" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.5 }}>{alumnos.length} {alumnos.length === 1 ? "alumno" : "alumnos"}</div>
+        {alumnos.length > 0 && <button onClick={todosPresentes} disabled={!sinMarcar} style={{ ...btnO, background: "#fff", padding: "6px 12px", fontSize: 12, color: "#059669", borderColor: "#A7F3D0", fontWeight: 700, opacity: sinMarcar ? 1 : 0.5 }}><Check size={13} />Todos presentes</button>}
+      </div>
+      <div style={{ flex: 1, minHeight: escritorio ? 400 : 240 }}>
+        {alumnos.length === 0 ? <Vacio>No hay alumnos en este grupo.</Vacio> : alumnos.map((a, i) => {
+          const actual = marcas[a.id] || ""; const cambiado = (guardadoHoja[a.id] || "") !== actual;
+          return (
+            <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 16px", borderBottom: "1px solid #EDE4D3", flexWrap: escritorio ? "nowrap" : "wrap", background: cambiado ? "rgba(254,243,199,.6)" : "transparent" }}>
+              <div style={{ flex: 1, minWidth: 140, display: "flex", alignItems: "baseline", gap: 6 }}>
+                <span style={{ color: "#94A3B8", fontSize: 11, width: 20 }}>{i + 1}.</span>
+                <span style={{ fontWeight: 600, color: "#1E293B", fontSize: 14 }}>{a.nombre}</span>
+                {a.estado !== "activo" && <span style={badge("#94A3B8")}>inactivo</span>}
+              </div>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {ORDEN_ASIS.map((v) => { const e = ESTADOS_ASIS.find((x) => x.v === v); const on = actual === v; return (
+                  <button key={v} onClick={() => marcar(a.id, v)} title={on ? "Toca otra vez para quitar" : e.l}
+                    style={{ padding: "6px 11px", borderRadius: 20, border: `1.5px solid ${on ? e.c : "#E2E8F0"}`, background: on ? e.c : "#fff", color: on ? "#fff" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minWidth: 74 }}>{e.l}</button>
                 ); })}
-                {dias.length === 0 && <th style={{ ...celdaBase, borderBottom: "2px solid #E7DCC8", background: "#FFF7ED", padding: "8px 12px", fontSize: 12, color: "#9A3412", fontWeight: 400 }}>Agrega un día de clase con “Agregar día”</th>}
-                {["Asist.", "Faltas"].map((h) => <th key={h} style={{ ...celdaBase, borderBottom: "2px solid #E7DCC8", background: "#F1F5F9", padding: "8px 8px", fontSize: 11, color: "#475569", minWidth: 48 }}>{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {alumnos.map((a, i) => { const t = totales(a.id); return (
-                <tr key={a.id}>
-                  <td style={{ position: "sticky", left: 0, zIndex: 1, background: i % 2 ? "#FFFBF2" : "#FFFDF8", padding: "0 10px", height: 38, borderRight: "2px solid #E7DCC8", borderBottom: "1px solid #E2E8F0", whiteSpace: "nowrap" }}>
-                    <span style={{ color: "#94A3B8", fontSize: 11, display: "inline-block", width: 22 }}>{i + 1}.</span><span style={{ fontWeight: 600, color: "#1E293B" }}>{a.nombre}</span>
-                  </td>
-                  {dias.map((d) => { const k = `${a.id}|${d}`; const e = ESTADOS_ASIS.find((x) => x.v === marcas[k]); const cambiado = (guardado[k] || "") !== (marcas[k] || ""); return (
-                    <td key={d} style={{ ...celdaBase, background: d === hoy ? "#FFF7ED" : "transparent" }}>
-                      <button onClick={() => tocar(a.id, d)} title={e ? e.l : "Sin marcar (toca para marcar)"} style={{ width: "100%", height: 37, border: "none", background: cambiado ? "#FEF3C7" : "transparent", cursor: "pointer", fontFamily: "'Segoe UI',system-ui,sans-serif", fontSize: 15, fontWeight: 800, color: e ? e.c : "#E2E8F0" }}>{e ? e.k : "·"}</button>
-                    </td>
-                  ); })}
-                  {dias.length === 0 && <td style={celdaBase} />}
-                  <td style={{ ...celdaBase, fontWeight: 700, color: "#059669" }}>{t.asis}</td>
-                  <td style={{ ...celdaBase, fontWeight: 700, color: t.faltas ? "#DC2626" : "#94A3B8" }}>{t.faltas}</td>
-                </tr>
-              ); })}
-              <tr>
-                <td style={{ position: "sticky", left: 0, zIndex: 1, background: "#F1F5F9", padding: "6px 10px", borderRight: "2px solid #E7DCC8", fontSize: 11, fontWeight: 700, color: "#475569" }}>Presentes del día</td>
-                {dias.map((d) => <td key={d} style={{ ...celdaBase, background: "#F1F5F9", fontSize: 12, fontWeight: 700, color: "#475569", padding: "6px 0" }}>{alumnos.filter((a) => ["presente", "tarde"].includes(marcas[`${a.id}|${d}`])).length}</td>)}
-                {dias.length === 0 && <td style={{ ...celdaBase, background: "#F1F5F9" }} />}
-                <td colSpan={2} style={{ ...celdaBase, background: "#F1F5F9" }} />
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
+              </div>
+            </div>
+          );
+        })}
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 16px", background: "rgba(255,255,255,.85)", borderTop: "1px solid #E7DCC8", flexWrap: "wrap" }}>
-        <span style={{ fontSize: 11, color: "#94A3B8", minWidth: 70 }}>{cambios.length ? `${cambios.length} sin guardar` : ""}</span>
+        <button onClick={borrarClase} style={{ ...btnO, color: "#DC2626", borderColor: "#FECACA", padding: "6px 10px", fontSize: 12 }}><Trash2 size={13} />{hojaGuardada ? "Borrar clase" : "Limpiar"}</button>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <button onClick={() => cambiarMes(-1)} title="Mes anterior" style={redondo(false)}><ChevronLeft size={18} /></button>
-          <span style={{ fontSize: 12, color: "#64748B", minWidth: 110, textAlign: "center", fontWeight: 600 }}>{nombreMes}</span>
-          <button onClick={() => !enMesActual && cambiarMes(1)} disabled={enMesActual} title="Mes siguiente" style={redondo(enMesActual)}><ChevronRight size={18} /></button>
+          <button onClick={() => ir(fechas[pos - 1], "atras")} disabled={pos <= 0} title="Clase anterior" style={redondo(pos <= 0)}><ChevronLeft size={18} /></button>
+          <span style={{ fontSize: 12, color: "#64748B", minWidth: 54, textAlign: "center" }}>{pos + 1} / {fechas.length}</span>
+          {enUltima && hojaGuardada
+            ? <button onClick={() => ir(fechaNueva(), "adelante")} title="Clase nueva" style={{ ...btnO, height: 34, padding: "0 12px", borderRadius: 17, borderColor: NAR, color: NAR, fontWeight: 700 }}><Plus size={15} />Nueva<ChevronRight size={16} /></button>
+            : <button onClick={() => ir(fechas[pos + 1], "adelante")} disabled={enUltima} title="Clase siguiente" style={redondo(enUltima)}><ChevronRight size={18} /></button>}
         </div>
-        <button onClick={guardar} disabled={guardando || !cambios.length} style={{ ...btn(), opacity: guardando || !cambios.length ? 0.5 : 1 }}><Save size={15} />{guardando ? "Guardando…" : cambios.length ? `Guardar (${cambios.length})` : "✓ Guardada"}</button>
+        <button onClick={guardar} disabled={guardando || !cambios} style={{ ...btn(), opacity: guardando || !cambios ? 0.5 : 1 }}><Save size={15} />{guardando ? "Guardando…" : cambios ? "Guardar" : "✓ Guardada"}</button>
       </div>
     </div>
   );
@@ -481,7 +473,7 @@ function Asistencia({ datos, maestroId, avisar }) {
   return (<div>
     <style>{ESTILOS_LIBRO}</style>
     <div style={{ display: "flex", marginBottom: 14 }}>
-      <button onClick={() => { if (cambios.length && !confirm("Tienes cambios sin guardar. ¿Cerrar la libreta sin guardar?")) return; setMarcas(guardado); setCerrada(true); }} style={btnO}><BookOpen size={14} />Cerrar (ver portada)</button>
+      <button onClick={() => { if (!confirmarSalir("Tienes cambios sin guardar. ¿Cerrar la libreta sin guardar?")) return; setMarcas({ ...guardadoHoja }); setFechaPag(fecha); setCerrada(true); }} style={btnO}><BookOpen size={14} />Cerrar (ver portada)</button>
     </div>
     <div ref={marcoRef} style={{ background: "#1E293B", borderRadius: 14, padding: escritorio ? 12 : 6, boxShadow: "0 24px 50px rgba(15,23,42,.25)", position: "relative", perspective: 2400 }}>
       {capa}
