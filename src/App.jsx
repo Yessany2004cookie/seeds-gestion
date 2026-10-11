@@ -432,6 +432,9 @@ const generarImgEstadoCuenta = (alumno, padre, sec, anio, filas, totales) => {
 // ══════════════════════════
 export default function App() {
   const [session, setSession] = useState(null);
+  // Al girar el celular o cambiar el tamaño de la ventana, todo se reacomoda
+  const [, setAncho] = useState(window.innerWidth);
+  useEffect(() => { let t; const f = () => { clearTimeout(t); t = setTimeout(() => setAncho(window.innerWidth), 120); }; window.addEventListener("resize", f); return () => { window.removeEventListener("resize", f); clearTimeout(t); }; }, []);
   const [page, setPage] = useState("dashboard");
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -569,10 +572,10 @@ export default function App() {
         <header className="vidrio-barra" style={{padding:"10px 18px",margin:window.innerWidth>768?"12px 12px 0 0":"10px 10px 0",borderRadius:20,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             {window.innerWidth<=768&&<button onClick={()=>setSidebarOpen(true)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Menu size={22} color="#475569"/></button>}
-            <h1 style={{fontSize:17,fontWeight:700,color:"#1E293B",margin:0}}>{NAV.find(n=>n.id===page)?.label||""}</h1>
+            <h1 className="titulo-barra" style={{fontSize:17,fontWeight:700,color:"#1E293B",margin:0}}>{NAV.find(n=>n.id===page)?.label||""}</h1>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            {data.sucursales.length>0&&<div style={{display:"flex",alignItems:"center",gap:6,background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:"4px 8px"}}>
+            {data.sucursales.length>0&&<div className="selector-sucursal" style={{display:"flex",alignItems:"center",gap:6,background:"rgba(245,243,255,.8)",border:"1px solid #DDD6FE",borderRadius:999,padding:"4px 10px",minWidth:0}}>
               <BookOpen size={14} color="#7C3AED"/>
               <select value={sucursalActiva||""} onChange={e=>{setSucursalActiva(e.target.value);try{localStorage.setItem("seeds_sucursal",e.target.value);}catch(x){}}} style={{border:"none",background:"transparent",fontSize:13,fontWeight:700,color:"#6D28D9",cursor:"pointer",outline:"none",fontFamily:"inherit",maxWidth:160}}>
                 {data.sucursales.filter(s=>s.activa!==false).map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}

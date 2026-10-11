@@ -171,12 +171,12 @@ export function DocenteApp({ session, perfil, onVolver }) {
         <header className="vidrio-barra" style={{ padding: "10px 18px", margin: escritorio ? "12px 12px 0 0" : "10px 10px 0", borderRadius: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
             {!escritorio && <button onClick={() => setMenu(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Menu size={22} color="#475569" /></button>}
-            <h1 style={{ fontSize: 17, fontWeight: 700, color: "#1E293B", margin: 0 }}>{NAV.find((n) => n.id === page)?.label}</h1>
+            <h1 className="titulo-barra" style={{ fontSize: 17, fontWeight: 700, color: "#1E293B", margin: 0 }}>{NAV.find((n) => n.id === page)?.label}</h1>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {onVolver && <button onClick={onVolver} title="Volver a administración" style={{ ...btnO, padding: "5px 10px", fontSize: 12, color: NAR, borderColor: "#FED7AA" }}>Administración</button>}
-            <button onClick={cargar} title="Actualizar" style={{ background: "none", border: "1px solid #E2E8F0", borderRadius: 6, cursor: "pointer", padding: "5px 8px", display: "flex" }}><RefreshCw size={14} color="#64748B" /></button>
-            <div style={{ fontSize: 12, color: "#64748B", textAlign: "right" }}><div style={{ fontWeight: 700, color: "#1E293B" }}>{datos.maestro?.nombre || ""}</div><div>{session.user.email}</div></div>
+            <button onClick={cargar} title="Actualizar" style={{ background: "rgba(255,255,255,.6)", border: "1px solid rgba(255,255,255,.85)", borderRadius: 999, cursor: "pointer", padding: "5px 8px", display: "flex" }}><RefreshCw size={14} color="#64748B" /></button>
+            <div className="hide-mobile" style={{ fontSize: 12, color: "#64748B", textAlign: "right" }}><div style={{ fontWeight: 700, color: "#1E293B" }}>{datos.maestro?.nombre || ""}</div><div>{session.user.email}</div></div>
           </div>
         </header>
         <div style={{ flex: 1, overflow: "auto", padding: 20 }}>{cargando ? <Vacio>Cargando…</Vacio> : paginas[page]}</div>
@@ -701,7 +701,7 @@ function GridAsistencia({ secciones, alumnos: todos, setError }) {
     </div>
     <div style={card}>
       {dias.length === 0 ? <Vacio>No hay asistencia registrada para este grupo en {nombreMes}.</Vacio> : (
-        <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+        <div style={{ overflowX: "auto" }}><table data-tarjetas="no" style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
           <thead><tr style={{ borderBottom: "2px solid #E2E8F0" }}>
             <th style={{ textAlign: "left", padding: "6px 8px", color: "#64748B" }}>Alumno</th>
             {dias.map((d) => <th key={d} title={fechaLarga(d)} style={{ padding: "6px 4px", color: "#64748B", fontWeight: 600 }}>{Number(d.slice(8))}</th>)}

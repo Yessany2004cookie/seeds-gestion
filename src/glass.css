@@ -150,3 +150,89 @@ div[style*="border-radius: 22px"][style*="blur(22px)"]::before {
 
 /* En celular, con el menú abierto se esconde el botón del asistente */
 body:has(.vidrio-menu[style*="left: 10px"]) button[title="Asistente financiero con IA"] { display: none !important; }
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE: celular y tableta
+   ════════════════════════════════════════════════════════════ */
+img, svg, canvas, video { max-width: 100%; }
+.titulo-barra { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+header.vidrio-barra > div { min-width: 0; }
+header.vidrio-barra > div:first-child { flex: 1 1 auto; }
+header.vidrio-barra > div:last-child { flex: 0 1 auto; }
+.selector-sucursal select { min-width: 0; text-overflow: ellipsis; }
+
+@media (max-width: 768px) {
+  /* En iPhone, letra de 16px en los campos para que no haga zoom al escribir */
+  input, select, textarea { font-size: 16px !important; }
+  header.vidrio-barra { padding: 8px 12px !important; gap: 8px !important; }
+  header.vidrio-barra > div { gap: 8px !important; }
+  .titulo-barra { font-size: 16px !important; }
+  .selector-sucursal { padding: 3px 8px !important; }
+  .selector-sucursal select { max-width: 112px !important; font-size: 13px !important; }
+  /* Menos espacio alrededor del contenido */
+  main > div:last-child { padding: 12px !important; }
+  /* Ventanas y formularios emergentes: ocupan el ancho del celular */
+  div[style*="position: fixed"][style*="inset: 0px"] { padding: 10px !important; }
+}
+@media (max-width: 420px) {
+  .selector-sucursal svg { display: none; }
+  .selector-sucursal select { max-width: 96px !important; }
+}
+
+/* Tablas → tarjetas en celular */
+@media (max-width: 640px) {
+  table.tabla-tarjetas, table.tabla-tarjetas > tbody { display: block; width: 100% !important; min-width: 0 !important; }
+  table.tabla-tarjetas > thead { display: none; }
+  table.tabla-tarjetas > tbody > tr {
+    display: block; margin-bottom: 10px; padding: 10px 14px; border-radius: 18px;
+    background: rgba(255, 255, 255, .62); border: 1px solid rgba(255, 255, 255, .85) !important;
+    box-shadow: 0 6px 18px rgba(30, 41, 59, .07), inset 0 1px 0 rgba(255, 255, 255, .9);
+  }
+  table.tabla-tarjetas > tbody > tr > td {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 6px 0 !important; border: none !important; text-align: right !important;
+    white-space: normal !important; width: auto !important; min-width: 0 !important; position: static !important; background: transparent !important;
+  }
+  table.tabla-tarjetas > tbody > tr > td::before {
+    content: attr(data-label); flex-shrink: 0; text-align: left; max-width: 45%;
+    font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: .3px;
+  }
+  table.tabla-tarjetas > tbody > tr > td[data-label=""]::before { content: none; }
+  table.tabla-tarjetas > tbody > tr > td[data-label=""] { justify-content: flex-end; }
+  /* La primera columna es el título de la tarjeta */
+  table.tabla-tarjetas > tbody > tr > td:first-child {
+    justify-content: flex-start; text-align: left !important; font-size: 15px; font-weight: 700;
+    padding-bottom: 8px !important; margin-bottom: 4px; border-bottom: 1px solid rgba(15, 23, 42, .07) !important;
+  }
+  table.tabla-tarjetas > tbody > tr > td:first-child::before { content: none; }
+  table.tabla-tarjetas > tbody > tr > td[colspan] { justify-content: center; text-align: center !important; }
+  table.tabla-tarjetas > tbody > tr > td[colspan]::before { content: none; }
+}
+
+@media (max-width: 640px) {
+  /* Buscadores y filtros ocupan todo el ancho en el celular */
+  main div[style*="flex-wrap: wrap"] > input:not([type="checkbox"]):not([type="radio"]),
+  main div[style*="flex-wrap: wrap"] > select,
+  main div[style*="flex-wrap: wrap"] > div[style*="position: relative"]:has(> input) {
+    flex: 1 1 100% !important; width: 100% !important; max-width: none !important; min-width: 0 !important;
+  }
+  main div[style*="flex-wrap: wrap"] > div[style*="position: relative"]:has(> input) > input { width: 100% !important; }
+  /* Tarjetas con menos relleno para aprovechar la pantalla */
+  div[style*="border-radius: 22px"][style*="blur(22px)"] { padding: 14px !important; }
+  /* Formularios de dos columnas pasan a una (los contadores pequeños no) */
+  div[style*="grid-template-columns: 1fr 1fr"]:has(> div > label), div[style*="grid-template-columns: 1fr 1fr"]:has(> div > input) { grid-template-columns: 1fr !important; }
+  /* Si la primera columna es solo el número, el título de la tarjeta es la segunda */
+  table.tabla-num > tbody > tr > td:first-child { display: none; }
+  table.tabla-num > tbody > tr > td:nth-child(2) {
+    justify-content: flex-start; text-align: left !important; font-size: 15px; font-weight: 700;
+    padding-bottom: 8px !important; margin-bottom: 4px; border-bottom: 1px solid rgba(15, 23, 42, .07) !important;
+  }
+  table.tabla-num > tbody > tr > td:nth-child(2)::before { content: none; }
+}
+
+/* Ventanas emergentes: vidrio casi sólido para que se lean bien */
+div[style*="position: fixed"] > div[style*="background: rgb(255, 255, 255)"] {
+  background: rgba(255, 255, 255, .93) !important;
+  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: 0 30px 70px rgba(15, 23, 42, .28), inset 0 1px 0 rgba(255, 255, 255, .95);
+}

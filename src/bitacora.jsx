@@ -406,7 +406,7 @@ export function PortadaCuero({ titulo = "Bitácora de clases", nombre, anio, abr
           <div className="bt-quemado" style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: "clamp(12px, 3.4vw, 15px)", letterSpacing: "clamp(2px, .8vw, 4px)", fontWeight: 700, textTransform: "uppercase", marginTop: 6 }}>{titulo}</div>
           <div className="bt-sello"><img src={LOGO_SEEDS} alt="Seeds" /></div>
           <div>
-            <div className="bt-quemado" style={{ fontFamily: "Caveat, 'Segoe Print', cursive", fontSize: "clamp(34px, 9vw, 50px)", fontWeight: 700, lineHeight: 1.05 }}>{nombre}</div>
+            <div className="bt-quemado" style={{ fontFamily: "Caveat, 'Segoe Print', cursive", fontSize: "clamp(26px, 7.4vw, 48px)", fontWeight: 700, lineHeight: 1.05 }}>{nombre}</div>
             <div className="bt-quemado" style={{ width: 120, height: 2, margin: "10px auto 8px", background: "#2A1206", opacity: 0.75 }} />
             <div className="bt-quemado" style={{ fontFamily: "Georgia, serif", fontSize: "clamp(10px, 2.8vw, 12px)", letterSpacing: "clamp(1px, .6vw, 3px)", textTransform: "uppercase", fontWeight: 700 }}>Seeds English School · {anio}</div>
           </div>
