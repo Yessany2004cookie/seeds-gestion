@@ -551,19 +551,19 @@ export default function App() {
   return (
     <div style={{display:"flex",height:"100vh",background:"transparent"}}>
       {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.25)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",zIndex:40}}/>}
-      <aside className="vidrio-menu" style={{position:"fixed",left:sidebarOpen?10:-280,top:10,bottom:10,width:240,color:"#1E293B",zIndex:50,transition:"left 0.25s cubic-bezier(.2,.8,.2,1)",display:"flex",flexDirection:"column",borderRadius:26,overflow:"hidden",...(window.innerWidth>768?{position:"relative",left:0,top:0,bottom:0,margin:12}:{})}}>
-        <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(15,23,42,.07)",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+      <aside className="vidrio-menu" style={{position:"fixed",left:sidebarOpen?10:-280,top:10,bottom:10,width:240,color:"#fff",zIndex:50,transition:"left 0.25s cubic-bezier(.2,.8,.2,1)",display:"flex",flexDirection:"column",borderRadius:26,overflow:"hidden",...(window.innerWidth>768?{position:"relative",left:0,top:0,bottom:0,margin:12}:{})}}>
+        <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,.08)",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
           <div style={{background:"#fff",borderRadius:22,padding:8,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 6px 18px rgba(249,115,22,.15)"}}>
             <img src={LOGO_SEEDS} alt="Seeds" style={{width:110,height:110,objectFit:"contain"}}/>
           </div>
-          <div style={{textAlign:"center"}}><div style={{fontWeight:800,fontSize:16,background:"linear-gradient(90deg,#F97316,#EA580C)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Seeds English</div><div style={{fontSize:11,color:"#64748B"}}>Sistema de Gestión</div></div>
+          <div style={{textAlign:"center"}}><div style={{fontWeight:800,fontSize:16,background:"linear-gradient(90deg,#F97316,#EA580C)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Seeds English</div><div style={{fontSize:11,color:"#94A3B8"}}>Sistema de Gestión</div></div>
         </div>
         <nav style={{flex:1,padding:"10px 10px",overflowY:"auto"}}>
           {NAV.map(n=>{const Icon=n.icon;const a=page===n.id;return(
-            <button key={n.id} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 14px",marginBottom:2,border:"none",borderRadius:14,cursor:"pointer",background:a?"linear-gradient(135deg,#FB923C,#EA580C)":"transparent",color:a?"#fff":"#334155",fontSize:13,fontWeight:a?700:500,textAlign:"left",boxShadow:a?"0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)":"none",fontFamily:"inherit"}}><Icon size={17}/>{n.label}</button>
+            <button key={n.id} className={"menu-item"+(a?" activo":"")} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 14px",marginBottom:2,border:"none",borderRadius:14,cursor:"pointer",background:a?"linear-gradient(135deg,#FB923C,#EA580C)":"transparent",color:a?"#fff":"#CBD5E1",fontSize:13,fontWeight:a?700:500,textAlign:"left",boxShadow:a?"0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)":"none",fontFamily:"inherit"}}><Icon size={17}/>{n.label}</button>
           );})}
         </nav>
-        <button onClick={logout} style={{display:"flex",alignItems:"center",gap:8,padding:"14px 20px",border:"none",borderTop:"1px solid rgba(15,23,42,.07)",background:"transparent",color:"#EF4444",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}><LogOut size={16}/>Cerrar sesión</button>
+        <button onClick={logout} style={{display:"flex",alignItems:"center",gap:8,padding:"14px 20px",border:"none",borderTop:"1px solid rgba(255,255,255,.08)",background:"transparent",color:"#FCA5A5",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}><LogOut size={16}/>Cerrar sesión</button>
       </aside>
       <main style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
         <header className="vidrio-barra" style={{padding:"10px 18px",margin:window.innerWidth>768?"12px 12px 0 0":"10px 10px 0",borderRadius:20,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
