@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, btn, btnO, label } from "./estilo";
-import { Send, Plus, Trash2, Save, ChevronUp, ChevronDown, Copy, Eye, Inbox, Pencil, ArrowLeft, Mail, MailOpen, Check, Printer } from "lucide-react";
+import { Send, Plus, Trash2, Save, ChevronUp, ChevronDown, Copy, Eye, Inbox, Pencil, ArrowLeft, Mail, MailOpen, Check, Printer, X, Info, CheckCircle2 } from "lucide-react";
 
 const NAR = "#EA580C";
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -30,57 +30,55 @@ const colorDe = (id) => COLORES_AVATAR[[...String(id || "")].reduce((a, c) => a 
 const errorTexto = (e) => /relation|does not exist|schema cache|column/i.test(e?.message || "") ? "Falta activar el formulario editable en Supabase (script supabase/formularios.sql)." : e?.message || "Error";
 
 export const TIPOS = [
-  { v: "seccion", l: "Título de sección", i: "🔖" },
-  { v: "texto", l: "Respuesta corta", i: "✏️" },
-  { v: "parrafo", l: "Párrafo", i: "📝" },
-  { v: "unica", l: "Opción única", i: "🔘" },
-  { v: "varias", l: "Check list (varias)", i: "✅" },
-  { v: "sino", l: "Sí / No", i: "👍" },
-  { v: "escala", l: "Escala 1 a 5", i: "⭐" },
-  { v: "numero", l: "Número", i: "🔢" },
-  { v: "fecha", l: "Fecha", i: "📅" },
-  { v: "mensaje", l: "Texto informativo", i: "💡" },
-  { v: "firma", l: "Declaración y firma", i: "✍️" },
+  { v: "seccion", l: "Título de sección" },
+  { v: "texto", l: "Respuesta corta" },
+  { v: "parrafo", l: "Párrafo" },
+  { v: "unica", l: "Opción única" },
+  { v: "varias", l: "Check list (varias)" },
+  { v: "sino", l: "Sí / No" },
+  { v: "escala", l: "Escala 1 a 5" },
+  { v: "numero", l: "Número" },
+  { v: "fecha", l: "Fecha" },
+  { v: "mensaje", l: "Texto informativo" },
+  { v: "firma", l: "Declaración y firma" },
 ];
-const ICONOS = ["💻", "📷", "🙏", "🏰", "🎬", "📞", "💰", "🤖", "✍️", "📚", "✏️", "🎯", "🧩", "🗣️", "🎧", "📖", "🏆", "💡", "⭐", "✅", "🎨", "🎵", "🧠", "👥", "⏰", "📝", "💬", "🌱", "🚀", "📊", "🔤", "🙋", "⚠️", "🏠", "🎲", "🖍️", "📷"];
-const CARAS = ["😞", "😕", "😐", "🙂", "🤩"];
 
 // Preguntas del reporte de clase anterior (para leer reportes viejos)
 const CAMPOS_ANTERIORES = [
-  { id: "tema", tipo: "texto", etiqueta: "Tema / unidad trabajada", icono: "📚" },
-  { id: "objetivo", tipo: "parrafo", etiqueta: "Objetivo de la clase", icono: "🎯" },
-  { id: "actividades", tipo: "parrafo", etiqueta: "Actividades realizadas", icono: "🧩" },
-  { id: "tarea", tipo: "parrafo", etiqueta: "Tarea asignada", icono: "🏠" },
-  { id: "materiales", tipo: "texto", etiqueta: "Materiales o recursos usados", icono: "🖍️" },
-  { id: "logro", tipo: "unica", etiqueta: "¿Se cumplió el objetivo?", icono: "🏆", opciones: ["Sí", "Parcialmente", "No"] },
-  { id: "destacados", tipo: "texto", etiqueta: "Alumnos que destacaron", icono: "⭐" },
-  { id: "dificultades", tipo: "texto", etiqueta: "Alumnos con dificultades", icono: "🙋" },
-  { id: "observaciones", tipo: "parrafo", etiqueta: "Observaciones generales", icono: "💬" },
+  { id: "tema", tipo: "texto", etiqueta: "Tema / unidad trabajada" },
+  { id: "objetivo", tipo: "parrafo", etiqueta: "Objetivo de la clase" },
+  { id: "actividades", tipo: "parrafo", etiqueta: "Actividades realizadas" },
+  { id: "tarea", tipo: "parrafo", etiqueta: "Tarea asignada" },
+  { id: "materiales", tipo: "texto", etiqueta: "Materiales o recursos usados" },
+  { id: "logro", tipo: "unica", etiqueta: "¿Se cumplió el objetivo?", opciones: ["Sí", "Parcialmente", "No"] },
+  { id: "destacados", tipo: "texto", etiqueta: "Alumnos que destacaron" },
+  { id: "dificultades", tipo: "texto", etiqueta: "Alumnos con dificultades" },
+  { id: "observaciones", tipo: "parrafo", etiqueta: "Observaciones generales" },
 ];
 
 // Formulario inicial: el "Checklist for teachers" de Jotform.
 // La fecha, el docente y el grupo los pone el sistema.
-const si = (id, icono, etiqueta) => ({ id, tipo: "sino", etiqueta, icono, req: true });
+const si = (id, etiqueta) => ({ id, tipo: "sino", etiqueta, req: true });
 export const FORM_DEFECTO = {
   id: "reporte_clase",
   titulo: "Checklist for teachers",
   descripcion: "",
   despedida: "Thanks for being part of Seeds English School. Thanks for your responsibility.",
   campos: [
-    { id: "porque", tipo: "mensaje", icono: "💡", etiqueta: "Why is this checklist important?", ayuda: "Because it helps us remember our activities in the class." },
-    si("zoom", "💻", "I've already connected Zoom or Meet?"),
-    si("foto", "📷", "I've already sent a photo to the group?"),
-    si("ebook", "📖", "I've already used the e-book of Big English?"),
-    si("biblia", "🙏", "I've already read the Bible text in English?"),
-    si("disney_reader", "🏰", "I've already used Disney Reader?"),
-    si("asistencia", "✅", "I've already taken attendance?"),
-    si("disney_plus", "🎬", "I've already watched Disney Plus 10-15 minutes with English subtitles?"),
-    si("padres", "📞", "I've already contacted the parents of absent students?"),
-    si("plataforma", "🖥️", "I've already worked on the digital platform?"),
-    si("cancion", "🎵", "I've already learned and practiced an English song (10 minutes)?"),
-    si("finanzas", "💰", "I've already played the video about financial education?"),
-    si("ia_pearson", "🤖", "Revisar avance en IA bot y plataforma Pearson"),
-    { id: "firma", tipo: "firma", icono: "✍️", etiqueta: "I'm a Seeds English School teacher, my name is {nombre}. And I've done all activities with the students today.", req: true },
+    { id: "porque", tipo: "mensaje", etiqueta: "Why is this checklist important?", ayuda: "Because it helps us remember our activities in the class." },
+    si("zoom", "I've already connected Zoom or Meet?"),
+    si("foto", "I've already sent a photo to the group?"),
+    si("ebook", "I've already used the e-book of Big English?"),
+    si("biblia", "I've already read the Bible text in English?"),
+    si("disney_reader", "I've already used Disney Reader?"),
+    si("asistencia", "I've already taken attendance?"),
+    si("disney_plus", "I've already watched Disney Plus 10-15 minutes with English subtitles?"),
+    si("padres", "I've already contacted the parents of absent students?"),
+    si("plataforma", "I've already worked on the digital platform?"),
+    si("cancion", "I've already learned and practiced an English song (10 minutes)?"),
+    si("finanzas", "I've already played the video about financial education?"),
+    si("ia_pearson", "Revisar avance en IA bot y plataforma Pearson"),
+    { id: "firma", tipo: "firma", etiqueta: "I'm a Seeds English School teacher, my name is {nombre}. And I've done all activities with the students today.", req: true },
   ],
 };
 
@@ -107,7 +105,7 @@ const resumenReporte = (r) => {
   const c = qs.find((x) => !vacio(x, r.respuestas?.[x.id]) && ["texto", "parrafo"].includes(x.tipo));
   if (c) return String(r.respuestas[c.id]).slice(0, 90);
   const sn = qs.filter((x) => x.tipo === "sino");
-  if (sn.length) { const no = sn.filter((x) => r.respuestas?.[x.id] === "No").length; return no ? `⚠ ${no} ${no === 1 ? "actividad pendiente" : "actividades pendientes"} de ${sn.length}` : `✓ ${sn.length} de ${sn.length} actividades hechas`; }
+  if (sn.length) { const no = sn.filter((x) => r.respuestas?.[x.id] === "No").length; return no ? `${no} ${no === 1 ? "actividad pendiente" : "actividades pendientes"} de ${sn.length}` : `✓ ${sn.length} de ${sn.length} actividades hechas`; }
   return r.titulo_form || "Check list de la clase";
 };
 
@@ -133,7 +131,7 @@ function Firma({ valor, onChange }) {
     <div style={{ position: "relative", border: `2px dashed ${valor ? "#059669" : "#CBD5E1"}`, borderRadius: 12, background: "#fff", maxWidth: 460 }}>
       <canvas ref={ref} width={460} height={150} style={{ width: "100%", height: 150, display: "block", touchAction: "none", cursor: "crosshair" }}
         onMouseDown={empezar} onMouseMove={mover} onMouseUp={soltar} onMouseLeave={soltar} onTouchStart={empezar} onTouchMove={mover} onTouchEnd={soltar} />
-      {!valor && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#CBD5E1", fontSize: 14, pointerEvents: "none" }}>✍️ Firma aquí</div>}
+      {!valor && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#CBD5E1", fontSize: 14, pointerEvents: "none" }}>Firma aquí</div>}
       <div style={{ position: "absolute", left: 16, right: 16, bottom: 28, borderBottom: "1px solid #E2E8F0", pointerEvents: "none" }} />
     </div>
     {valor && <button type="button" onClick={borrar} style={{ ...btnO, marginTop: 6, fontSize: 12, padding: "5px 10px" }}>Borrar firma</button>}
@@ -148,11 +146,9 @@ function Campo({ c, valor, onChange }) {
   if (c.tipo === "numero") return <input type="number" value={valor ?? ""} onChange={(e) => onChange(e.target.value)} style={{ ...input, width: 140, fontSize: 14, padding: "11px 13px", borderRadius: 10 }} />;
   if (c.tipo === "fecha") return <input type="date" value={valor || ""} onChange={(e) => onChange(e.target.value)} style={{ ...input, width: 190, fontSize: 14, padding: "10px 12px", borderRadius: 10 }} />;
   if (c.tipo === "unica") return <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{(c.opciones || []).map((o) => <button key={o} type="button" onClick={() => onChange(valor === o ? "" : o)} style={chip(valor === o)}>{o}</button>)}</div>;
-  if (c.tipo === "sino") return <div style={{ display: "flex", gap: 8 }}>{[["Sí", "#059669", "👍"], ["No", "#DC2626", "👎"]].map(([o, col, ic]) => <button key={o} type="button" onClick={() => onChange(valor === o ? "" : o)} style={{ ...chip(valor === o, col), minWidth: 90 }}>{ic} {o}</button>)}</div>;
-  if (c.tipo === "escala") return <div style={{ display: "flex", gap: 6 }}>{CARAS.map((cara, i) => { const n = i + 1, on = Number(valor) === n; return (
-    <button key={n} type="button" onClick={() => onChange(on ? "" : n)} title={`${n} de 5`} style={{ width: 52, height: 56, borderRadius: 12, border: `2px solid ${on ? NAR : "#E2E8F0"}`, background: on ? "#FFF7ED" : "#fff", cursor: "pointer", fontSize: 24, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", transform: on ? "scale(1.08)" : "none", transition: "all .15s" }}>
-      <span style={{ filter: on || !valor ? "none" : "grayscale(1) opacity(.5)" }}>{cara}</span><span style={{ fontSize: 10, fontWeight: 700, color: on ? NAR : "#94A3B8" }}>{n}</span>
-    </button>); })}</div>;
+  if (c.tipo === "sino") return <div style={{ display: "flex", gap: 8 }}>{[["Sí", "#059669", Check], ["No", "#DC2626", X]].map(([o, col, Ic]) => <button key={o} type="button" onClick={() => onChange(valor === o ? "" : o)} style={{ ...chip(valor === o, col), minWidth: 90, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Ic size={15} strokeWidth={2.6} />{o}</button>)}</div>;
+  if (c.tipo === "escala") return <div style={{ display: "flex", gap: 6 }}>{[1, 2, 3, 4, 5].map((n) => { const on = Number(valor) === n; return (
+    <button key={n} type="button" onClick={() => onChange(on ? "" : n)} title={`${n} de 5`} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${on ? NAR : "#E2E8F0"}`, background: on ? NAR : "#fff", color: on ? "#fff" : "#475569", cursor: "pointer", fontSize: 16, fontWeight: 800, fontFamily: "inherit" }}>{n}</button>); })}</div>;
   if (c.tipo === "firma") return <Firma valor={valor} onChange={onChange} />;
   if (c.tipo === "varias") { const sel = Array.isArray(valor) ? valor : []; return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 8 }}>{(c.opciones || []).map((o) => { const on = sel.includes(o); return (
@@ -168,12 +164,11 @@ function Preguntas({ campos, respuestas, onCambio, nombre }) {
   return (campos || []).map((c) => {
     if (c.tipo === "mensaje") return (
       <div key={c.id} style={{ display: "flex", gap: 12, alignItems: "flex-start", background: "linear-gradient(135deg,#FFF7ED,#FFFBF5)", border: "1px solid #FED7AA", borderRadius: 14, padding: "14px 16px", marginBottom: 10 }}>
-        <span style={{ fontSize: 26 }}>{c.icono || "💡"}</span>
+        <span style={{ width: 34, height: 34, borderRadius: 12, background: "#fff", color: NAR, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Info size={18} /></span>
         <div><div style={{ fontSize: 14, fontWeight: 800, color: "#9A3412" }}>{conNombre(c.etiqueta, nombre)}</div>{c.ayuda && <div style={{ fontSize: 13, color: "#7C2D12", marginTop: 2 }}>{conNombre(c.ayuda, nombre)}</div>}</div>
       </div>);
     if (c.tipo === "seccion") return (
       <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, margin: "22px 2px 10px" }}>
-        <span style={{ fontSize: 22 }}>{c.icono || "🔖"}</span>
         <div><div style={{ fontSize: 16, fontWeight: 800, color: "#1E293B" }}>{c.etiqueta}</div>{c.ayuda && <div style={{ fontSize: 12, color: "#64748B" }}>{c.ayuda}</div>}</div>
         <div style={{ flex: 1, height: 2, background: "linear-gradient(to right,#FED7AA,transparent)" }} />
       </div>);
@@ -182,9 +177,9 @@ function Preguntas({ campos, respuestas, onCambio, nombre }) {
     return (
       <div key={c.id} style={{ background: "#fff", border: `1px solid ${lleno ? "#FED7AA" : "#E2E8F0"}`, borderRadius: 14, padding: "16px 18px", marginBottom: 10, boxShadow: lleno ? "0 2px 10px rgba(234,88,12,.08)" : "0 1px 2px rgba(15,23,42,.04)", transition: "all .2s" }}>
         <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: lleno ? "linear-gradient(135deg,#FFEDD5,#FED7AA)" : "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{c.icono || TIPOS.find((t) => t.v === c.tipo)?.i}</div>
+          <div style={{ width: 34, height: 34, borderRadius: 999, background: lleno ? "linear-gradient(145deg,#FB923C,#EA580C)" : "#F1F5F9", color: lleno ? "#fff" : "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, flexShrink: 0, boxShadow: lleno ? "0 4px 10px rgba(234,88,12,.3)" : "none" }}>{c.tipo === "firma" ? <Pencil size={15} /> : n}</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#1E293B" }}>{c.tipo !== "firma" && <span style={{ color: "#CBD5E1", marginRight: 6 }}>{n}.</span>}{conNombre(c.etiqueta, nombre)}{c.req && <span style={{ color: NAR }}> *</span>}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", paddingTop: 7 }}>{conNombre(c.etiqueta, nombre)}{c.req && <span style={{ color: NAR }}> *</span>}</div>
             {c.ayuda && <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>{c.ayuda}</div>}
           </div>
           {lleno && <span style={{ color: "#059669" }}><Check size={18} strokeWidth={3} /></span>}
@@ -197,10 +192,9 @@ function Preguntas({ campos, respuestas, onCambio, nombre }) {
 function Portadilla({ titulo, descripcion, children }) {
   return (
     <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, padding: "26px 24px", marginBottom: 16, color: "#fff", background: "radial-gradient(circle at 85% 20%, rgba(255,255,255,.25), transparent 40%), linear-gradient(135deg,#F97316 0%,#EA580C 45%,#C2410C 100%)", boxShadow: "0 14px 30px rgba(234,88,12,.25)" }}>
-      <div aria-hidden style={{ position: "absolute", right: 14, top: 8, fontSize: 64, opacity: 0.9, transform: "rotate(8deg)", filter: "drop-shadow(0 6px 10px rgba(0,0,0,.2))" }}>📋</div>
-      <div aria-hidden style={{ position: "absolute", right: 90, bottom: -6, fontSize: 40, opacity: 0.8, transform: "rotate(-12deg)" }}>✏️</div>
-      <div aria-hidden style={{ position: "absolute", right: 150, top: 14, fontSize: 28, opacity: 0.7 }}>⭐</div>
-      <div style={{ position: "relative", maxWidth: "calc(100% - 120px)" }}>
+      <div aria-hidden style={{ position: "absolute", right: -30, top: -40, width: 160, height: 160, borderRadius: 999, background: "rgba(255,255,255,.16)", border: "1px solid rgba(255,255,255,.3)" }} />
+      <div aria-hidden style={{ position: "absolute", right: 70, bottom: -50, width: 110, height: 110, borderRadius: 999, background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.25)" }} />
+      <div style={{ position: "relative" }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", opacity: 0.85 }}>Seeds English School</div>
         <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4, lineHeight: 1.15 }}>{titulo}</div>
         {descripcion && <div style={{ fontSize: 13, opacity: 0.92, marginTop: 6 }}>{descripcion}</div>}
@@ -215,11 +209,10 @@ export function VerRespuestas({ r, nombre }) {
   const viejo = !(Array.isArray(r?.campos) && r.campos.length);
   const campos = camposDeReporte(r).filter((c) => c.tipo !== "mensaje" && !(viejo && vacio(c, r.respuestas?.[c.id])));
   return (<div>{campos.map((c) => {
-    if (c.tipo === "seccion") return <div key={c.id} style={{ fontSize: 13, fontWeight: 800, color: "#9A3412", margin: "16px 0 8px", display: "flex", gap: 6 }}><span>{c.icono || "🔖"}</span>{c.etiqueta}</div>;
+    if (c.tipo === "seccion") return <div key={c.id} style={{ fontSize: 13, fontWeight: 800, color: "#9A3412", margin: "16px 0 8px", display: "flex", gap: 6 }}>{c.etiqueta}</div>;
     const v = r.respuestas?.[c.id];
     return (
       <div key={c.id} style={{ display: "flex", gap: 12, padding: "10px 0", borderBottom: "1px solid #F1F5F9" }}>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: "#FFF7ED", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, flexShrink: 0 }}>{c.icono || TIPOS.find((t) => t.v === c.tipo)?.i}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: ["sino", "firma"].includes(c.tipo) ? 13 : 11, fontWeight: 700, color: ["sino", "firma"].includes(c.tipo) ? "#1E293B" : "#64748B", textTransform: ["sino", "firma"].includes(c.tipo) ? "none" : "uppercase", letterSpacing: 0.3 }}>{conNombre(c.etiqueta, nombre)}</div>
           {vacio(c, v) ? <div style={{ fontSize: 13, color: "#CBD5E1", fontStyle: "italic" }}>Sin respuesta</div>
@@ -229,7 +222,7 @@ export function VerRespuestas({ r, nombre }) {
               </div>
             : c.tipo === "sino" ? <span style={{ display: "inline-block", marginTop: 4, fontSize: 12, fontWeight: 800, padding: "3px 12px", borderRadius: 999, background: v === "Sí" ? "#ECFDF5" : "#FEF2F2", color: v === "Sí" ? "#047857" : "#DC2626" }}>{v === "Sí" ? "✓ Sí" : "✗ No"}</span>
             : c.tipo === "firma" ? <img src={v} alt="Firma" style={{ marginTop: 4, maxWidth: 260, height: "auto", borderBottom: "1px solid #CBD5E1" }} />
-            : c.tipo === "escala" ? <div style={{ fontSize: 20, marginTop: 2 }}>{CARAS[Number(v) - 1]} <span style={{ fontSize: 13, fontWeight: 700, color: "#1E293B" }}>{v} / 5</span></div>
+            : c.tipo === "escala" ? <div style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", marginTop: 2 }}>{v} / 5</div>
             : <div style={{ fontSize: 14, color: "#1E293B", whiteSpace: "pre-wrap", marginTop: 2 }}>{textoValor(c, v)}</div>}
         </div>
       </div>);
@@ -287,16 +280,16 @@ export function FormularioClase({ datos, maestroId, avisar }) {
     </Portadilla>
 
     <div style={{ ...card, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12, borderRadius: 14 }}>
-      <div><label style={label}>👥 Grupo *</label>
+      <div><label style={label}>Grupo *</label>
         <select value={envio.seccion_id} onChange={(e) => setEnvio({ ...envio, seccion_id: e.target.value })} style={{ ...input, cursor: "pointer", fontWeight: 600 }}>
           {datos.secciones.length === 0 && <option value="">Sin grupos asignados</option>}
           {datos.secciones.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
         </select></div>
-      <div><label style={label}>📅 Fecha de la clase *</label><input type="date" value={envio.fecha} max={hoyISO()} onChange={(e) => setEnvio({ ...envio, fecha: e.target.value })} style={{ ...input, fontWeight: 600 }} /></div>
+      <div><label style={label}>Fecha de la clase *</label><input type="date" value={envio.fecha} max={hoyISO()} onChange={(e) => setEnvio({ ...envio, fecha: e.target.value })} style={{ ...input, fontWeight: 600 }} /></div>
     </div>
 
     {gracias && <div style={{ ...card, borderRadius: 14, textAlign: "center", background: "linear-gradient(135deg,#ECFDF5,#F0FDF4)", borderColor: "#A7F3D0" }}>
-      <div style={{ fontSize: 44 }}>🎉</div>
+      <div style={{ width: 56, height: 56, margin: "0 auto", borderRadius: 999, background: "linear-gradient(145deg,#34D399,#059669)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 20px rgba(5,150,105,.35)" }}><CheckCircle2 size={30} /></div>
       <div style={{ fontSize: 17, fontWeight: 800, color: "#065F46", marginTop: 4 }}>¡Check list enviado!</div>
       <div style={{ fontSize: 14, color: "#047857", marginTop: 4 }}>{form.despedida || FORM_DEFECTO.despedida}</div>
       <button onClick={() => setGracias(false)} style={{ ...btnO, marginTop: 12 }}><Plus size={14} />Llenar otro</button>
@@ -407,7 +400,7 @@ function Bandeja({ data, setError, onNoLeidos }) {
       </div>
       <div style={{ maxHeight: escritorio ? 620 : "none", overflowY: "auto" }}>
         {lista === null ? <div style={{ padding: 30, textAlign: "center", color: "#94A3B8", fontSize: 13 }}>Cargando…</div>
-          : visibles.length === 0 ? <div style={{ padding: 30, textAlign: "center", color: "#94A3B8", fontSize: 13 }}>📭 No hay check list {soloNuevos ? "sin leer" : "con esos filtros"}.</div>
+          : visibles.length === 0 ? <div style={{ padding: 30, textAlign: "center", color: "#94A3B8", fontSize: 13 }}>No hay check list {soloNuevos ? "sin leer" : "con esos filtros"}.</div>
           : grupos.map((g) => (<div key={g.id || "todos"}>
               {orden === "maestro" && <div style={{ padding: "8px 14px", background: "#F1F5F9", fontSize: 11, fontWeight: 800, color: "#475569", textTransform: "uppercase", letterSpacing: 0.5, display: "flex", justifyContent: "space-between" }}>
                 <span>{nombreM(g.id)}</span><span>{g.items.length}{g.items.some((r) => !r.leido_at) ? ` · ${g.items.filter((r) => !r.leido_at).length} nuevos` : ""}</span></div>}
@@ -434,7 +427,7 @@ function Bandeja({ data, setError, onNoLeidos }) {
     </div>
   ) : (
     <div style={{ ...card, marginBottom: 0, textAlign: "center", padding: "60px 20px", color: "#94A3B8", borderRadius: 14 }}>
-      <div style={{ fontSize: 48 }}>📬</div>
+      <div style={{ width: 60, height: 60, margin: "0 auto", borderRadius: 999, background: "#FFF7ED", color: NAR, display: "flex", alignItems: "center", justifyContent: "center" }}><Inbox size={28} /></div>
       <div style={{ fontSize: 14, fontWeight: 600, color: "#475569", marginTop: 8 }}>Elige un check list de la bandeja</div>
       <div style={{ fontSize: 12, marginTop: 4 }}>{(lista || []).filter((r) => !r.leido_at).length} sin leer de {(lista || []).length}</div>
     </div>
@@ -449,7 +442,6 @@ function EditorFormulario({ showToast }) {
   const { form, activo, recargar } = useFormulario();
   const [borrador, setBorrador] = useState(null);
   const [abierta, setAbierta] = useState(null);
-  const [iconosDe, setIconosDe] = useState(null);
   const [vista, setVista] = useState({});
   const [guardando, setGuardando] = useState(false);
   const escritorio = window.innerWidth > 1000;
@@ -463,7 +455,7 @@ function EditorFormulario({ showToast }) {
   const mover = (i, d) => setCampos((cs) => { const n = [...cs]; const j = i + d; if (j < 0 || j >= n.length) return cs; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const agregar = (tipo) => {
     const t = TIPOS.find((x) => x.v === tipo);
-    const c = { id: uid(), tipo, etiqueta: tipo === "seccion" ? "Nueva sección" : "Nueva pregunta", icono: t.i, ...(["unica", "varias"].includes(tipo) ? { opciones: ["Opción 1", "Opción 2"] } : {}) };
+    const c = { id: uid(), tipo, etiqueta: tipo === "seccion" ? "Nueva sección" : "Nueva pregunta", ...(["unica", "varias"].includes(tipo) ? { opciones: ["Opción 1", "Opción 2"] } : {}) };
     setCampos((cs) => [...cs, c]); setAbierta(c.id);
   };
   const guardar = async () => {
@@ -480,7 +472,7 @@ function EditorFormulario({ showToast }) {
   };
 
   const editor = (<div>
-    {!activo && <div style={{ ...card, background: "#FFF7ED", borderColor: "#FDBA74", color: "#9A3412", fontSize: 13 }}>⚠ Falta activar el formulario editable en Supabase (script <code>supabase/formularios.sql</code>).</div>}
+    {!activo && <div style={{ ...card, background: "#FFF7ED", borderColor: "#FDBA74", color: "#9A3412", fontSize: 13 }}>Falta activar el formulario editable en Supabase (script <code>supabase/formularios.sql</code>).</div>}
     <div style={{ ...card, borderRadius: 14 }}>
       <label style={label}>Título del formulario</label>
       <input value={borrador.titulo} onChange={(e) => setBorrador({ ...borrador, titulo: e.target.value })} style={{ ...input, fontSize: 15, fontWeight: 700, marginBottom: 10 }} />
@@ -493,7 +485,7 @@ function EditorFormulario({ showToast }) {
     {borrador.campos.map((c, i) => { const abiertoC = abierta === c.id; const t = TIPOS.find((x) => x.v === c.tipo); return (
       <div key={c.id} style={{ background: "#fff", border: `1px solid ${abiertoC ? "#FDBA74" : "#E2E8F0"}`, borderRadius: 12, marginBottom: 8, boxShadow: abiertoC ? "0 6px 18px rgba(234,88,12,.12)" : "none" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", cursor: "pointer" }} onClick={() => setAbierta(abiertoC ? null : c.id)}>
-          <span style={{ fontSize: 20, width: 28, textAlign: "center" }}>{c.icono || t?.i}</span>
+          <span style={{ width: 26, height: 26, borderRadius: 999, background: "#F1F5F9", color: "#64748B", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: c.tipo === "seccion" ? 800 : 600, color: "#1E293B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.etiqueta}{c.req && <span style={{ color: NAR }}> *</span>}</div>
             <div style={{ fontSize: 11, color: "#94A3B8" }}>{t?.l}{c.opciones ? ` · ${c.opciones.length} opciones` : ""}</div>
@@ -507,17 +499,10 @@ function EditorFormulario({ showToast }) {
         </div>
         {abiertoC && <div style={{ padding: "4px 14px 14px", borderTop: "1px solid #F1F5F9", display: "grid", gap: 10 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <div style={{ position: "relative" }}>
-              <label style={label}>Imagen</label>
-              <button onClick={() => setIconosDe(iconosDe === c.id ? null : c.id)} style={{ ...btnO, fontSize: 22, padding: "3px 10px" }}>{c.icono || t?.i}</button>
-              {iconosDe === c.id && <div style={{ position: "absolute", zIndex: 20, top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: 8, boxShadow: "0 12px 30px rgba(15,23,42,.18)", display: "grid", gridTemplateColumns: "repeat(7,36px)", gap: 4 }}>
-                {ICONOS.map((ic) => <button key={ic} onClick={() => { editar(c.id, { icono: ic }); setIconosDe(null); }} style={{ width: 36, height: 36, fontSize: 20, border: "none", borderRadius: 8, background: c.icono === ic ? "#FFEDD5" : "transparent", cursor: "pointer" }}>{ic}</button>)}
-              </div>}
-            </div>
             <div style={{ flex: 1, minWidth: 200 }}><label style={label}>{c.tipo === "seccion" ? "Título de la sección" : "Pregunta"}</label><input value={c.etiqueta} onChange={(e) => editar(c.id, { etiqueta: e.target.value })} style={input} /></div>
             <div><label style={label}>Tipo</label>
               <select value={c.tipo} onChange={(e) => { const tipo = e.target.value; editar(c.id, { tipo, ...(["unica", "varias"].includes(tipo) && !c.opciones ? { opciones: ["Opción 1", "Opción 2"] } : {}) }); }} style={{ ...input, width: "auto", cursor: "pointer" }}>
-                {TIPOS.map((x) => <option key={x.v} value={x.v}>{x.i} {x.l}</option>)}
+                {TIPOS.map((x) => <option key={x.v} value={x.v}>{x.l}</option>)}
               </select></div>
           </div>
           <div><label style={label}>Ayuda (opcional, texto pequeño debajo)</label><input value={c.ayuda || ""} onChange={(e) => editar(c.id, { ayuda: e.target.value })} style={input} /></div>
@@ -528,7 +513,7 @@ function EditorFormulario({ showToast }) {
       </div>); })}
     <div style={{ ...card, borderRadius: 14, borderStyle: "dashed", background: "#FFFBF7" }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#9A3412", marginBottom: 8 }}><Plus size={13} style={{ verticalAlign: -2 }} /> Agregar</div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{TIPOS.map((x) => <button key={x.v} onClick={() => agregar(x.v)} style={{ ...btnO, fontSize: 12, padding: "6px 10px" }}>{x.i} {x.l}</button>)}</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{TIPOS.map((x) => <button key={x.v} onClick={() => agregar(x.v)} style={{ ...btnO, fontSize: 12, padding: "6px 12px" }}><Plus size={12} />{x.l}</button>)}</div>
     </div>
     <div style={{ position: cambios ? "sticky" : "static", bottom: 10, display: "flex", justifyContent: "flex-end", gap: 8, zIndex: 5 }}>
       {cambios && <button onClick={() => setBorrador(base())} style={btnO}>Descartar cambios</button>}
