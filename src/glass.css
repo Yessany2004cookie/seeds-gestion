@@ -1,0 +1,72 @@
+/* ════════════════════════════════════════════════════════════
+   Fondo y detalles del estilo de vidrio (tipo iOS)
+   ════════════════════════════════════════════════════════════ */
+:root { color-scheme: light; }
+html, body { min-height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: #1E293B;
+  background:
+    radial-gradient(at 8% 8%, #FFD6B0 0, transparent 42%),
+    radial-gradient(at 92% 4%, #E9D5FF 0, transparent 40%),
+    radial-gradient(at 85% 88%, #BAE6FD 0, transparent 44%),
+    radial-gradient(at 6% 95%, #FBCFE8 0, transparent 40%),
+    radial-gradient(at 50% 50%, #FFF7ED 0, transparent 60%),
+    #F5F3FA;
+  background-attachment: fixed;
+}
+/* Burbujas de color que flotan detrás del vidrio */
+body::before, body::after {
+  content: ""; position: fixed; z-index: 0; pointer-events: none; border-radius: 50%; filter: blur(60px); opacity: .55;
+}
+body::before { width: 420px; height: 420px; left: -80px; top: 30%; background: radial-gradient(circle, #FDBA74, transparent 70%); animation: burbuja1 22s ease-in-out infinite alternate; }
+body::after { width: 380px; height: 380px; right: -60px; top: 8%; background: radial-gradient(circle, #C4B5FD, transparent 70%); animation: burbuja2 26s ease-in-out infinite alternate; }
+@keyframes burbuja1 { to { transform: translate(140px, -120px) scale(1.15); } }
+@keyframes burbuja2 { to { transform: translate(-160px, 220px) scale(.9); } }
+#root { position: relative; z-index: 1; }
+
+/* Las superficies blancas se vuelven vidrio */
+div[style*="background: rgb(255, 255, 255)"], div[style*="background-color: rgb(255, 255, 255)"] {
+  background: rgba(255, 255, 255, .6) !important;
+  backdrop-filter: blur(18px) saturate(175%); -webkit-backdrop-filter: blur(18px) saturate(175%);
+}
+div[style*="background: rgb(248, 250, 252)"], div[style*="background: rgb(241, 245, 249)"] {
+  background: rgba(255, 255, 255, .42) !important;
+}
+div[style*="border-radius: 10px"][style*="border: 1px solid rgb(226, 232, 240)"],
+div[style*="border-radius: 12px"][style*="border: 1px solid rgb(226, 232, 240)"] {
+  border-radius: 20px !important; border-color: rgba(255, 255, 255, .75) !important;
+  box-shadow: 0 10px 30px rgba(30, 41, 59, .07), inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+table tr { border-color: rgba(15, 23, 42, .06) !important; }
+
+/* Campos: brillo naranja al escribir */
+input:focus, select:focus, textarea:focus {
+  border-color: #FDBA74 !important;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, .16), inset 0 1px 3px rgba(15, 23, 42, .05) !important;
+}
+select { border-radius: 14px; }
+
+/* Botones: se hunden un poco al tocarlos */
+button { transition: transform .12s ease, box-shadow .2s ease, background .2s ease, filter .2s ease; }
+button:not(:disabled):hover { filter: brightness(1.04); }
+button:not(:disabled):active { transform: scale(.97); }
+
+/* Barras de desplazamiento finas */
+* { scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, .35) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, .35); border-radius: 99px; }
+
+@media (prefers-reduced-motion: reduce) { body::before, body::after { animation: none; } }
+@media print { body { background: #fff !important; } body::before, body::after { display: none; } }
+
+/* Menú lateral y barra superior flotantes de vidrio */
+.vidrio-menu, .vidrio-barra {
+  background: rgba(255, 255, 255, .55);
+  backdrop-filter: blur(26px) saturate(190%); -webkit-backdrop-filter: blur(26px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, .8);
+  box-shadow: 0 16px 40px rgba(30, 41, 59, .10), inset 0 1px 0 rgba(255, 255, 255, .95);
+}
+
+@media (max-width: 768px) { .hide-mobile { display: none !important; } }

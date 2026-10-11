@@ -8,14 +8,10 @@
 // ════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
+import { card, input, btn, btnO, label } from "./estilo";
 import { Send, Plus, Trash2, Save, ChevronUp, ChevronDown, Copy, Eye, Inbox, Pencil, ArrowLeft, Mail, MailOpen, Check, Printer } from "lucide-react";
 
 const NAR = "#EA580C";
-const card = { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 20, marginBottom: 16 };
-const input = { width: "100%", padding: "9px 12px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit", background: "#fff" };
-const btn = (c = NAR) => ({ padding: "9px 18px", background: c, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6 });
-const btnO = { padding: "8px 14px", background: "#fff", color: "#64748B", border: "1px solid #D1D5DB", borderRadius: 8, cursor: "pointer", fontSize: 13, fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 5 };
-const label = { fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4, display: "block" };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const hoyISO = () => new Date().toLocaleDateString("en-CA");
 const fechaLarga = (f) => (f ? new Date(f + "T12:00:00").toLocaleDateString("es-HN", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "");

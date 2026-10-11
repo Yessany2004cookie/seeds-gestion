@@ -3,6 +3,7 @@
 // seguridad de la base de datos: supabase/roles_docentes.sql).
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
+import { card, input, btn, btnO, label, badge } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
 import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
 import { FormularioClase, AdminChecklist } from "./formulario";
@@ -14,12 +15,6 @@ import {
 
 // ── Estilos (mismos del sistema) ──
 const NAR = "#EA580C";
-const card = { background: "#fff", borderRadius: 10, border: "1px solid #E2E8F0", padding: 20, marginBottom: 16 };
-const input = { width: "100%", padding: "9px 12px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
-const btn = (c = NAR) => ({ padding: "9px 18px", background: c, color: "#fff", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6 });
-const btnO = { padding: "8px 14px", background: "transparent", color: "#64748B", border: "1px solid #D1D5DB", borderRadius: 7, cursor: "pointer", fontSize: 13, fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 5 };
-const label = { fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4, display: "block" };
-const badge = (c) => ({ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: c + "18", color: c, whiteSpace: "nowrap" });
 // Editor SQL del proyecto de Supabase (se arma con la URL del proyecto)
 const EDITOR_SQL = (() => { const ref = (String(supabase.supabaseUrl || "").match(/https:\/\/([^.]+)\.supabase\.co/) || [])[1]; return ref ? `https://supabase.com/dashboard/project/${ref}/sql/new` : "https://supabase.com/dashboard"; })();
 
@@ -154,26 +149,26 @@ export function DocenteApp({ session, perfil, onVolver }) {
   }
 
   return (
-    <div style={{ display: "flex", height: "100vh", fontFamily: "'Segoe UI',system-ui,sans-serif", background: "#F1F5F9" }}>
-      {menu && <div onClick={() => setMenu(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 40 }} />}
-      <aside style={{ position: "fixed", left: menu ? 0 : -260, top: 0, bottom: 0, width: 250, background: "#1E293B", color: "#fff", zIndex: 50, transition: "left 0.2s", display: "flex", flexDirection: "column", ...(escritorio ? { position: "relative", left: 0 } : {}) }}>
-        <div style={{ padding: "20px 16px", borderBottom: "1px solid #334155", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-          <div style={{ background: "#fff", borderRadius: 12, padding: 8 }}><img src={LOGO_SEEDS} alt="Seeds" style={{ width: 96, height: 96, objectFit: "contain" }} /></div>
+    <div style={{ display: "flex", height: "100vh", background: "transparent" }}>
+      {menu && <div onClick={() => setMenu(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.25)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 40 }} />}
+      <aside className="vidrio-menu" style={{ position: "fixed", left: menu ? 10 : -280, top: 10, bottom: 10, width: 240, color: "#1E293B", zIndex: 50, transition: "left 0.25s cubic-bezier(.2,.8,.2,1)", display: "flex", flexDirection: "column", borderRadius: 26, overflow: "hidden", ...(escritorio ? { position: "relative", left: 0, top: 0, bottom: 0, margin: 12 } : {}) }}>
+        <div style={{ padding: "20px 16px", borderBottom: "1px solid rgba(15,23,42,.07)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+          <div style={{ background: "#fff", borderRadius: 22, padding: 8, boxShadow: "0 6px 18px rgba(249,115,22,.15)" }}><img src={LOGO_SEEDS} alt="Seeds" style={{ width: 96, height: 96, objectFit: "contain" }} /></div>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontWeight: 700, fontSize: 15, color: "#F97316" }}>Seeds English</div>
-            <div style={{ fontSize: 11, color: "#94A3B8" }}>Portal docente</div>
+            <div style={{ fontSize: 11, color: "#64748B" }}>Portal docente</div>
           </div>
         </div>
-        <nav style={{ flex: 1, padding: "8px 0", overflowY: "auto" }}>
+        <nav style={{ flex: 1, padding: "10px 10px", overflowY: "auto" }}>
           {NAV.map((n) => { const Icon = n.icon; const a = page === n.id; return (
-            <button key={n.id} onClick={() => { setPage(n.id); setMenu(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 16px", border: "none", cursor: "pointer", background: a ? "#334155" : "transparent", color: a ? "#F97316" : "#CBD5E1", fontSize: 13, fontWeight: a ? 600 : 400, fontFamily: "inherit", borderLeft: a ? "3px solid #F97316" : "3px solid transparent", textAlign: "left" }}><Icon size={17} />{n.label}</button>
+            <button key={n.id} onClick={() => { setPage(n.id); setMenu(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", marginBottom: 2, border: "none", borderRadius: 14, cursor: "pointer", background: a ? "linear-gradient(135deg,#FB923C,#EA580C)" : "transparent", color: a ? "#fff" : "#334155", boxShadow: a ? "0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)" : "none", fontSize: 13, fontWeight: a ? 700 : 500, fontFamily: "inherit", borderLeft: a ? "3px solid #F97316" : "3px solid transparent", textAlign: "left" }}><Icon size={17} />{n.label}</button>
           ); })}
         </nav>
-        {onVolver && <button onClick={onVolver} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", border: "none", borderTop: "1px solid #334155", background: "transparent", color: "#FDBA74", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}><RefreshCw size={16} />Volver a administración</button>}
-        <button onClick={salir} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", border: "none", borderTop: "1px solid #334155", background: "transparent", color: "#EF4444", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}><LogOut size={16} />Cerrar sesión</button>
+        {onVolver && <button onClick={onVolver} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", border: "none", borderTop: "1px solid rgba(15,23,42,.07)", background: "transparent", color: "#EA580C", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}><RefreshCw size={16} />Volver a administración</button>}
+        <button onClick={salir} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", border: "none", borderTop: "1px solid rgba(15,23,42,.07)", background: "transparent", color: "#EF4444", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}><LogOut size={16} />Cerrar sesión</button>
       </aside>
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <header style={{ background: "#fff", padding: "12px 20px", borderBottom: "1px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
+        <header className="vidrio-barra" style={{ padding: "10px 18px", margin: escritorio ? "12px 12px 0 0" : "10px 10px 0", borderRadius: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
             {!escritorio && <button onClick={() => setMenu(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Menu size={22} color="#475569" /></button>}
             <h1 style={{ fontSize: 17, fontWeight: 700, color: "#1E293B", margin: 0 }}>{NAV.find((n) => n.id === page)?.label}</h1>
@@ -441,7 +436,7 @@ function Asistencia({ datos, maestroId, avisar, editable = true }) {
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                 {ORDEN_ASIS.map((v) => { const e = ESTADOS_ASIS.find((x) => x.v === v); const on = actual === v; return (
                   <button key={v} onClick={() => marcar(a.id, v)} disabled={!editable} title={!editable ? e.l : on ? "Toca otra vez para quitar" : e.l}
-                    style={{ cursor: editable ? "pointer" : "default", opacity: !editable && !on ? 0.45 : 1, padding: "6px 11px", borderRadius: 20, border: `1.5px solid ${on ? e.c : "#E2E8F0"}`, background: on ? e.c : "#fff", color: on ? "#fff" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minWidth: 74 }}>{e.l}</button>
+                    style={{ cursor: editable ? "pointer" : "default", opacity: !editable && !on ? 0.45 : 1, padding: "6px 11px", borderRadius: 20, border: `1.5px solid ${on ? e.c : "#E2E8F0"}`, background: on ? e.c : "#fff", color: on ? "#fff" : "#64748B", fontSize: 12, fontWeight: 700, fontFamily: "inherit", minWidth: 74 }}>{e.l}</button>
                 ); })}
               </div>
             </div>

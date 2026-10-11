@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
+import { card, input, btn, btnO, label, badge } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
 import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
@@ -548,24 +549,24 @@ export default function App() {
   };
 
   return (
-    <div style={{display:"flex",height:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#F1F5F9"}}>
-      {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:40}}/>}
-      <aside style={{position:"fixed",left:sidebarOpen?0:-260,top:0,bottom:0,width:250,background:"#1E293B",color:"#fff",zIndex:50,transition:"left 0.2s",display:"flex",flexDirection:"column",...(window.innerWidth>768?{position:"relative",left:0}:{})}}>
-        <div style={{padding:"20px 16px",borderBottom:"1px solid #334155",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-          <div style={{background:"#fff",borderRadius:12,padding:8,display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div style={{display:"flex",height:"100vh",background:"transparent"}}>
+      {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.25)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",zIndex:40}}/>}
+      <aside className="vidrio-menu" style={{position:"fixed",left:sidebarOpen?10:-280,top:10,bottom:10,width:240,color:"#1E293B",zIndex:50,transition:"left 0.25s cubic-bezier(.2,.8,.2,1)",display:"flex",flexDirection:"column",borderRadius:26,overflow:"hidden",...(window.innerWidth>768?{position:"relative",left:0,top:0,bottom:0,margin:12}:{})}}>
+        <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(15,23,42,.07)",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+          <div style={{background:"#fff",borderRadius:22,padding:8,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 6px 18px rgba(249,115,22,.15)"}}>
             <img src={LOGO_SEEDS} alt="Seeds" style={{width:110,height:110,objectFit:"contain"}}/>
           </div>
-          <div style={{textAlign:"center"}}><div style={{fontWeight:700,fontSize:16,color:"#F97316"}}>Seeds English</div><div style={{fontSize:11,color:"#94A3B8"}}>Sistema de Gestión</div></div>
+          <div style={{textAlign:"center"}}><div style={{fontWeight:800,fontSize:16,background:"linear-gradient(90deg,#F97316,#EA580C)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Seeds English</div><div style={{fontSize:11,color:"#64748B"}}>Sistema de Gestión</div></div>
         </div>
-        <nav style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
+        <nav style={{flex:1,padding:"10px 10px",overflowY:"auto"}}>
           {NAV.map(n=>{const Icon=n.icon;const a=page===n.id;return(
-            <button key={n.id} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 16px",border:"none",cursor:"pointer",background:a?"#334155":"transparent",color:a?"#F97316":"#CBD5E1",fontSize:13,fontWeight:a?600:400,textAlign:"left",borderLeft:a?"3px solid #F97316":"3px solid transparent",fontFamily:"inherit"}}><Icon size={17}/>{n.label}</button>
+            <button key={n.id} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 14px",marginBottom:2,border:"none",borderRadius:14,cursor:"pointer",background:a?"linear-gradient(135deg,#FB923C,#EA580C)":"transparent",color:a?"#fff":"#334155",fontSize:13,fontWeight:a?700:500,textAlign:"left",boxShadow:a?"0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)":"none",fontFamily:"inherit"}}><Icon size={17}/>{n.label}</button>
           );})}
         </nav>
-        <button onClick={logout} style={{display:"flex",alignItems:"center",gap:8,padding:"12px 16px",border:"none",borderTop:"1px solid #334155",background:"transparent",color:"#EF4444",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}><LogOut size={16}/>Cerrar sesión</button>
+        <button onClick={logout} style={{display:"flex",alignItems:"center",gap:8,padding:"14px 20px",border:"none",borderTop:"1px solid rgba(15,23,42,.07)",background:"transparent",color:"#EF4444",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}><LogOut size={16}/>Cerrar sesión</button>
       </aside>
       <main style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
-        <header style={{background:"#fff",padding:"12px 20px",borderBottom:"1px solid #E2E8F0",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <header className="vidrio-barra" style={{padding:"10px 18px",margin:window.innerWidth>768?"12px 12px 0 0":"10px 10px 0",borderRadius:20,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             {window.innerWidth<=768&&<button onClick={()=>setSidebarOpen(true)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Menu size={22} color="#475569"/></button>}
             <h1 style={{fontSize:17,fontWeight:700,color:"#1E293B",margin:0}}>{NAV.find(n=>n.id===page)?.label||""}</h1>
@@ -578,14 +579,14 @@ export default function App() {
               </select>
             </div>}
             {rol.perfil?.maestro_id&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:8,cursor:"pointer",padding:"5px 10px",color:"#EA580C",fontSize:12,fontWeight:700,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
-            <button onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"none",border:"1px solid #E2E8F0",borderRadius:6,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
+            <button onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"rgba(255,255,255,.6)",border:"1px solid rgba(255,255,255,.85)",borderRadius:999,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
             <div style={{fontSize:12,color:"#64748B"}} className="hide-mobile">{session.user.email}</div>
           </div>
         </header>
         <div style={{flex:1,overflow:"auto",padding:20}}>{pageMap[page]}</div>
       </main>
       <AsistenteIA data={dataSuc} session={session} nombreSucursal={data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||""}/>
-      {toast&&<div style={{position:"fixed",bottom:20,right:20,padding:"12px 20px",background:toast.type==="success"?"#059669":"#DC2626",color:"#fff",borderRadius:8,fontSize:13,fontWeight:500,boxShadow:"0 4px 12px rgba(0,0,0,0.15)",zIndex:999,maxWidth:320}}>{toast.msg}</div>}
+      {toast&&<div style={{position:"fixed",bottom:20,right:20,padding:"12px 20px",background:toast.type==="success"?"linear-gradient(180deg,rgba(16,185,129,.92),rgba(5,150,105,.92))":"linear-gradient(180deg,rgba(239,68,68,.92),rgba(220,38,38,.92))",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",border:"1px solid rgba(255,255,255,.35)",color:"#fff",borderRadius:18,fontSize:13,fontWeight:600,boxShadow:"0 12px 30px rgba(15,23,42,.2), inset 0 1px 0 rgba(255,255,255,.35)",zIndex:999,maxWidth:320}}>{toast.msg}</div>}
     </div>
   );
 }
@@ -801,12 +802,6 @@ function AsistenteIA({data,session,nombreSucursal}){
 }
 
 // ── ESTILOS ──
-const card={background:"#fff",borderRadius:10,border:"1px solid #E2E8F0",padding:20,marginBottom:16};
-const input={width:"100%",padding:"9px 12px",border:"1px solid #D1D5DB",borderRadius:7,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
-const btn=(c="#F97316")=>({padding:"9px 18px",background:c,color:"#fff",border:"none",borderRadius:7,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6});
-const btnO={padding:"8px 14px",background:"transparent",color:"#64748B",border:"1px solid #D1D5DB",borderRadius:7,cursor:"pointer",fontSize:13,fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:5};
-const label={fontSize:12,fontWeight:600,color:"#475569",marginBottom:4,display:"block"};
-const badge=(c)=>({padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,background:c+"18",color:c});
 
 // ── LOGIN (Supabase Auth) ──
 function LoginPage({showToast,toast}){
@@ -852,7 +847,7 @@ function Dashboard({data,setPage,loadData,showToast}){
   return(<div>
     <AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
-      {stats.map((s,i)=>{const Icon=s.i;return(<div key={i} onClick={()=>setPage(s.p)} style={{...card,cursor:"pointer",padding:18,display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${s.c}`}}><div style={{background:s.c+"14",borderRadius:10,padding:10}}><Icon size={22} color={s.c}/></div><div><div style={{fontSize:20,fontWeight:800,color:"#1E293B"}}>{s.v}</div><div style={{fontSize:12,color:"#64748B"}}>{s.l}</div></div></div>);})}
+      {stats.map((s,i)=>{const Icon=s.i;return(<div key={i} onClick={()=>setPage(s.p)} style={{...card,cursor:"pointer",padding:18,display:"flex",alignItems:"center",gap:14}}><div style={{background:`linear-gradient(145deg, ${s.c}CC, ${s.c})`,borderRadius:16,padding:11,boxShadow:`0 8px 18px ${s.c}40, inset 0 1px 0 rgba(255,255,255,.45)`}}><Icon size={22} color="#fff"/></div><div><div style={{fontSize:20,fontWeight:800,color:"#1E293B"}}>{s.v}</div><div style={{fontSize:12,color:"#64748B"}}>{s.l}</div></div></div>);})}
     </div>
     <ResumenFinanciero data={data}/>
     <div style={card}><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Acciones rápidas</h3><div style={{display:"flex",flexWrap:"wrap",gap:10}}><button onClick={()=>setPage("alumnos")} style={btn("#2563EB")}><UserPlus size={15}/>Nueva matrícula</button><button onClick={()=>setPage("facturas")} style={btn("#059669")}><FileText size={15}/>Crear cobros</button><button onClick={()=>setPage("recordatorios")} style={btn("#7C3AED")}><Bell size={15}/>Recordatorios</button></div></div>

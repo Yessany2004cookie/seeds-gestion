@@ -4,15 +4,12 @@
 // Administración ve (sin editar) la bitácora de cada docente.
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
+import { card, input, btn, btnO } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
 import SCRIPT_BITACORA from "../supabase/bitacora.sql?raw";
 import { ChevronLeft, ChevronRight, Save, Trash2, Download, Printer, Plus, BookOpen, Eye, X, Bold, Italic, Underline, Strikethrough, List, ListOrdered, Highlighter, RemoveFormatting } from "lucide-react";
 
 const NAR = "#EA580C";
-const card = { background: "#fff", borderRadius: 10, border: "1px solid #E2E8F0", padding: 20, marginBottom: 16 };
-const input = { width: "100%", padding: "9px 12px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
-const btn = (c = NAR) => ({ padding: "9px 16px", background: c, color: "#fff", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none" });
-const btnO = { padding: "8px 12px", background: "#fff", color: "#475569", border: "1px solid #D1D5DB", borderRadius: 7, cursor: "pointer", fontSize: 13, fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 5, textDecoration: "none" };
 const hoyISO = () => new Date().toLocaleDateString("en-CA");
 const fechaTitulo = (f) => { const t = new Date(f + "T12:00:00").toLocaleDateString("es-HN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 const fechaCorta = (f) => new Date(f + "T12:00:00").toLocaleDateString("es-HN", { day: "numeric", month: "short" });
