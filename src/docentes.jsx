@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
 import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
+import { FormularioClase, AdminChecklist } from "./formulario";
 import { Bitacora, AdminBitacoras, PortadaCuero, useVueltaHoja, ESTILOS_LIBRO, ComboMaestros } from "./bitacora";
 import {
   LogOut, Users, BookOpen, Check, X, Menu, Send, Home, ClipboardList,
@@ -68,17 +69,6 @@ const ESTADO_SOL = {
   rechazada: { l: "Rechazada", c: "#DC2626" },
 };
 // Formulario de clase. Cuando compartan el formulario actual, se ajustan estos campos.
-const CAMPOS_REPORTE = [
-  { k: "tema", l: "Tema / unidad trabajada", tipo: "texto", req: true },
-  { k: "objetivo", l: "Objetivo de la clase", tipo: "area" },
-  { k: "actividades", l: "Actividades realizadas", tipo: "area", req: true },
-  { k: "tarea", l: "Tarea asignada", tipo: "area" },
-  { k: "materiales", l: "Materiales o recursos usados", tipo: "texto" },
-  { k: "logro", l: "¿Se cumplió el objetivo?", tipo: "opcion", opciones: ["Sí", "Parcialmente", "No"] },
-  { k: "destacados", l: "Alumnos que destacaron", tipo: "texto" },
-  { k: "dificultades", l: "Alumnos con dificultades", tipo: "texto" },
-  { k: "observaciones", l: "Observaciones generales", tipo: "area" },
-];
 
 // Errores de la base de datos en palabras sencillas
 const mensajeError = (e) => {
@@ -144,7 +134,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
     { id: "asistencia", label: "Libreta de asistencia", icon: UserCheck },
     { id: "bitacora", label: "Bitácora", icon: BookOpen },
     { id: "reflections", label: "Reflections", icon: MessageSquare },
-    { id: "reporte", label: "Reporte de clase", icon: ClipboardList },
+    { id: "reporte", label: "Check list de la clase", icon: ClipboardList },
     { id: "solicitudes", label: "Solicitudes", icon: Inbox },
   ];
   const escritorio = window.innerWidth > 768;
@@ -155,7 +145,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
     asistencia: <Asistencia {...props} />,
     bitacora: <Bitacora maestro={datos.maestro} secciones={datos.secciones} editable avisar={avisar} esAdmin={!!onVolver} />,
     reflections: <Reflections {...props} />,
-    reporte: <ReporteClase {...props} />,
+    reporte: <FormularioClase {...props} />,
     solicitudes: <SolicitudesDocente {...props} />,
   };
 
@@ -220,7 +210,7 @@ function InicioDocente({ datos, setPage }) {
   const accesos = [
     { id: "asistencia", t: "Libreta de asistencia", d: "Pasa lista de hoy y revisa los días anteriores", icon: UserCheck },
     { id: "bitacora", t: "Bitácora", d: "Escribe lo que hiciste en tu clase de hoy", icon: BookOpen },
-    { id: "reporte", t: "Reporte de clase", d: "Llena el formulario de la clase de hoy", icon: ClipboardList },
+    { id: "reporte", t: "Check list de la clase", d: "Llénalo al terminar cada clase", icon: ClipboardList },
     { id: "reflections", t: "Escribir reflection", d: "Anota el avance o la conducta de un alumno", icon: MessageSquare },
     { id: "solicitudes", t: "Hacer una solicitud", d: "Pide algo a administración", icon: Inbox },
   ];
@@ -554,80 +544,7 @@ function Reflections({ datos, maestroId, avisar }) {
   </div>);
 }
 
-// ── Reporte de clase ──
-function ReporteClase({ datos, maestroId, avisar }) {
-  const vacio = () => ({ seccion_id: datos.secciones[0]?.id || "", fecha: hoyISO(), respuestas: {} });
-  const [form, setForm] = useState(vacio);
-  const [lista, setLista] = useState([]);
-  const [abierto, setAbierto] = useState(null);
-  const [guardando, setGuardando] = useState(false);
-  const grupo = (id) => datos.secciones.find((s) => s.id === id)?.nombre || "—";
 
-  const cargar = useCallback(async () => {
-    const { data, error } = await supabase.from("reportes_clase").select("*").eq("maestro_id", maestroId).order("fecha", { ascending: false }).limit(60);
-    if (error) { avisar(mensajeError(error), "error"); return; }
-    setLista(data || []);
-  }, []);
-  useEffect(() => { cargar(); }, [cargar]);
-
-  const set = (k, v) => setForm({ ...form, respuestas: { ...form.respuestas, [k]: v } });
-  const guardar = async () => {
-    if (!form.seccion_id) { avisar("Elige el grupo", "error"); return; }
-    const falta = CAMPOS_REPORTE.find((c) => c.req && !String(form.respuestas[c.k] || "").trim());
-    if (falta) { avisar(`Completa: ${falta.l}`, "error"); return; }
-    setGuardando(true);
-    const { error } = await supabase.from("reportes_clase").insert({ id: uid(), seccion_id: form.seccion_id, maestro_id: maestroId, fecha: form.fecha, respuestas: form.respuestas });
-    setGuardando(false);
-    if (error) { avisar("No se guardó: " + mensajeError(error), "error"); return; }
-    avisar("✓ Reporte enviado");
-    setForm(vacio());
-    cargar();
-  };
-
-  return (<div>
-    <div style={card}>
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", margin: "0 0 12px" }}>Nuevo reporte de clase</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10, marginBottom: 10 }}>
-        <div><label style={label}>Grupo</label><SelectorGrupo secciones={datos.secciones} value={form.seccion_id} onChange={(v) => setForm({ ...form, seccion_id: v })} /></div>
-        <div><label style={label}>Fecha de la clase</label><input type="date" value={form.fecha} max={hoyISO()} onChange={(e) => setForm({ ...form, fecha: e.target.value })} style={input} /></div>
-      </div>
-      {CAMPOS_REPORTE.map((c) => (
-        <div key={c.k} style={{ marginBottom: 10 }}>
-          <label style={label}>{c.l}{c.req && <span style={{ color: NAR }}> *</span>}</label>
-          {c.tipo === "area" ? <textarea value={form.respuestas[c.k] || ""} onChange={(e) => set(c.k, e.target.value)} rows={3} style={{ ...input, resize: "vertical" }} />
-            : c.tipo === "opcion" ? <div style={{ display: "flex", gap: 6 }}>{c.opciones.map((o) => { const on = form.respuestas[c.k] === o; return <button key={o} onClick={() => set(c.k, o)} style={{ ...btnO, padding: "6px 14px", borderColor: on ? NAR : "#D1D5DB", background: on ? "#FFF7ED" : "#fff", color: on ? NAR : "#64748B", fontWeight: on ? 700 : 400 }}>{o}</button>; })}</div>
-            : <input value={form.respuestas[c.k] || ""} onChange={(e) => set(c.k, e.target.value)} style={input} />}
-        </div>
-      ))}
-      <div style={{ display: "flex", justifyContent: "flex-end" }}><button onClick={guardar} disabled={guardando} style={btn()}><Send size={15} />{guardando ? "Enviando…" : "Enviar reporte"}</button></div>
-    </div>
-    <div style={card}>
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", margin: "0 0 8px" }}>Mis reportes enviados</h3>
-      {lista.length === 0 ? <Vacio>Todavía no has enviado reportes.</Vacio> : lista.map((r) => (
-        <div key={r.id} style={{ borderBottom: "1px solid #F1F5F9" }}>
-          <button onClick={() => setAbierto(abierto === r.id ? null : r.id)} style={{ width: "100%", display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 0", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
-            <span style={{ fontSize: 13 }}><strong>{grupo(r.seccion_id)}</strong> · {r.respuestas?.tema || "Sin tema"}</span>
-            <span style={{ fontSize: 12, color: "#94A3B8", whiteSpace: "nowrap" }}>{fechaLarga(r.fecha)}</span>
-          </button>
-          {abierto === r.id && <RespuestasReporte r={r} />}
-        </div>
-      ))}
-    </div>
-  </div>);
-}
-
-function RespuestasReporte({ r }) {
-  return (
-    <div style={{ background: "#F8FAFC", borderRadius: 8, padding: 12, marginBottom: 10 }}>
-      {CAMPOS_REPORTE.filter((c) => r.respuestas?.[c.k]).map((c) => (
-        <div key={c.k} style={{ marginBottom: 6 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 0.3 }}>{c.l}</div>
-          <div style={{ fontSize: 13, color: "#1E293B", whiteSpace: "pre-wrap" }}>{r.respuestas[c.k]}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ── Solicitudes (docente) ──
 function SolicitudesDocente({ maestroId, avisar }) {
@@ -701,13 +618,13 @@ export function AdminDocentesPage({ data, showToast }) {
       <button onClick={() => setTab("solicitudes")} style={tBtn(tab === "solicitudes")}>📥 Solicitudes</button>
       <button onClick={() => setTab("asistencia")} style={tBtn(tab === "asistencia")}>✅ Asistencia</button>
       <button onClick={() => setTab("reflections")} style={tBtn(tab === "reflections")}>💬 Reflections</button>
-      <button onClick={() => setTab("reportes")} style={tBtn(tab === "reportes")}>📋 Reportes de clase</button>
+      <button onClick={() => setTab("reportes")} style={tBtn(tab === "reportes")}>📋 Check list de clase</button>
       <button onClick={() => setTab("bitacoras")} style={tBtn(tab === "bitacoras")}>📖 Bitácoras</button>
     </div>
     {tab === "solicitudes" && <AdminSolicitudes {...props} />}
     {tab === "asistencia" && <AdminAsistencia {...props} />}
     {tab === "reflections" && <AdminReflections {...props} />}
-    {tab === "reportes" && <AdminReportes {...props} />}
+    {tab === "reportes" && <AdminChecklist {...props} />}
     {tab === "bitacoras" && <AdminBitacoras data={data} showToast={showToast} />}
   </div>);
 }
@@ -879,38 +796,6 @@ function AdminReflections({ data, setError }) {
   </div>);
 }
 
-function AdminReportes({ data, setError }) {
-  const [sec, setSec] = useState("");
-  const [lista, setLista] = useState([]);
-  const [abierto, setAbierto] = useState(null);
-  useEffect(() => { (async () => {
-    let q = supabase.from("reportes_clase").select("*").order("fecha", { ascending: false }).limit(200);
-    if (sec) q = q.eq("seccion_id", sec);
-    const { data: d, error } = await q;
-    if (error) { setError(mensajeError(error)); return; }
-    setError(""); setLista(d || []);
-  })(); }, [sec]);
-  const grupo = (id) => data.secciones.find((s) => s.id === id)?.nombre || "—";
-  return (<div>
-    <div style={{ marginBottom: 12 }}>
-      <select value={sec} onChange={(e) => setSec(e.target.value)} style={{ ...input, width: 240, cursor: "pointer" }}>
-        <option value="">Todos los grupos</option>
-        {data.secciones.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-      </select>
-    </div>
-    <div style={card}>
-      {lista.length === 0 ? <Vacio>No hay reportes de clase.</Vacio> : lista.map((r) => (
-        <div key={r.id} style={{ borderBottom: "1px solid #F1F5F9" }}>
-          <button onClick={() => setAbierto(abierto === r.id ? null : r.id)} style={{ width: "100%", display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 0", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
-            <span style={{ fontSize: 13 }}><strong>{grupo(r.seccion_id)}</strong> · {r.respuestas?.tema || "Sin tema"} <span style={{ color: "#94A3B8" }}>· {nombreMaestro(data, r.maestro_id)}</span></span>
-            <span style={{ fontSize: 12, color: "#94A3B8", whiteSpace: "nowrap" }}>{fechaLarga(r.fecha)}</span>
-          </button>
-          {abierto === r.id && <RespuestasReporte r={r} />}
-        </div>
-      ))}
-    </div>
-  </div>);
-}
 
 // ════════════════════════════════════════════════════════════
 //  ADMINISTRACIÓN: acceso de un maestro al portal (en la página Maestros)
