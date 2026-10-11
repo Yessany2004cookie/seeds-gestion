@@ -78,7 +78,7 @@ div[style*="border-radius: 22px"][style*="blur(22px)"]::before {
 
 /* Burbujas de vidrio que suben despacio en el fondo */
 .burbujas { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
-.burbujas span {
+.burbujas .burbuja {
   position: absolute; bottom: -160px; border-radius: 50%;
   background:
     radial-gradient(circle at 30% 28%, rgba(255, 255, 255, .95) 0, rgba(255, 255, 255, .35) 12%, transparent 30%),
@@ -87,6 +87,26 @@ div[style*="border-radius: 22px"][style*="blur(22px)"]::before {
   box-shadow: inset 0 0 18px rgba(255, 255, 255, .5), 0 8px 24px rgba(30, 41, 59, .06);
   animation: subir var(--t, 30s) linear infinite; animation-delay: var(--d, 0s);
 }
+/* Pulpi: nada despacio por el fondo, tenue como las burbujas */
+.pulpi { position: absolute; width: 130px; height: 136px; left: 0; top: 0; opacity: .38; filter: saturate(1.1) drop-shadow(0 10px 20px rgba(234, 88, 12, .18));
+  animation: pulpiNada 70s ease-in-out infinite; }
+.pulpi-flota { position: relative; width: 100%; height: 100%; animation: pulpiFlota 5s ease-in-out infinite; }
+.pulpi-pata { transform-origin: 0 0; animation: pulpiPata 2.6s ease-in-out infinite alternate; }
+.pulpi-burbuja { position: absolute; top: 4px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .9);
+  background: radial-gradient(circle at 32% 30%, rgba(255, 255, 255, .95), rgba(253, 186, 116, .25) 60%, transparent 70%);
+  animation: pulpiBurbuja 4.8s ease-in infinite; opacity: 0; }
+@keyframes pulpiNada {
+  0% { transform: translate(6vw, 72vh) rotate(-6deg); }
+  25% { transform: translate(38vw, 46vh) rotate(4deg); }
+  50% { transform: translate(78vw, 64vh) rotate(-4deg); }
+  75% { transform: translate(60vw, 18vh) rotate(6deg); }
+  100% { transform: translate(6vw, 72vh) rotate(-6deg); }
+}
+@keyframes pulpiFlota { 0%, 100% { transform: translateY(0) scale(1, 1); } 45% { transform: translateY(-14px) scale(.97, 1.04); } 70% { transform: translateY(-6px) scale(1.03, .97); } }
+@keyframes pulpiPata { from { transform: rotate(-9deg); } to { transform: rotate(9deg); } }
+@keyframes pulpiBurbuja { 0% { transform: translateY(0) scale(.6); opacity: 0; } 15% { opacity: .9; } 100% { transform: translate(10px, -90px) scale(1.15); opacity: 0; } }
+@media (max-width: 768px) { .pulpi { width: 86px; height: 90px; } }
+
 @keyframes subir {
   0% { transform: translate(0, 0) scale(1); opacity: 0; }
   8% { opacity: 1; }
