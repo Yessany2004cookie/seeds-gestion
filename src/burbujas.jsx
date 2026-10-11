@@ -6,57 +6,47 @@ const LISTA = Array.from({ length: 14 }, (_, i) => {
   return { tam: 26 + Math.round(azar(1) * 90), izq: Math.round(azar(2) * 96), t: 24 + Math.round(azar(3) * 26), d: -Math.round(azar(4) * 40), dx: Math.round((azar(5) - 0.5) * 140), tono: TONOS[i % TONOS.length] };
 });
 
-// Tentáculos: sale de abajo de la cabeza y termina en un rizo
+// Pulpi como en el dibujo de la escuela: naranja plano con contorno café
+// oscuro, ojos grandes mirando de lado y tentáculos largos y ondulados.
+// Cada tentáculo sale del cuerpo (x, y) y se dibuja desde ahí.
 const TENTACULOS = [
-  { x: 46, d: "M0 0 C -26 10, -46 28, -42 50 C -39 64, -24 64, -27 53" },
-  { x: 64, d: "M0 0 C -16 20, -30 44, -22 64 C -16 77, -3 72, -8 62" },
-  { x: 84, d: "M0 0 C -5 26, -10 52, -2 70 C 4 81, 15 74, 8 65" },
-  { x: 116, d: "M0 0 C 5 26, 10 52, 2 70 C -4 81, -15 74, -8 65" },
-  { x: 136, d: "M0 0 C 16 20, 30 44, 22 64 C 16 77, 3 72, 8 62" },
-  { x: 154, d: "M0 0 C 26 10, 46 28, 42 50 C 39 64, 24 64, 27 53" },
+  { x: 100, y: 108, d: "M0 0 C -14 2, -30 -6, -40 -18 C -48 -28, -58 -30, -64 -24" },   // brazo arriba izquierda
+  { x: 140, y: 108, d: "M0 0 C 14 2, 30 -8, 40 -20 C 48 -30, 58 -32, 64 -26" },        // brazo arriba derecha
+  { x: 98, y: 118, d: "M0 0 C -16 12, -34 22, -52 22 C -64 22, -72 28, -74 36" },       // brazo abajo izquierda
+  { x: 142, y: 118, d: "M0 0 C 16 12, 34 24, 52 24 C 64 24, 72 30, 74 38" },           // brazo abajo derecha
+  { x: 108, y: 124, d: "M0 0 C -6 18, -18 32, -22 48 C -25 60, -18 68, -26 76" },
+  { x: 117, y: 127, d: "M0 0 C -2 20, -8 38, -6 56 C -4 68, -12 76, -10 86" },
+  { x: 126, y: 127, d: "M0 0 C 4 20, 10 36, 8 54 C 6 66, 14 74, 12 84" },
+  { x: 134, y: 124, d: "M0 0 C 8 16, 20 30, 24 46 C 27 58, 20 66, 28 74" },
 ];
+const CAFE = "#3B2A20", NARANJA_PULPI = "#F4974E";
 
 function Pulpi() {
   return (
     <div className="pulpi">
       <div className="pulpi-flota">
-        <svg viewBox="-10 0 220 210" width="100%" height="100%">
-          <defs>
-            <radialGradient id="pulpiCabeza" cx="38%" cy="30%" r="75%">
-              <stop offset="0" stopColor="#FFD3A8" />
-              <stop offset=".45" stopColor="#FB923C" />
-              <stop offset="1" stopColor="#EA580C" />
-            </radialGradient>
-            <linearGradient id="pulpiPata" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#F97316" />
-              <stop offset="1" stopColor="#FDBA74" />
-            </linearGradient>
-          </defs>
-          {/* Tentáculos (se mueven cada uno a su ritmo) */}
+        <svg viewBox="8 6 224 214" width="100%" height="100%">
+          {/* Tentáculos: contorno café y relleno naranja, cada uno a su ritmo */}
           {TENTACULOS.map((t, i) => (
-            <g key={i} transform={`translate(${t.x} 118)`}>
-              <path className="pulpi-pata" style={{ animationDelay: `${-i * 0.45}s` }} d={t.d} fill="none" stroke="url(#pulpiPata)" strokeWidth="15" strokeLinecap="round" />
+            <g key={i} transform={`translate(${t.x} ${t.y})`}>
+              <g className="pulpi-pata" style={{ animationDelay: `${-i * 0.4}s`, animationDuration: `${2.4 + (i % 3) * 0.4}s` }}>
+                <path d={t.d} fill="none" stroke={CAFE} strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={t.d} fill="none" stroke={NARANJA_PULPI} strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+              </g>
             </g>
           ))}
           {/* Cabeza */}
-          <path d="M100 18 C 150 18, 170 58, 166 92 C 163 120, 140 132, 100 132 C 60 132, 37 120, 34 92 C 30 58, 50 18, 100 18 Z" fill="url(#pulpiCabeza)" />
-          <ellipse cx="74" cy="46" rx="20" ry="11" fill="#fff" opacity=".55" transform="rotate(-25 74 46)" />
-          {/* Ojos */}
-          <ellipse cx="78" cy="84" rx="12" ry="14" fill="#fff" />
-          <ellipse cx="122" cy="84" rx="12" ry="14" fill="#fff" />
-          <circle cx="80" cy="87" r="7" fill="#1E293B" />
-          <circle cx="124" cy="87" r="7" fill="#1E293B" />
-          <circle cx="83" cy="83" r="2.6" fill="#fff" />
-          <circle cx="127" cy="83" r="2.6" fill="#fff" />
-          {/* Cachetes y sonrisa */}
-          <ellipse cx="62" cy="104" rx="9" ry="5" fill="#F472B6" opacity=".45" />
-          <ellipse cx="138" cy="104" rx="9" ry="5" fill="#F472B6" opacity=".45" />
-          <path d="M88 106 Q 100 117 112 106" fill="none" stroke="#7C2D12" strokeWidth="4" strokeLinecap="round" />
+          <path d="M120 22 C 156 22, 172 52, 170 82 C 168 108, 150 128, 120 128 C 90 128, 72 108, 70 82 C 68 52, 84 22, 120 22 Z" fill={NARANJA_PULPI} stroke={CAFE} strokeWidth="3.5" />
+          {/* Ojos grandes mirando a un lado */}
+          <ellipse cx="105" cy="84" rx="17" ry="21" fill="#fff" stroke={CAFE} strokeWidth="3" />
+          <ellipse cx="137" cy="84" rx="17" ry="21" fill="#fff" stroke={CAFE} strokeWidth="3" />
+          <ellipse cx="113" cy="88" rx="6.5" ry="7.5" fill={CAFE} />
+          <ellipse cx="145" cy="88" rx="6.5" ry="7.5" fill={CAFE} />
         </svg>
         {/* Burbujitas que suelta Pulpi */}
-        <span className="pulpi-burbuja" style={{ left: "58%", width: 12, height: 12, animationDelay: "0s" }} />
-        <span className="pulpi-burbuja" style={{ left: "66%", width: 8, height: 8, animationDelay: "1.6s" }} />
-        <span className="pulpi-burbuja" style={{ left: "52%", width: 10, height: 10, animationDelay: "3.1s" }} />
+        <span className="pulpi-burbuja" style={{ left: "56%", width: 12, height: 12, animationDelay: "0s" }} />
+        <span className="pulpi-burbuja" style={{ left: "64%", width: 8, height: 8, animationDelay: "1.6s" }} />
+        <span className="pulpi-burbuja" style={{ left: "50%", width: 10, height: 10, animationDelay: "3.1s" }} />
       </div>
     </div>
   );

@@ -88,7 +88,7 @@ div[style*="border-radius: 22px"][style*="blur(22px)"]::before {
   animation: subir var(--t, 30s) linear infinite; animation-delay: var(--d, 0s);
 }
 /* Pulpi: nada despacio por el fondo, tenue como las burbujas */
-.pulpi { position: absolute; width: 130px; height: 136px; left: 0; top: 0; opacity: .38; filter: saturate(1.1) drop-shadow(0 10px 20px rgba(234, 88, 12, .18));
+.pulpi { position: absolute; width: 150px; height: 158px; left: 0; top: 0; opacity: .32; filter: drop-shadow(0 10px 20px rgba(234, 88, 12, .15));
   animation: pulpiNada 70s ease-in-out infinite; }
 .pulpi-flota { position: relative; width: 100%; height: 100%; animation: pulpiFlota 5s ease-in-out infinite; }
 .pulpi-pata { transform-origin: 0 0; animation: pulpiPata 2.6s ease-in-out infinite alternate; }
@@ -105,7 +105,7 @@ div[style*="border-radius: 22px"][style*="blur(22px)"]::before {
 @keyframes pulpiFlota { 0%, 100% { transform: translateY(0) scale(1, 1); } 45% { transform: translateY(-14px) scale(.97, 1.04); } 70% { transform: translateY(-6px) scale(1.03, .97); } }
 @keyframes pulpiPata { from { transform: rotate(-9deg); } to { transform: rotate(9deg); } }
 @keyframes pulpiBurbuja { 0% { transform: translateY(0) scale(.6); opacity: 0; } 15% { opacity: .9; } 100% { transform: translate(10px, -90px) scale(1.15); opacity: 0; } }
-@media (max-width: 768px) { .pulpi { width: 86px; height: 90px; } }
+@media (max-width: 768px) { .pulpi { width: 96px; height: 101px; } }
 
 @keyframes subir {
   0% { transform: translate(0, 0) scale(1); opacity: 0; }
