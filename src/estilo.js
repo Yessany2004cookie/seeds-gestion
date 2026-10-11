@@ -1,6 +1,6 @@
 // ════════════════════════════════════════════════════════════
-//  ESTILO DEL SISTEMA (vidrio tipo iOS: transparencias, degradados y
-//  botones de burbuja). Todas las pantallas usan estos mismos estilos.
+//  ESTILO DEL SISTEMA (vidrio tipo iOS: transparencias y degradados; botones
+//  sobrios). Todas las pantallas usan estos mismos estilos.
 // ════════════════════════════════════════════════════════════
 export const NARANJA = "#F97316";
 
@@ -28,20 +28,20 @@ const aclarar = (c, p = 0.28) => {
   return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
 };
 
-// Botón de burbuja con degradado
+// Botón principal: píldora con un degradado suave y sombra de su color
 export const btn = (c = NARANJA) => ({
-  padding: "10px 20px", background: `linear-gradient(180deg, ${aclarar(c)} 0%, ${c} 55%, ${c} 100%)`, color: "#fff",
-  border: "1px solid rgba(255,255,255,.35)", borderRadius: 999, cursor: "pointer", fontSize: 13, fontWeight: 600,
+  padding: "10px 20px", background: `linear-gradient(180deg, ${aclarar(c, 0.12)} 0%, ${c} 100%)`, color: "#fff",
+  border: "none", borderRadius: 999, cursor: "pointer", fontSize: 13, fontWeight: 600,
   fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6,
-  boxShadow: `0 6px 18px ${/^#[0-9a-f]{6}$/i.test(c) ? c + "55" : "rgba(249,115,22,.35)"}, inset 0 1px 0 rgba(255,255,255,.5)`,
+  boxShadow: `0 4px 12px ${/^#[0-9a-f]{6}$/i.test(c) ? c + "40" : "rgba(249,115,22,.25)"}`,
 });
 
-// Botón secundario de vidrio
+// Botón secundario: blanco translúcido con borde fino
 export const btnO = {
-  padding: "9px 16px", background: "rgba(255,255,255,.6)", backdropFilter: "blur(14px) saturate(180%)", WebkitBackdropFilter: "blur(14px) saturate(180%)",
-  color: "#475569", border: "1px solid rgba(255,255,255,.85)", borderRadius: 999, cursor: "pointer", fontSize: 13,
+  padding: "9px 16px", background: "rgba(255,255,255,.78)", color: "#475569",
+  border: "1px solid rgba(15,23,42,.10)", borderRadius: 999, cursor: "pointer", fontSize: 13,
   fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 5,
-  boxShadow: "0 2px 10px rgba(30,41,59,.07), inset 0 1px 0 rgba(255,255,255,.95)",
+  boxShadow: "0 1px 3px rgba(15,23,42,.06)",
 };
 
 export const label = { fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 5, display: "block" };

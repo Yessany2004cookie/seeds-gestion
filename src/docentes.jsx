@@ -1,7 +1,7 @@
 // ── VISTA DE DOCENTES Y SU REVISIÓN DESDE ADMINISTRACIÓN ──
 // Un docente solo puede leer sus grupos, alumnos y padres (lo garantiza la
 // seguridad de la base de datos: supabase/roles_docentes.sql).
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, btn, btnO, label, badge } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
@@ -9,7 +9,7 @@ import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
 import { FormularioClase, AdminChecklist } from "./formulario";
 import { Bitacora, AdminBitacoras, PortadaCuero, useVueltaHoja, ESTILOS_LIBRO, ComboMaestros } from "./bitacora";
 import {
-  LogOut, Users, BookOpen, Check, X, Menu, Send, Home, ClipboardList,
+  LogOut, Users, BookOpen, Check, X, Menu, Send, Home, ClipboardList, ChevronLeft as AtrasIcon,
   MessageSquare, FileText, Phone, Plus, Trash2, RefreshCw, Save, Inbox, KeyRound, UserCheck, ChevronLeft, ChevronRight,
 } from "lucide-react";
 
@@ -75,7 +75,13 @@ const mensajeError = (e) => {
 
 function Toast({ toast }) {
   if (!toast) return null;
-  return <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", padding: "12px 20px", background: toast.type === "error" ? "#DC2626" : "#1E293B", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: 500, boxShadow: "0 4px 12px rgba(0,0,0,0.15)", zIndex: 300, maxWidth: "90vw" }}>{toast.msg}</div>;
+  const error = toast.type === "error";
+  return (
+    <div className="vidrio-ahumado aviso-flotante centrado" role="status">
+      <span className="aviso-icono" style={{ background: error ? "#EF4444" : "#10B981" }}>{error ? "!" : "✓"}</span>
+      <span>{toast.msg}</span>
+    </div>
+  );
 }
 function Vacio({ children }) {
   return <p style={{ fontSize: 13, color: "#94A3B8", textAlign: "center", padding: "20px 0", margin: 0 }}>{children}</p>;
@@ -93,7 +99,15 @@ function SelectorGrupo({ secciones, value, onChange }) {
 //  APLICACIÓN DEL DOCENTE
 // ════════════════════════════════════════════════════════════
 export function DocenteApp({ session, perfil, onVolver }) {
-  const [page, setPage] = useState("inicio");
+  const [page, setPageRaw] = useState("inicio");
+  // Historial de páginas: botón "atrás" en celular y gesto atrás del teléfono
+  const pageRef = useRef(page); pageRef.current = page;
+  const setPage = useCallback((p) => { if (p === pageRef.current) return; history.pushState({ seedsDoc: p }, ""); setPageRaw(p); }, []);
+  useEffect(() => {
+    if (!history.state?.seedsDoc) history.replaceState({ seedsDoc: "inicio" }, "");
+    const volver = (e) => setPageRaw(e.state?.seedsDoc || "inicio");
+    window.addEventListener("popstate", volver); return () => window.removeEventListener("popstate", volver);
+  }, []);
   const [menu, setMenu] = useState(false);
   const [datos, setDatos] = useState({ maestro: null, secciones: [], alumnos: [], padres: [] });
   const [cargando, setCargando] = useState(true);
@@ -170,7 +184,8 @@ export function DocenteApp({ session, perfil, onVolver }) {
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <header className="vidrio-barra" style={{ padding: "10px 18px", margin: escritorio ? "12px 12px 0 0" : "10px 10px 0", borderRadius: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-            {!escritorio && <button onClick={() => setMenu(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Menu size={22} color="#475569" /></button>}
+            {!escritorio && page !== "inicio" && <button onClick={() => history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20} /></button>}
+            {!escritorio && <button onClick={() => setMenu(true)} aria-label="Menú" style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Menu size={22} color="#475569" /></button>}
             <h1 className="titulo-barra" style={{ fontSize: 17, fontWeight: 700, color: "#1E293B", margin: 0 }}>{NAV.find((n) => n.id === page)?.label}</h1>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

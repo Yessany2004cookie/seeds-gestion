@@ -7,7 +7,8 @@ import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
   Plus, Trash2, Edit, Search, Calendar, X, Eye,
   Send, Home, UserPlus, GraduationCap, Phone, Mail, DollarSign,
-  Check, AlertCircle, Menu, RefreshCw, Download, Upload, Award, MessageCircle, Sparkles, ClipboardList
+  Check, AlertCircle, Menu, RefreshCw, Download, Upload, Award, MessageCircle, Sparkles, ClipboardList,
+  ChevronLeft as AtrasIcon,
 } from "lucide-react";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -435,7 +436,16 @@ export default function App() {
   // Al girar el celular o cambiar el tamaño de la ventana, todo se reacomoda
   const [, setAncho] = useState(window.innerWidth);
   useEffect(() => { let t; const f = () => { clearTimeout(t); t = setTimeout(() => setAncho(window.innerWidth), 120); }; window.addEventListener("resize", f); return () => { window.removeEventListener("resize", f); clearTimeout(t); }; }, []);
-  const [page, setPage] = useState("dashboard");
+  const [page, setPageRaw] = useState("dashboard");
+  // Cada cambio de página queda en el historial: el botón "atrás" de la barra
+  // (en celular) y el gesto/botón atrás del teléfono regresan a la anterior.
+  const pageRef = useRef(page); pageRef.current = page;
+  const setPage = useCallback((p) => { if (p === pageRef.current) return; history.pushState({ seedsPage: p }, ""); setPageRaw(p); }, []);
+  useEffect(() => {
+    if (!history.state?.seedsPage) history.replaceState({ seedsPage: "dashboard" }, "");
+    const volver = (e) => setPageRaw(e.state?.seedsPage || "dashboard");
+    window.addEventListener("popstate", volver); return () => window.removeEventListener("popstate", volver);
+  }, []);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[] });
@@ -571,7 +581,8 @@ export default function App() {
       <main style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
         <header className="vidrio-barra" style={{padding:"10px 18px",margin:window.innerWidth>768?"12px 12px 0 0":"10px 10px 0",borderRadius:20,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            {window.innerWidth<=768&&<button onClick={()=>setSidebarOpen(true)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Menu size={22} color="#475569"/></button>}
+            {window.innerWidth<=768&&page!=="dashboard"&&<button onClick={()=>history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20}/></button>}
+            {window.innerWidth<=768&&<button onClick={()=>setSidebarOpen(true)} aria-label="Menú" style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Menu size={22} color="#475569"/></button>}
             <h1 className="titulo-barra" style={{fontSize:17,fontWeight:700,color:"#1E293B",margin:0}}>{NAV.find(n=>n.id===page)?.label||""}</h1>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -589,7 +600,10 @@ export default function App() {
         <div style={{flex:1,overflow:"auto",padding:20}}>{pageMap[page]}</div>
       </main>
       <AsistenteIA data={dataSuc} session={session} nombreSucursal={data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||""}/>
-      {toast&&<div style={{position:"fixed",bottom:20,right:20,padding:"12px 20px",background:toast.type==="success"?"linear-gradient(180deg,rgba(16,185,129,.92),rgba(5,150,105,.92))":"linear-gradient(180deg,rgba(239,68,68,.92),rgba(220,38,38,.92))",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",border:"1px solid rgba(255,255,255,.35)",color:"#fff",borderRadius:18,fontSize:13,fontWeight:600,boxShadow:"0 12px 30px rgba(15,23,42,.2), inset 0 1px 0 rgba(255,255,255,.35)",zIndex:999,maxWidth:320}}>{toast.msg}</div>}
+      {toast&&<div className="vidrio-ahumado aviso-flotante" role="status">
+        <span className="aviso-icono" style={{background:toast.type==="success"?"#10B981":"#EF4444"}}>{toast.type==="success"?"✓":"!"}</span>
+        <span>{toast.msg}</span>
+      </div>}
     </div>
   );
 }
@@ -764,7 +778,7 @@ function AsistenteIA({data,session,nombreSucursal}){
       @keyframes as-punto{0%,80%,100%{opacity:.25}40%{opacity:1}}
       .as-punto{display:inline-block;width:6px;height:6px;border-radius:50%;background:#EA580C;margin:0 2px;animation:as-punto 1.2s infinite}
     `}</style>
-    {!abierto&&<button onClick={()=>setAbierto(true)} title="Asistente financiero con IA" style={{position:"fixed",right:20,bottom:20,zIndex:90,display:"flex",alignItems:"center",gap:8,padding:"12px 18px",borderRadius:30,border:"none",background:"#EA580C",color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer",boxShadow:"0 8px 24px rgba(234,88,12,.4)"}}>
+    {!abierto&&<button onClick={()=>setAbierto(true)} title="Asistente financiero con IA" className="vidrio-ahumado" style={{position:"fixed",right:20,bottom:20,zIndex:90,display:"flex",alignItems:"center",gap:8,padding:"12px 18px",borderRadius:30,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>
       <MessageCircle size={18}/>Asistente IA
     </button>}
     {abierto&&<div style={{position:"fixed",right:ancho?0:20,bottom:ancho?0:20,top:ancho?0:"auto",left:ancho?0:"auto",zIndex:95,width:ancho?"100%":400,height:ancho?"100%":"min(640px, calc(100vh - 40px))",background:"#fff",borderRadius:ancho?0:16,boxShadow:"0 20px 60px rgba(15,23,42,.3)",display:"flex",flexDirection:"column",overflow:"hidden",border:"1px solid #E2E8F0"}}>

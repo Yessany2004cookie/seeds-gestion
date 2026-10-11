@@ -48,24 +48,12 @@ input:focus, select:focus, textarea:focus {
 }
 select { border-radius: 14px; }
 
-/* Botones de burbuja (como iPhone): brillo arriba, se levantan al pasar
-   y rebotan al tocarlos */
-button { transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), box-shadow .25s ease, background .2s ease, filter .2s ease; }
-button:not(:disabled):hover { filter: brightness(1.05); }
-button:not(:disabled):active { transform: scale(.94); transition-duration: .08s; }
-button[style*="border-radius: 999px"] { position: relative; overflow: hidden; isolation: isolate; }
-button[style*="border-radius: 999px"]::before {
-  content: ""; position: absolute; left: 6%; right: 6%; top: 1px; height: 52%; border-radius: 999px; pointer-events: none; z-index: -1;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0));
-}
-button[style*="border-radius: 999px"]::after {
-  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-  background: radial-gradient(120px 60px at var(--x, 50%) var(--y, 120%), rgba(255, 255, 255, .45), transparent 70%);
-  opacity: 0; transition: opacity .3s ease;
-}
+/* Botones: se levantan un poco al pasar y se hunden al tocarlos */
+button { transition: transform .18s ease, box-shadow .2s ease, background .2s ease, filter .2s ease; }
+button:not(:disabled):hover { filter: brightness(1.04); }
+button:not(:disabled):active { transform: scale(.97); }
 button[style*="border-radius: 999px"]:not(:disabled):hover { transform: translateY(-1px); }
-button[style*="border-radius: 999px"]:not(:disabled):hover::after { opacity: 1; }
-button[style*="border-radius: 999px"]:not(:disabled):active { transform: scale(.94); }
+button[style*="border-radius: 999px"]:not(:disabled):active { transform: scale(.97); }
 
 /* Borde de luz de las tarjetas de vidrio (como el vidrio líquido de iOS) */
 div[style*="border-radius: 22px"][style*="blur(22px)"] { position: relative; }
@@ -235,4 +223,39 @@ div[style*="position: fixed"] > div[style*="background: rgb(255, 255, 255)"] {
   background: rgba(255, 255, 255, .93) !important;
   backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
   box-shadow: 0 30px 70px rgba(15, 23, 42, .28), inset 0 1px 0 rgba(255, 255, 255, .95);
+}
+
+/* ════════════════════════════════════════════════════════════
+   VIDRIO AHUMADO (como las notificaciones del iPhone): para lo que flota
+   encima del contenido — avisos, botón del asistente, botón atrás.
+   ════════════════════════════════════════════════════════════ */
+.vidrio-ahumado {
+  background: rgba(38, 38, 42, .58) !important;
+  backdrop-filter: blur(28px) saturate(170%); -webkit-backdrop-filter: blur(28px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, .20) !important;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .14) !important;
+  color: #fff;
+}
+button.vidrio-ahumado svg { color: #FDBA74; }
+
+/* Aviso tipo notificación: baja desde arriba, como en el iPhone */
+.aviso-flotante, .aviso-flotante.centrado {
+  position: fixed; z-index: 999; top: 14px; left: 50%; right: auto; bottom: auto; transform: translateX(-50%);
+  width: max-content; max-width: min(420px, calc(100vw - 24px));
+  display: flex; align-items: center; gap: 12px; padding: 12px 18px 12px 12px; border-radius: 22px;
+  font-size: 14px; font-weight: 600; line-height: 1.35; animation: avisoBaja .4s cubic-bezier(.2, .9, .3, 1.15);
+}
+.aviso-icono { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; color: #fff; }
+@keyframes avisoBaja { from { opacity: 0; transform: translate(-50%, -24px) scale(.96); } to { opacity: 1; transform: translateX(-50%); } }
+
+/* Fondo de las ventanas emergentes: oscuro y desenfocado */
+div[style*="position: fixed"][style*="inset: 0px"][style*="background: rgba(0, 0, 0"] {
+  backdrop-filter: blur(6px) saturate(120%); -webkit-backdrop-filter: blur(6px) saturate(120%);
+}
+
+/* Botón atrás (celular) */
+.boton-atras {
+  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; color: #EA580C;
+  background: rgba(255, 255, 255, .8); border: 1px solid rgba(15, 23, 42, .10); box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
 }
