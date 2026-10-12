@@ -1,7 +1,7 @@
 // ── VISTA DE DOCENTES Y SU REVISIÓN DESDE ADMINISTRACIÓN ──
 // Un docente solo puede leer sus grupos, alumnos y padres (lo garantiza la
 // seguridad de la base de datos: supabase/roles_docentes.sql).
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, btn, btnO, label, badge } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
@@ -290,10 +290,12 @@ const ORDEN_ASIS = ["presente", "ausente", "tarde", "justificado"];
 const fechaClase = (f) => { if (!f) return ""; const t = new Date(f + "T12:00:00").toLocaleDateString("es-HN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 const diaAntes = (f) => { const d = new Date(f + "T12:00:00"); d.setDate(d.getDate() - 1); return d.toLocaleDateString("en-CA"); };
 
-function Asistencia({ datos, maestroId, avisar, editable = true }) {
+function Asistencia({ datos, maestroId, avisar, editable = true, nombres: nombresProp }) {
   const hoy = hoyISO();
   const [sec, setSec] = useState(datos.secciones[0]?.id || "");
   const [registros, setRegistros] = useState(null); // fecha -> { alumno_id: estado } (lo guardado)
+  const [autores, setAutores] = useState({});        // fecha -> { alumno_id: { por, corrigio, t } } (quién marcó)
+  const [nombres, setNombres] = useState(nombresProp || {}); // maestro_id -> nombre (compañeros del grupo)
   const [fecha, setFecha] = useState(hoy);           // hoja abierta
   const [fechaPag, setFechaPag] = useState(hoy);     // fecha elegida dentro de la hoja
   const [marcas, setMarcas] = useState({});          // alumno_id -> estado (lo que se ve)
@@ -308,19 +310,41 @@ function Asistencia({ datos, maestroId, avisar, editable = true }) {
     if (!sec) { setRegistros({}); return; }
     const todos = [];
     for (let desde = 0; ; desde += 1000) { // de 1000 en 1000 (límite de Supabase)
-      const { data, error } = await supabase.from("asistencias").select("alumno_id,fecha,estado").eq("seccion_id", sec).order("fecha").order("alumno_id").range(desde, desde + 999);
+      let { data, error } = await supabase.from("asistencias").select("alumno_id,fecha,estado,maestro_id,actualizado_por,updated_at").eq("seccion_id", sec).order("fecha").order("alumno_id").range(desde, desde + 999);
+      if (error && /column/i.test(error.message)) ({ data, error } = await supabase.from("asistencias").select("alumno_id,fecha,estado,maestro_id").eq("seccion_id", sec).order("fecha").order("alumno_id").range(desde, desde + 999));
       if (error) { avisar(mensajeError(error), "error"); setRegistros({}); return; }
       todos.push(...(data || []));
       if (!data || data.length < 1000) break;
     }
-    const r = {};
-    todos.forEach((x) => { (r[x.fecha] = r[x.fecha] || {})[x.alumno_id] = x.estado; });
-    setRegistros(r);
+    const r = {}, au = {};
+    todos.forEach((x) => {
+      (r[x.fecha] = r[x.fecha] || {})[x.alumno_id] = x.estado;
+      (au[x.fecha] = au[x.fecha] || {})[x.alumno_id] = { por: x.maestro_id, corrigio: x.actualizado_por && x.actualizado_por !== x.maestro_id ? x.actualizado_por : null, t: x.updated_at || "" };
+    });
+    setRegistros(r); setAutores(au);
     if (!editable) setFecha((f) => (r[f] ? f : Object.keys(r).sort().at(-1) || hoy));
   }, [sec]);
   useEffect(() => { setRegistros(null); cargar(); }, [cargar]);
+  // Nombres de los compañeros que comparten grupo (el docente solo puede ver id y nombre)
+  useEffect(() => { (async () => {
+    if (nombresProp) { setNombres(nombresProp); return; }
+    const n = { [maestroId]: datos.maestro?.nombre || "" };
+    const { data } = await supabase.rpc("mis_companeros");
+    (data || []).forEach((m) => { n[m.id] = m.nombre; });
+    setNombres(n);
+  })(); }, [maestroId, nombresProp]);
 
   const guardadoHoja = registros?.[fecha] || {};
+  const autoresHoja = autores[fecha] || {};
+  const primerNombre = (id) => String(nombres[id] || "otro docente").trim().split(/\s+/).filter((p) => !/^(mr|mrs|miss|ms|teacher)\.?$/i.test(p))[0] || "otro docente";
+  const quien = (id) => (editable && id === maestroId ? "Tú" : primerNombre(id));
+  // Cuántas marcas puso cada docente en esta clase
+  const porDocente = {};
+  Object.entries(autoresHoja).forEach(([aid, x]) => { if (guardadoHoja[aid] && x.por) porDocente[x.por] = (porDocente[x.por] || 0) + 1; });
+  const docentesHoja = Object.keys(porDocente);
+  const marcasDeOtros = Object.entries(autoresHoja).filter(([aid, x]) => guardadoHoja[aid] && ((x.por && x.por !== maestroId) || (x.corrigio && x.corrigio !== maestroId)));
+  const nombresOtros = [...new Set(marcasDeOtros.flatMap(([, x]) => [x.por, x.corrigio]).filter((id) => id && id !== maestroId).map(primerNombre))];
+  const varios = docentesHoja.length > 1 || (editable && docentesHoja.some((id) => id !== maestroId));
   useEffect(() => { setMarcas({ ...(registros?.[fecha] || {}) }); setFechaPag(fecha); }, [fecha, registros]);
 
   // Alumnos activos del grupo, y los que ya no están pero tienen marca ese día
@@ -334,6 +358,15 @@ function Asistencia({ datos, maestroId, avisar, editable = true }) {
   const fechaNueva = () => { let f = hoy; while (registros?.[f]) f = diaAntes(f); return f; };
 
   const confirmarSalir = (texto) => !cambios || confirm(texto);
+  // Ver lo que marcó el compañero: al tocar "Actualizar" o al volver a la ventana (si no hay cambios sin guardar)
+  const [actualizando, setActualizando] = useState(false);
+  const actualizar = async () => { if (!confirmarSalir("Tienes cambios sin guardar. ¿Actualizar y perderlos?")) return; setActualizando(true); await cargar(); setActualizando(false); };
+  const sinCambiosRef = useRef(true); sinCambiosRef.current = !cambios;
+  useEffect(() => {
+    const alVolver = () => { if (document.visibilityState === "visible" && sinCambiosRef.current && !cerrada) cargar(); };
+    document.addEventListener("visibilitychange", alVolver); window.addEventListener("focus", alVolver);
+    return () => { document.removeEventListener("visibilitychange", alVolver); window.removeEventListener("focus", alVolver); };
+  }, [cargar, cerrada]);
   const ir = (f, hacia) => {
     if (!f || f === fecha) return;
     if (!confirmarSalir("Esta clase tiene cambios sin guardar. ¿Pasar de hoja sin guardar?")) return;
@@ -353,11 +386,29 @@ function Asistencia({ datos, maestroId, avisar, editable = true }) {
     if (!destino) { avisar("Elige la fecha de la clase", "error"); return; }
     if (destino > hoy) { avisar("La fecha no puede ser futura", "error"); return; }
     if (destino !== fecha && registros?.[destino]) { avisar(`Ya hay asistencia el ${fechaClase(destino)}. Ábrela con ‹ › o elige otra fecha.`, "error"); return; }
-    const poner = Object.entries(marcas).filter(([, e]) => e).map(([aid, e]) => ({ id: `${sec}_${aid}_${destino}`, seccion_id: sec, alumno_id: aid, maestro_id: maestroId, fecha: destino, estado: e }));
-    if (!poner.length && !hojaGuardada) { avisar("Marca la asistencia de al menos un alumno", "error"); return; }
+    if (!Object.values(marcas).some(Boolean) && !hojaGuardada) { avisar("Marca la asistencia de al menos un alumno", "error"); return; }
+    if (destino !== fecha && marcasDeOtros.length && !confirm(`Esta clase tiene marcas de ${nombresOtros.join(" y ")}. Si cambias la fecha, todas las marcas quedarán a tu nombre. ¿Continuar?`)) return;
     setGuardando(true);
+    // ¿Otro docente cambió algo de esta clase mientras la tenías abierta?
+    let actual = null;
+    if (hojaGuardada || destino === fecha) {
+      const { data: srv } = await supabase.from("asistencias").select("alumno_id,estado,maestro_id,actualizado_por").eq("seccion_id", sec).eq("fecha", fecha);
+      actual = Object.fromEntries((srv || []).map((x) => [x.alumno_id, x]));
+      const choques = ids.filter((aid) => (guardadoHoja[aid] || "") !== (marcas[aid] || "") && (actual[aid]?.estado || "") !== (guardadoHoja[aid] || "") && (actual[aid]?.estado || "") !== (marcas[aid] || ""));
+      if (choques.length) {
+        const det = choques.slice(0, 4).map((aid) => { const x = actual[aid]; const al = datos.alumnos.find((a) => a.id === aid)?.nombre || "un alumno"; return `• ${al}: ${x ? `${primerNombre(x.actualizado_por || x.maestro_id)} marcó ${ESTADOS_ASIS.find((e) => e.v === x.estado)?.l || x.estado}` : "otro docente quitó la marca"}`; }).join("\n");
+        if (!confirm(`Mientras tenías la libreta abierta, otro docente cambió:\n${det}${choques.length > 4 ? `\n… y ${choques.length - 4} más` : ""}\n\n¿Guardar tus marcas encima?`)) { setGuardando(false); avisar("No se guardó. Toca Actualizar para ver lo que marcó tu compañero.", "error"); return; }
+      }
+    }
+    // Solo se envía lo que cambió (para no pisar las marcas del compañero)
+    const cambiadas = destino !== fecha ? Object.keys(marcas).filter((aid) => marcas[aid]) : ids.filter((aid) => marcas[aid] && (guardadoHoja[aid] || "") !== marcas[aid]);
+    const poner = cambiadas.map((aid) => ({ id: `${sec}_${aid}_${destino}`, seccion_id: sec, alumno_id: aid, maestro_id: maestroId, actualizado_por: maestroId, fecha: destino, estado: marcas[aid] }));
     try {
-      if (poner.length) { const { error } = await supabase.from("asistencias").upsert(poner, { onConflict: "seccion_id,alumno_id,fecha" }); if (error) throw error; }
+      if (poner.length) {
+        let { error } = await supabase.from("asistencias").upsert(poner, { onConflict: "seccion_id,alumno_id,fecha" });
+        if (error && /actualizado_por/i.test(error.message)) ({ error } = await supabase.from("asistencias").upsert(poner.map(({ actualizado_por, ...x }) => x), { onConflict: "seccion_id,alumno_id,fecha" }));
+        if (error) throw error;
+      }
       if (destino !== fecha) { // se cambió la fecha: se quita lo de la fecha anterior
         if (hojaGuardada) { const { error } = await supabase.from("asistencias").delete().eq("seccion_id", sec).eq("fecha", fecha); if (error) throw error; }
       } else {
@@ -373,7 +424,9 @@ function Asistencia({ datos, maestroId, avisar, editable = true }) {
   };
   const borrarClase = async () => {
     if (!hojaGuardada) { setMarcas({}); return; }
-    if (!confirm(`¿Borrar la asistencia del ${fechaClase(fecha)}?`)) return;
+    if (!confirm(marcasDeOtros.length
+      ? `¿Borrar la asistencia del ${fechaClase(fecha)}?\n\nOjo: también se borran ${marcasDeOtros.length} ${marcasDeOtros.length === 1 ? "marca" : "marcas"} de ${nombresOtros.join(" y ")}.`
+      : `¿Borrar la asistencia del ${fechaClase(fecha)}?`)) return;
     const { error } = await supabase.from("asistencias").delete().eq("seccion_id", sec).eq("fecha", fecha);
     if (error) { avisar("No se borró: " + mensajeError(error), "error"); return; }
     avisar("Clase borrada", "error");
@@ -427,6 +480,10 @@ function Asistencia({ datos, maestroId, avisar, editable = true }) {
         ); })}
       </div>
       <div style={{ fontSize: 12, color: sinMarcar ? "#9A3412" : "#059669", fontWeight: 600 }}>{sinMarcar ? `Faltan ${sinMarcar} por marcar` : alumnos.length ? "✓ Todos marcados" : ""}</div>
+      {docentesHoja.length > 0 && <div style={{ background: "#fff", border: "1px solid #E7DCC8", borderRadius: 8, padding: "8px 10px" }}>
+        <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Marcaron esta clase</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{docentesHoja.sort((a, b) => porDocente[b] - porDocente[a]).map((id) => <span key={id} style={badge(id === maestroId && editable ? NAR : "#6366F1")}>{quien(id)} · {porDocente[id]}</span>)}</div>
+      </div>}
       <div style={{ fontSize: 11, color: "#94A3B8" }}>{registros === null ? "Cargando…" : hojaGuardada ? `Clase ${pos + 1} de ${fechas.length}` : editable ? "Clase nueva (sin guardar)" : "Este grupo no tiene asistencia registrada."}</div>
     </div>
   );
@@ -436,6 +493,8 @@ function Asistencia({ datos, maestroId, avisar, editable = true }) {
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "#FFFEF9" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: "2px solid #E7DCC8", background: "rgba(255,247,237,.9)", flexWrap: "wrap" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.5 }}>{alumnos.length} {alumnos.length === 1 ? "alumno" : "alumnos"}</div>
+        <span style={{ flex: 1 }} />
+        <button onClick={actualizar} disabled={actualizando} title="Ver lo último que marcaron" style={{ ...btnO, background: "#fff", padding: "6px 10px", fontSize: 12 }}><RefreshCw size={13} style={actualizando ? { animation: "spin 1s linear infinite" } : undefined} />Actualizar</button>
         {editable && alumnos.length > 0 && <button onClick={todosPresentes} disabled={!sinMarcar} style={{ ...btnO, background: "#fff", padding: "6px 12px", fontSize: 12, color: "#059669", borderColor: "#A7F3D0", fontWeight: 700, opacity: sinMarcar ? 1 : 0.5 }}><Check size={13} />Todos presentes</button>}
       </div>
       <div style={{ flex: 1, minHeight: escritorio ? 400 : 240 }}>
@@ -447,6 +506,7 @@ function Asistencia({ datos, maestroId, avisar, editable = true }) {
                 <span style={{ color: "#94A3B8", fontSize: 11, width: 20 }}>{i + 1}.</span>
                 <span style={{ fontWeight: 600, color: "#1E293B", fontSize: 14 }}>{a.nombre}</span>
                 {a.estado !== "activo" && <span style={badge("#94A3B8")}>inactivo</span>}
+                {varios && !cambiado && guardadoHoja[a.id] && autoresHoja[a.id]?.por && <span title={autoresHoja[a.id].corrigio ? `Marcó ${nombres[autoresHoja[a.id].por] || ""}; corrigió ${nombres[autoresHoja[a.id].corrigio] || ""}` : `Marcó ${nombres[autoresHoja[a.id].por] || ""}`} style={{ fontSize: 11, color: "#94A3B8", whiteSpace: "nowrap" }}>· {quien(autoresHoja[a.id].por)}{autoresHoja[a.id].corrigio ? ` → ${quien(autoresHoja[a.id].corrigio)}` : ""}</span>}
               </div>
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                 {ORDEN_ASIS.map((v) => { const e = ESTADOS_ASIS.find((x) => x.v === v); const on = actual === v; return (
@@ -746,17 +806,22 @@ function AdminAsistencia({ data, setError, showToast }) {
   const [mid, setMid] = useState(maestros[0]?.id || "");
   const [conteo, setConteo] = useState({});
   useEffect(() => { (async () => {
-    const { data: d, error } = await supabase.from("asistencias").select("maestro_id,seccion_id,fecha").order("fecha", { ascending: false }).limit(20000);
+    const { data: d, error } = await supabase.from("asistencias").select("seccion_id,fecha").order("fecha", { ascending: false }).limit(20000);
     if (error) return;
-    const c = {}, visto = new Set();
-    (d || []).forEach((r) => {
-      const k = `${r.maestro_id}|${r.seccion_id}|${r.fecha}`; if (!r.maestro_id || visto.has(k)) return; visto.add(k);
-      if (!c[r.maestro_id]) c[r.maestro_id] = { n: 0, ultima: r.fecha }; c[r.maestro_id].n++;
+    // Clases con asistencia en los grupos de cada docente (en grupos compartidos
+    // la clase cuenta para todos los docentes del grupo)
+    const clases = new Map(); (d || []).forEach((r) => { const k = `${r.seccion_id}|${r.fecha}`; if (!clases.has(k)) clases.set(k, r); });
+    const c = {};
+    data.maestros.forEach((m) => {
+      const mis = new Set(m.secciones_ids || []);
+      const suyas = [...clases.values()].filter((r) => mis.has(r.seccion_id));
+      if (suyas.length) c[m.id] = { n: suyas.length, ultima: suyas[0].fecha };
     });
     setConteo(c);
   })(); }, []);
   const maestro = data.maestros.find((m) => m.id === mid);
   const secciones = data.secciones.filter((s) => (maestro?.secciones_ids || []).includes(s.id));
+  const nombresMaestros = useMemo(() => Object.fromEntries(data.maestros.map((m) => [m.id, m.nombre])), [data.maestros]);
   const tab = (a) => ({ ...btnO, background: a ? "#FFF7ED" : "#fff", color: a ? NAR : "#64748B", borderColor: a ? "#FDBA74" : "#D1D5DB", fontWeight: a ? 700 : 400 });
   return (<div>
     <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
@@ -769,7 +834,7 @@ function AdminAsistencia({ data, setError, showToast }) {
         <ComboMaestros maestros={maestros} conteo={conteo} valor={mid} onElegir={setMid} unidad={["clase", "clases", "Sin clases registradas"]} />
       </div>
       {maestro
-        ? <Asistencia key={mid} datos={{ maestro, secciones, alumnos: data.alumnos }} maestroId={mid} avisar={showToast} editable={false} />
+        ? <Asistencia key={mid} datos={{ maestro, secciones, alumnos: data.alumnos }} maestroId={mid} avisar={showToast} editable={false} nombres={nombresMaestros} />
         : <div style={card}>No hay maestros registrados.</div>}
     </>)}
   </div>);

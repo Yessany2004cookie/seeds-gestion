@@ -259,3 +259,4 @@ div[style*="position: fixed"][style*="inset: 0px"][style*="background: rgba(0, 0
   display: inline-flex; align-items: center; justify-content: center; color: #EA580C;
   background: rgba(255, 255, 255, .8); border: 1px solid rgba(15, 23, 42, .10); box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
 }
+@keyframes spin { to { transform: rotate(360deg); } }
