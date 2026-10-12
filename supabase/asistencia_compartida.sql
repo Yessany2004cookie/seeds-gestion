@@ -50,3 +50,14 @@ create policy reflections_solo_propias_borrar on public.reflections as restricti
   using (public.es_admin() or maestro_id = public.mi_maestro_id());
 create policy reflections_solo_propias_editar on public.reflections as restrictive for update to authenticated
   using (public.es_admin() or maestro_id = public.mi_maestro_id());
+
+-- Docentes de cada grupo del docente (encabezado del parte mensual)
+create or replace function public.companeros_por_grupo() returns table(seccion_id text, maestro_id text, nombre text)
+language sql stable security definer set search_path = public as $$
+  select s.v, m.id, m.nombre
+  from public.maestros m
+  cross join lateral jsonb_array_elements_text(coalesce(m.secciones_ids, '[]'::jsonb)) s(v)
+  where s.v in (select public.mis_secciones());
+$$;
+revoke execute on function public.companeros_por_grupo() from public, anon;
+grant execute on function public.companeros_por_grupo() to authenticated;
