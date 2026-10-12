@@ -518,7 +518,7 @@ export default function App() {
     {id:"graduacion",label:"Graduación",icon:Award},
     {id:"historial",label:"Historial",icon:Calendar},{id:"recordatorios",label:"Recordatorios",icon:Bell},
     {id:"finanzas",label:"Finanzas",icon:DollarSign},{id:"reportes",label:"Reportes",icon:FileText},
-    {id:"docentes",label:"Docentes",icon:ClipboardList},
+    {id:"docentes",label:"Gestión curricular",icon:ClipboardList},
     {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema",icon:LogIn},
   ];
 
