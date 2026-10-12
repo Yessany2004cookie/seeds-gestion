@@ -50,8 +50,8 @@ function calcular(alumnosGrupo, regs, sec) {
   return { dias, filas, presentesDia, totAsist, totPerm, totFaltas, totInasist: totPerm + totFaltas, matricula, retirados: filas.length - matricula, media, pct, sinMarca };
 }
 
-export function ParteMensual({ secciones, alumnos, docentesDe, sede, avisar }) {
-  const [sec, setSec] = useState(secciones[0]?.id || "");
+export function ParteMensual({ secciones, alumnos, docentesDe, sede, avisar, seccionInicial }) {
+  const [sec, setSec] = useState(seccionInicial || secciones[0]?.id || "");
   const [mes, setMes] = useState(hoyISO().slice(0, 7));
   const [regs, setRegs] = useState(null);
   const [archivo, setArchivo] = useState(null); // { url, nombre, tipo }

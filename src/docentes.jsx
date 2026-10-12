@@ -222,6 +222,7 @@ function InicioDocente({ datos, setPage }) {
   const activos = datos.alumnos.filter((a) => a.estado === "activo");
   const accesos = [
     { id: "asistencia", t: "Libreta de asistencia", d: "Pasa lista de hoy y revisa los días anteriores", icon: UserCheck },
+    { id: "parte", t: "Parte mensual", d: "Asistencias e inasistencias del mes, en PDF o Excel", icon: FileText },
     { id: "bitacora", t: "Bitácora", d: "Escribe lo que hiciste en tu clase de hoy", icon: BookOpen },
     { id: "reporte", t: "Check list de la clase", d: "Llénalo al terminar cada clase", icon: ClipboardList },
     { id: "reflections", t: "Escribir reflection", d: "Anota el avance o la conducta de un alumno", icon: MessageSquare },
@@ -293,7 +294,8 @@ const ORDEN_ASIS = ["presente", "ausente", "tarde", "justificado"];
 const fechaClase = (f) => { if (!f) return ""; const t = new Date(f + "T12:00:00").toLocaleDateString("es-HN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 const diaAntes = (f) => { const d = new Date(f + "T12:00:00"); d.setDate(d.getDate() - 1); return d.toLocaleDateString("en-CA"); };
 
-function Asistencia({ datos, maestroId, avisar, editable = true, nombres: nombresProp }) {
+function Asistencia({ datos, maestroId, avisar, editable = true, nombres: nombresProp, docentesDe }) {
+  const [verParte, setVerParte] = useState(false); // muestra el parte mensual del grupo
   const hoy = hoyISO();
   const [sec, setSec] = useState(datos.secciones[0]?.id || "");
   const [registros, setRegistros] = useState(null); // fecha -> { alumno_id: estado } (lo guardado)
@@ -436,6 +438,16 @@ function Asistencia({ datos, maestroId, avisar, editable = true, nombres: nombre
     await cargar();
   };
 
+  // ── Parte mensual del grupo (desde la libreta) ──
+  if (verParte) return (<div>
+    <div style={{ display: "flex", marginBottom: 14 }}>
+      <button onClick={() => setVerParte(false)} style={btnO}><ChevronLeft size={14} />Volver a la libreta</button>
+    </div>
+    {editable
+      ? <ParteMensualDocente datos={datos} avisar={avisar} seccionInicial={sec} />
+      : <ParteMensual secciones={datos.secciones} alumnos={datos.alumnos} avisar={avisar} seccionInicial={sec} docentesDe={docentesDe} />}
+  </div>);
+
   // ── Portada ──
   const abrir = () => {
     if (abriendo) return;
@@ -447,6 +459,7 @@ function Asistencia({ datos, maestroId, avisar, editable = true, nombres: nombre
     <PortadaCuero titulo="Libreta de asistencia" tono="naranja" nombre={datos.maestro?.nombre || ""} anio={new Date().getFullYear()} abriendo={abriendo} onAbrir={abrir}
       etiqueta={datos.secciones.length ? `Abrir libreta · ${datos.secciones.length} ${datos.secciones.length === 1 ? "grupo" : "grupos"}` : null} />
     {!datos.secciones.length && <div style={{ textAlign: "center", fontSize: 13, color: "#64748B", marginTop: 14 }}>Este docente no tiene grupos asignados.</div>}
+    {datos.secciones.length > 0 && <div style={{ textAlign: "center", marginTop: 10 }}><button onClick={() => setVerParte(true)} style={btnO}><FileText size={14} />Ver parte mensual</button></div>}
   </div>);
 
   const cuenta = (e) => alumnos.filter((a) => marcas[a.id] === e).length;
@@ -539,6 +552,8 @@ function Asistencia({ datos, maestroId, avisar, editable = true, nombres: nombre
     <style>{ESTILOS_LIBRO}</style>
     <div style={{ display: "flex", marginBottom: 14 }}>
       <button onClick={() => { if (!confirmarSalir("Tienes cambios sin guardar. ¿Cerrar la libreta sin guardar?")) return; setMarcas({ ...guardadoHoja }); setFechaPag(fecha); setCerrada(true); }} style={btnO}><BookOpen size={14} />Cerrar (ver portada)</button>
+      <span style={{ flex: 1 }} />
+      <button onClick={() => { if (!confirmarSalir("Tienes cambios sin guardar. ¿Ver el parte mensual sin guardar?")) return; setVerParte(true); }} style={btnO}><FileText size={14} />Parte mensual</button>
     </div>
     <div ref={marcoRef} style={{ background: "#1E293B", borderRadius: 14, padding: escritorio ? 12 : 6, boxShadow: "0 24px 50px rgba(15,23,42,.25)", position: "relative", perspective: 2400 }}>
       {capa}
@@ -758,7 +773,7 @@ function AdminSolicitudes({ data, showToast, setError }) {
 
 // Administración: la libreta de cada docente (solo lectura, como la bitácora)
 // o el parte mensual por grupo.
-function ParteMensualDocente({ datos, avisar }) {
+function ParteMensualDocente({ datos, avisar, seccionInicial }) {
   // Docentes de cada grupo (para el encabezado del parte), incluidos los compañeros
   const [porGrupo, setPorGrupo] = useState({});
   useEffect(() => { (async () => {
@@ -766,7 +781,7 @@ function ParteMensualDocente({ datos, avisar }) {
     const m = {}; (data || []).forEach((x) => { (m[x.seccion_id] = m[x.seccion_id] || []).push(x.nombre.trim()); });
     setPorGrupo(m);
   })(); }, []);
-  return <ParteMensual secciones={datos.secciones} alumnos={datos.alumnos} avisar={avisar}
+  return <ParteMensual secciones={datos.secciones} alumnos={datos.alumnos} avisar={avisar} seccionInicial={seccionInicial}
     docentesDe={(sid) => (porGrupo[sid] || [datos.maestro?.nombre || ""]).join(", ")} />;
 }
 
@@ -805,7 +820,7 @@ function AdminAsistencia({ data, setError, showToast }) {
         <ComboMaestros maestros={maestros} conteo={conteo} valor={mid} onElegir={setMid} unidad={["clase", "clases", "Sin clases registradas"]} />
       </div>
       {maestro
-        ? <Asistencia key={mid} datos={{ maestro, secciones, alumnos: data.alumnos }} maestroId={mid} avisar={showToast} editable={false} nombres={nombresMaestros} />
+        ? <Asistencia key={mid} datos={{ maestro, secciones, alumnos: data.alumnos }} maestroId={mid} avisar={showToast} editable={false} nombres={nombresMaestros} docentesDe={(sid) => data.maestros.filter((m) => (m.secciones_ids || []).includes(sid)).map((m) => m.nombre.trim()).join(", ")} />
         : <div style={card}>No hay maestros registrados.</div>}
     </>)}
   </div>);
