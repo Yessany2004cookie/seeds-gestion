@@ -7,6 +7,7 @@ import { card, input, btn, btnO, label, badge } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
 import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
 import { FormularioClase, AdminChecklist } from "./formulario";
+import { ParteMensual } from "./parteMensual";
 import { Bitacora, AdminBitacoras, PortadaCuero, useVueltaHoja, ESTILOS_LIBRO, ComboMaestros } from "./bitacora";
 import {
   LogOut, Users, BookOpen, Check, X, Menu, Send, Home, ClipboardList, ChevronLeft as AtrasIcon,
@@ -141,6 +142,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
     { id: "inicio", label: "Inicio", icon: Home },
     { id: "grupos", label: "Mis grupos", icon: Users },
     { id: "asistencia", label: "Libreta de asistencia", icon: UserCheck },
+    { id: "parte", label: "Parte mensual", icon: FileText },
     { id: "bitacora", label: "Bitácora", icon: BookOpen },
     { id: "reflections", label: "Reflections", icon: MessageSquare },
     { id: "reporte", label: "Check list de la clase", icon: ClipboardList },
@@ -153,6 +155,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
     grupos: <MisGrupos {...props} />,
     asistencia: <Asistencia {...props} />,
     bitacora: <Bitacora maestro={datos.maestro} secciones={datos.secciones} editable avisar={avisar} esAdmin={!!onVolver} />,
+    parte: <ParteMensualDocente datos={datos} avisar={avisar} />,
     reflections: <Reflections {...props} />,
     reporte: <FormularioClase {...props} />,
     solicitudes: <SolicitudesDocente {...props} />,
@@ -752,54 +755,21 @@ function AdminSolicitudes({ data, showToast, setError }) {
 }
 
 // Tabla mensual de asistencia de un grupo (la usan administración y docentes)
-function GridAsistencia({ secciones, alumnos: todos, setError }) {
-  const [sec, setSec] = useState(secciones[0]?.id || "");
-  const [mes, setMes] = useState(hoyISO().slice(0, 7));
-  const [regs, setRegs] = useState([]);
-  useEffect(() => { (async () => {
-    if (!sec) return;
-    const { data: d, error } = await supabase.from("asistencias").select("*").eq("seccion_id", sec).gte("fecha", mes + "-01").lte("fecha", mes + "-31");
-    if (error) { setError(mensajeError(error)); return; }
-    setError(""); setRegs(d || []);
-  })(); }, [sec, mes]);
-  const dias = [...new Set(regs.map((r) => r.fecha))].sort();
-  // Alumnos activos del grupo y también los que ya no están pero tienen registros ese mes
-  const conRegistro = new Set(regs.map((r) => r.alumno_id));
-  const alumnos = todos.filter((a) => a.seccion_id === sec && a.estado === "activo" || conRegistro.has(a.id));
-  const est = (aid, d) => regs.find((r) => r.alumno_id === aid && r.fecha === d)?.estado;
-  const nombreMes = new Date(mes + "-15T12:00:00").toLocaleDateString("es-HN", { month: "long", year: "numeric" });
-  return (<div>
-    <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-      <SelectorGrupo secciones={secciones} value={sec} onChange={setSec} />
-      <input type="month" value={mes} max={hoyISO().slice(0, 7)} onChange={(e) => setMes(e.target.value)} style={{ ...input, width: 170 }} />
-      <span style={{ fontSize: 12, color: "#64748B" }}>{dias.length} {dias.length === 1 ? "clase registrada" : "clases registradas"} en {nombreMes}</span>
-    </div>
-    <div style={card}>
-      {dias.length === 0 ? <Vacio>No hay asistencia registrada para este grupo en {nombreMes}.</Vacio> : (
-        <div style={{ overflowX: "auto" }}><table data-tarjetas="no" style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
-          <thead><tr style={{ borderBottom: "2px solid #E2E8F0" }}>
-            <th style={{ textAlign: "left", padding: "6px 8px", color: "#64748B" }}>Alumno</th>
-            {dias.map((d) => <th key={d} title={fechaLarga(d)} style={{ padding: "6px 4px", color: "#64748B", fontWeight: 600 }}>{Number(d.slice(8))}</th>)}
-            <th style={{ padding: "6px 8px", color: "#64748B", textAlign: "right" }}>Ausencias</th>
-            <th style={{ padding: "6px 8px", color: "#64748B", textAlign: "right" }}>% asistencia</th>
-          </tr></thead>
-          <tbody>{alumnos.map((a) => { const r = regs.filter((x) => x.alumno_id === a.id); const ok = r.filter((x) => x.estado === "presente" || x.estado === "tarde").length; const aus = r.filter((x) => x.estado === "ausente").length; const pct = r.length ? Math.round((ok / r.length) * 100) : null; return (
-            <tr key={a.id} style={{ borderBottom: "1px solid #F1F5F9" }}>
-              <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{a.nombre}{a.estado !== "activo" && <span style={{ ...badge("#94A3B8"), marginLeft: 6 }}>inactivo</span>}</td>
-              {dias.map((d) => { const e = ESTADOS_ASIS.find((x) => x.v === est(a.id, d)); return <td key={d} style={{ textAlign: "center", padding: "4px" }}>{e ? <span title={e.l} style={{ display: "inline-block", width: 22, height: 22, lineHeight: "22px", borderRadius: 5, background: e.c + "1A", color: e.c, fontWeight: 800 }}>{e.k}</span> : <span style={{ color: "#CBD5E1" }}>·</span>}</td>; })}
-              <td style={{ textAlign: "right", padding: "6px 8px", color: aus ? "#DC2626" : "#94A3B8" }}>{aus}</td>
-              <td style={{ textAlign: "right", padding: "6px 8px", fontWeight: 700, color: pct !== null && pct < 75 ? "#DC2626" : "#1E293B" }}>{pct === null ? "—" : pct + "%"}</td>
-            </tr>
-          ); })}</tbody>
-        </table></div>
-      )}
-      <div style={{ display: "flex", gap: 12, marginTop: 10, fontSize: 11, color: "#64748B", flexWrap: "wrap" }}>{ESTADOS_ASIS.map((e) => <span key={e.v}><strong style={{ color: e.c }}>{e.k}</strong> {e.l}</span>)}</div>
-    </div>
-  </div>);
-}
 
 // Administración: la libreta de cada docente (solo lectura, como la bitácora)
-// o la tabla del mes por grupo.
+// o el parte mensual por grupo.
+function ParteMensualDocente({ datos, avisar }) {
+  // Docentes de cada grupo (para el encabezado del parte), incluidos los compañeros
+  const [porGrupo, setPorGrupo] = useState({});
+  useEffect(() => { (async () => {
+    const { data } = await supabase.rpc("companeros_por_grupo");
+    const m = {}; (data || []).forEach((x) => { (m[x.seccion_id] = m[x.seccion_id] || []).push(x.nombre.trim()); });
+    setPorGrupo(m);
+  })(); }, []);
+  return <ParteMensual secciones={datos.secciones} alumnos={datos.alumnos} avisar={avisar}
+    docentesDe={(sid) => (porGrupo[sid] || [datos.maestro?.nombre || ""]).join(", ")} />;
+}
+
 function AdminAsistencia({ data, setError, showToast }) {
   const maestros = [...data.maestros].sort((a, b) => a.nombre.localeCompare(b.nombre));
   const [vista, setVista] = useState("libreta");
@@ -826,9 +796,10 @@ function AdminAsistencia({ data, setError, showToast }) {
   return (<div>
     <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
       <button onClick={() => setVista("libreta")} style={tab(vista === "libreta")}><BookOpen size={14} />Libretas de los docentes</button>
-      <button onClick={() => setVista("tabla")} style={tab(vista === "tabla")}><ClipboardList size={14} />Tabla del mes por grupo</button>
+      <button onClick={() => setVista("tabla")} style={tab(vista === "tabla")}><FileText size={14} />Parte mensual</button>
     </div>
-    {vista === "tabla" ? <GridAsistencia secciones={data.secciones.filter((s) => s.activa !== false)} alumnos={data.alumnos} setError={setError} /> : (<>
+    {vista === "tabla" ? <ParteMensual secciones={data.secciones.filter((s) => s.activa !== false)} alumnos={data.alumnos} avisar={showToast}
+        docentesDe={(sid) => data.maestros.filter((m) => (m.secciones_ids || []).includes(sid)).map((m) => m.nombre.trim()).join(", ")} /> : (<>
       <div style={{ marginBottom: 14, maxWidth: 420 }}>
         <label style={label}>Docente</label>
         <ComboMaestros maestros={maestros} conteo={conteo} valor={mid} onElegir={setMid} unidad={["clase", "clases", "Sin clases registradas"]} />
