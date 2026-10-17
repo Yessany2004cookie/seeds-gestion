@@ -44,6 +44,23 @@ const ANIO_ACTUAL = new Date().getFullYear();
 // ¿El ingreso / gasto cuenta en ese mes y año? (sin fecha ni año guardado, cuenta)
 const esIngresoDe = (r, mes, anio) => mesIngreso(r) === mes && (anioAsignado(r.fecha_pago || r.fecha_venta || r.fecha_emision, mesIngreso(r), r.anio_correspondiente) ?? anio) === anio;
 const esGastoDe = (g, mes, anio) => mesGasto(g) === mes && (anioAsignado(g.fecha, mesGasto(g), g.anio_correspondiente) ?? anio) === anio;
+// --- Graduación con abonos parciales ---
+// ¿Un cobro de graduación cuenta como ingreso? Si está pagado o abonado (parcial).
+const gradCuenta = (v) => v.estado === "pagado" || v.estado === "abonado";
+// Monto REAL recibido de un cobro de graduación: lo abonado; si no hay abonado
+// (datos viejos marcados pagado), el precio completo.
+const gradRecibido = (v) => {
+  const ab = Number(v.abonado);
+  if (ab > 0) return ab;
+  return v.estado === "pagado" ? Number(v.precio_venta) : 0;
+};
+// Ganancia proporcional según lo recibido (si abonó la mitad, media ganancia).
+const gradGananciaReal = (v) => {
+  const pv = Number(v.precio_venta) || 0;
+  if (pv <= 0) return Number(v.ganancia) || 0;
+  const recibido = gradRecibido(v);
+  return (Number(v.ganancia) || 0) * (recibido / pv);
+};
 // Año de un cobro (mensualidad): el guardado, o el de su fecha de emisión
 const anioCobro = (f) => Number(f.anio_correspondiente) || anioAsignado(f.fecha_emision, f.mes_correspondiente) || ANIO_ACTUAL;
 const TIPOS_PAGO = [{value:"efectivo",label:"Efectivo"},{value:"transferencia",label:"Transferencia"},{value:"tarjeta",label:"Tarjeta"},{value:"deposito",label:"Depósito"}];
@@ -621,13 +638,13 @@ function resumenParaAsistente(data, nombreSucursal){
   const meses=periodos.map(({mes,anio})=>{
     const mens=suma(data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,anio)),f=>f.monto_total);
     const mat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,anio));
-    const grad=(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,anio));
+    const grad=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,anio));
     const gas=data.gastos.filter(g=>esGastoDe(g,mes,anio));
     const planilla=suma(gas.filter(g=>g.tipo==="salario"),g=>g.monto);
     const renta=suma(gas.filter(g=>g.tipo==="renta"),g=>g.monto);
     const otros=suma(gas.filter(g=>g.tipo!=="salario"&&g.tipo!=="renta"),g=>g.monto);
-    const ingMat=suma(mat,v=>v.precio_venta),ingGrad=suma(grad,v=>v.precio_venta);
-    const costoVentas=suma(mat,v=>v.costo)+suma(grad,v=>v.costo);
+    const ingMat=suma(mat,v=>v.precio_venta),ingGrad=suma(grad,v=>gradRecibido(v));
+    const costoVentas=suma(mat,v=>v.costo)+suma(grad,v=>gradRecibido(v)-gradGananciaReal(v));
     const ingresos=mens+ingMat+ingGrad;
     const gastosOp=planilla+renta+otros;
     const utilidad=ingresos-costoVentas-gastosOp;
@@ -854,9 +871,9 @@ function Dashboard({data,setPage,loadData,showToast}){
   const ventMat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
-  const gradPag=(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
-  const ingGrad=gradPag.reduce((s,v)=>s+Number(v.precio_venta),0);
-  const ganGrad=gradPag.reduce((s,v)=>s+Number(v.ganancia),0);
+  const gradPag=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,ANIO_ACTUAL));
+  const ingGrad=gradPag.reduce((s,v)=>s+gradRecibido(v),0);
+  const ganGrad=gradPag.reduce((s,v)=>s+gradGananciaReal(v),0);
   const ing=ingMens+ingMat+ingGrad;
   const gastos=data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
   const ganancia=ingMens+ganMat+ganGrad-gastos;
@@ -882,9 +899,11 @@ function ResumenFinanciero({data}){
   // Ingresos del mes (mismo criterio que el reporte mensual)
   const ingMens=suma(data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL)),"monto_total");
   const mat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
-  const grad=(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
-  const ingresos=ingMens+suma(mat,"precio_venta")+suma(grad,"precio_venta");
-  const costoVentas=(suma(mat,"precio_venta")-suma(mat,"ganancia"))+(suma(grad,"precio_venta")-suma(grad,"ganancia"));
+  const grad=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,ANIO_ACTUAL));
+  const ingGradR=grad.reduce((s,v)=>s+gradRecibido(v),0);
+  const costoGradR=grad.reduce((s,v)=>s+(gradRecibido(v)-gradGananciaReal(v)),0);
+  const ingresos=ingMens+suma(mat,"precio_venta")+ingGradR;
+  const costoVentas=(suma(mat,"precio_venta")-suma(mat,"ganancia"))+costoGradR;
 
   // Gastos del mes
   const gMes=data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL));
@@ -2024,11 +2043,11 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const rentaMes=(mes)=>data.gastos.filter(g=>g.tipo==="renta"&&esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
   // Materiales y graduacion pagados del mes (por fecha de pago), igual que Dashboard/Reportes
   const matMes=(mes)=>(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
-  const gradMesF=(mes)=>(data.cobros_graduacion||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
+  const gradMesF=(mes)=>(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const ingMatMes=(mes)=>matMes(mes).reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganMatMes=(mes)=>matMes(mes).reduce((s,v)=>s+Number(v.ganancia),0);
-  const ingGradMes=(mes)=>gradMesF(mes).reduce((s,v)=>s+Number(v.precio_venta),0);
-  const ganGradMes=(mes)=>gradMesF(mes).reduce((s,v)=>s+Number(v.ganancia),0);
+  const ingGradMes=(mes)=>gradMesF(mes).reduce((s,v)=>s+gradRecibido(v),0);
+  const ganGradMes=(mes)=>gradMesF(mes).reduce((s,v)=>s+gradGananciaReal(v),0);
   // Ingreso total del mes (lo que entra a caja): mensualidades + materiales + graduacion
   const ingresoTotalMes=(mes)=>ingresosMes(mes)+ingMatMes(mes)+ingGradMes(mes);
   // Resultado del mes: mensualidades + ganancia de materiales/graduacion - gastos
@@ -2727,25 +2746,56 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
-  const confirmarPago=async(v,tipoPago)=>{
+  // Confirmar pago: cf = {venta, tipo_pago, modo, monto}
+  // modo "completo" = paga el total; "abono" = parcial, queda saldo;
+  // modo "final" = parcial pero se salda (trato especial, ya no debe nada)
+  const confirmarPago=async(cf)=>{
     try{
+      const v=cf.venta;
       const hoy=new Date().toISOString().split("T")[0];
-      await db.update("cobros_graduacion",v.id,{estado:"pagado",fecha_pago:hoy,tipo_pago:tipoPago||v.tipo_pago||"efectivo"});
+      const precio=Number(v.precio_venta)||0;
+      const yaAbonado=Number(v.abonado)||0;
+      const modo=cf.modo||"completo";
+      let nuevoAbonado, nuevoEstado, montoEstePago;
+      if(modo==="completo"){
+        montoEstePago=precio-yaAbonado;       // lo que falta para completar
+        nuevoAbonado=precio;
+        nuevoEstado="pagado";
+      } else {
+        const abono=Number(cf.monto)||0;
+        if(abono<=0){showToast("Ingresa el monto del abono","error");return;}
+        montoEstePago=abono;
+        nuevoAbonado=yaAbonado+abono;
+        if(modo==="final"){
+          // Trato especial: se salda con lo que pagó (ya no debe el resto)
+          nuevoEstado="pagado";
+        } else {
+          // Abono normal: si ya cubrió el precio, pagado; si no, queda abonado (parcial)
+          nuevoEstado = nuevoAbonado>=precio ? "pagado" : "abonado";
+        }
+      }
+      await db.update("cobros_graduacion",v.id,{estado:nuevoEstado,abonado:nuevoAbonado,fecha_pago:hoy,tipo_pago:cf.tipo_pago||v.tipo_pago||"efectivo"});
       await loadData();setCompForm(null);
-      const actualizada={...v,estado:"pagado",fecha_pago:hoy,tipo_pago:tipoPago||v.tipo_pago};
+      const actualizada={...v,estado:nuevoEstado,abonado:nuevoAbonado,fecha_pago:hoy,tipo_pago:cf.tipo_pago||v.tipo_pago};
       setTimeout(()=>mostrarImagen(actualizada,"comprobante"),300);
-      showToast("Pago confirmado ✓ — comprobante listo");
+      const saldo=precio-nuevoAbonado;
+      if(nuevoEstado==="abonado") showToast(`Abono de L ${montoEstePago.toLocaleString()} registrado · saldo L ${saldo.toLocaleString()}`);
+      else showToast(`Pago confirmado ✓ (L ${montoEstePago.toLocaleString()})`);
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
   const anular=async(v)=>{if(!confirm("¿Anular este cobro de graduación?"))return;try{await db.update("cobros_graduacion",v.id,{estado:"anulado"});await loadData();showToast("Anulado","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
   const todas=data.cobros_graduacion.filter(v=>!filtroSec||v.seccion_id===filtroSec);
-  const cobros=todas.filter(v=>v.estado==="pendiente");
+  // Pendientes = sin pagar + abonados (aún deben saldo). Pagados = saldados por completo.
+  const saldoDe=(v)=>(Number(v.precio_venta)||0)-(Number(v.abonado)||0);
+  const cobros=todas.filter(v=>v.estado==="pendiente"||v.estado==="abonado");
   const pagados=todas.filter(v=>v.estado==="pagado");
-  const totVenta=pagados.reduce((s,v)=>s+Number(v.precio_venta),0);
-  const totGanancia=pagados.reduce((s,v)=>s+Number(v.ganancia),0);
-  const totPend=cobros.reduce((s,v)=>s+Number(v.precio_venta),0);
+  // Total cobrado = lo realmente recibido (abonos incluidos, de pagados y abonados)
+  const totVenta=[...pagados,...todas.filter(v=>v.estado==="abonado")].reduce((s,v)=>s+gradRecibido(v),0);
+  const totGanancia=[...pagados,...todas.filter(v=>v.estado==="abonado")].reduce((s,v)=>s+gradGananciaReal(v),0);
+  // Pendiente de cobro = suma de saldos sin pagar
+  const totPend=cobros.reduce((s,v)=>s+saldoDe(v),0);
   const tBtn=(a)=>({padding:"10px 20px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #7C3AED":"3px solid transparent",background:"transparent",color:a?"#7C3AED":"#64748B"});
 
   // Selector de conceptos (checkboxes) reutilizable
@@ -2795,12 +2845,12 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
             <td style={{padding:"5px 6px",fontWeight:600}}>{v.numero}</td>
             <td style={{padding:"5px 6px"}}>{al?.nombre||"—"}</td>
             <td style={{padding:"5px 6px"}}>{sec?<span style={badge("#7C3AED")}>{sec.nombre}</span>:"—"}</td>
-            <td style={{padding:"5px 6px",fontSize:11,color:"#64748B"}}>{det.map(d=>d.nombre).join(" + ")||"—"}</td>
-            <td style={{padding:"5px 6px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(v.precio_venta).toLocaleString()}</td>
+            <td style={{padding:"5px 6px",fontSize:11,color:"#64748B"}}>{det.map(d=>d.nombre).join(" + ")||"—"}{Number(v.abonado)>0&&<span style={{...badge("#D97706"),marginLeft:4,fontSize:9}}>Abonó L {Number(v.abonado).toLocaleString()}</span>}</td>
+            <td style={{padding:"5px 6px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {saldoDe(v).toLocaleString()}{Number(v.abonado)>0&&<div style={{fontSize:9,color:"#94A3B8",fontWeight:400}}>de L {Number(v.precio_venta).toLocaleString()}</div>}</td>
             <td style={{padding:"5px 6px"}}>{v.mes_correspondiente}</td>
             <td style={{padding:"5px 6px",textAlign:"right",whiteSpace:"nowrap"}}>
               <button onClick={()=>mostrarImagen(v,"cobro")} title="Enviar cobro" style={{background:"#25D366",border:"none",cursor:"pointer",padding:"3px 6px",borderRadius:4,marginRight:3}}><Phone size={12} color="#fff"/></button>
-              <button onClick={()=>setCompForm({venta:v,tipo_pago:v.tipo_pago||"efectivo"})} title="Confirmar pago" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 6px",borderRadius:4,marginRight:3}}><Check size={12} color="#fff"/></button>
+              <button onClick={()=>setCompForm({venta:v,tipo_pago:v.tipo_pago||"efectivo",modo:"completo",monto:String((Number(v.precio_venta)||0)-(Number(v.abonado)||0))})} title="Confirmar pago" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 6px",borderRadius:4,marginRight:3}}><Check size={12} color="#fff"/></button>
               <button onClick={()=>anular(v)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><X size={13} color="#DC2626"/></button>
             </td></tr>);})}</tbody>
         </table></div>
@@ -2917,14 +2967,41 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
     </Modal>}
 
     {/* Modal confirmar pago */}
-    {compForm&&<Modal title="✅ Confirmar pago de graduación" onClose={()=>setCompForm(null)} onSave={()=>confirmarPago(compForm.venta,compForm.tipo_pago)}>
-      {(()=>{const v=compForm.venta;const al=data.alumnos.find(a=>a.id===v.alumno_id);const det=Array.isArray(v.detalle)?v.detalle:[];return(
+    {compForm&&<Modal title="✅ Confirmar pago de graduación" onClose={()=>setCompForm(null)} onSave={()=>confirmarPago(compForm)}>
+      {(()=>{const v=compForm.venta;const al=data.alumnos.find(a=>a.id===v.alumno_id);const det=Array.isArray(v.detalle)?v.detalle:[];const precio=Number(v.precio_venta)||0;const yaAb=Number(v.abonado)||0;const saldo=precio-yaAb;return(
         <div style={{background:"#F0FDF4",borderRadius:8,padding:12,marginBottom:12,fontSize:13,border:"1px solid #BBF7D0"}}>
           <div style={{fontWeight:700,color:"#166534",marginBottom:4}}>✓ {v.numero}</div>
           <div><strong>Alumno:</strong> {al?.nombre}</div>
           <div><strong>Conceptos:</strong> {det.map(d=>d.nombre).join(", ")}</div>
-          <div><strong>Total:</strong> L {Number(v.precio_venta).toLocaleString()}</div>
+          <div><strong>Total:</strong> L {precio.toLocaleString()}</div>
+          {yaAb>0&&<div style={{color:"#D97706"}}><strong>Ya abonado:</strong> L {yaAb.toLocaleString()} · <strong>Saldo:</strong> L {saldo.toLocaleString()}</div>}
         </div>);})()}
+
+      {/* Opción de pago: completo o parcial */}
+      <div style={{marginBottom:12}}><label style={label}>¿Cómo pagó?</label>
+        <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:4}}>
+          {[
+            {k:"completo",t:"Pagó completo",d:"Paga todo el saldo pendiente"},
+            {k:"abono",t:"Abono (pago parcial)",d:"Paga una parte, queda saldo por cobrar"},
+            {k:"final",t:"Monto final acordado",d:"Trato especial: paga esto y ya no debe el resto"},
+          ].map(op=>{const sel=compForm.modo===op.k;return(
+            <div key={op.k} onClick={()=>{const v=compForm.venta;const rem=(Number(v.precio_venta)||0)-(Number(v.abonado)||0);setCompForm({...compForm,modo:op.k,monto:op.k==="completo"?String(rem):compForm.monto});}} style={{border:sel?"2px solid #7C3AED":"1px solid #D1D5DB",borderRadius:8,padding:"8px 10px",cursor:"pointer",background:sel?"#F5F3FF":"#fff"}}>
+              <div style={{fontWeight:700,fontSize:13,color:sel?"#6D28D9":"#334155"}}>{op.t}</div>
+              <div style={{fontSize:11,color:"#94A3B8"}}>{op.d}</div>
+            </div>);})}
+        </div>
+      </div>
+
+      {/* Monto del abono (solo si es parcial) */}
+      {compForm.modo!=="completo"&&<div style={{marginBottom:12}}>
+        <label style={label}>¿Cuánto pagó? (L)</label>
+        <input type="number" value={compForm.monto} onChange={e=>setCompForm({...compForm,monto:e.target.value})} placeholder="Ej: 400" style={input}/>
+        {(()=>{const v=compForm.venta;const precio=Number(v.precio_venta)||0;const yaAb=Number(v.abonado)||0;const abono=Number(compForm.monto)||0;const saldoRest=precio-yaAb-abono;
+          if(compForm.modo==="abono") return <div style={{fontSize:11,color:saldoRest>0?"#DC2626":"#059669",marginTop:4}}>{saldoRest>0?`Quedará un saldo de L ${saldoRest.toLocaleString()}`:"Cubre el total, quedará saldado ✓"}</div>;
+          if(compForm.modo==="final") return <div style={{fontSize:11,color:"#7C3AED",marginTop:4}}>Se saldará con L {abono.toLocaleString()}. El resto (L {Math.max(0,saldoRest).toLocaleString()}) no se cobrará.</div>;
+          return null;})()}
+      </div>}
+
       <div style={{marginBottom:12}}><label style={label}>Tipo de pago</label>
         <select value={compForm.tipo_pago} onChange={e=>setCompForm({...compForm,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select>
       </div>
@@ -2955,11 +3032,12 @@ function ReportesPage({data,showToast}){
   const costoMateriales=ventasMes.reduce((s,v)=>s+Number(v.costo),0);
 
   // Graduación: solo PAGADAS, contadas por la fecha real de pago.
-  const gradMes=data.cobros_graduacion.filter(v=>v.estado==="pagado"&&esIngresoDe(v,mesSel,anioSel));
-  const gradPendMes=data.cobros_graduacion.filter(v=>v.mes_correspondiente===mesSel&&v.estado==="pendiente"&&(anioAsignado(v.fecha_venta,v.mes_correspondiente)??anioSel)===anioSel);
-  const pendGraduacion=gradPendMes.reduce((s,v)=>s+Number(v.precio_venta),0);
-  const ingGraduacion=gradMes.reduce((s,v)=>s+Number(v.precio_venta),0);
-  const costoGraduacion=gradMes.reduce((s,v)=>s+Number(v.costo),0);
+  const gradMes=data.cobros_graduacion.filter(v=>gradCuenta(v)&&esIngresoDe(v,mesSel,anioSel));
+  const gradPendMes=data.cobros_graduacion.filter(v=>v.mes_correspondiente===mesSel&&(v.estado==="pendiente"||v.estado==="abonado")&&(anioAsignado(v.fecha_venta,v.mes_correspondiente)??anioSel)===anioSel);
+  // Pendiente = saldo sin cobrar (precio - lo abonado)
+  const pendGraduacion=gradPendMes.reduce((s,v)=>s+(Number(v.precio_venta)-gradRecibido(v)),0);
+  const ingGraduacion=gradMes.reduce((s,v)=>s+gradRecibido(v),0);
+  const costoGraduacion=gradMes.reduce((s,v)=>s+(gradRecibido(v)-gradGananciaReal(v)),0);
 
   // Gastos: por el mes asignado (los salarios se asignan al mes que corresponden)
   const gastosMes=data.gastos.filter(g=>esGastoDe(g,mesSel,anioSel));
