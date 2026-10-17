@@ -1601,7 +1601,7 @@ function HistorialPage({data,loadData,showToast}){
   // Lista de años disponibles: desde 2024 hasta el año actual + 1 (para adelantar)
   const anioActual=new Date().getFullYear();
   const aniosDisponibles=[];
-  for(let y=2024; y<=anioActual+1; y++) aniosDisponibles.push(y);
+  for(let y=2020; y<=anioActual+1; y++) aniosDisponibles.push(y);
 
   const verImagen = (f, tipo) => {
     const al=data.alumnos.find(a=>a.id===f.alumno_id);
