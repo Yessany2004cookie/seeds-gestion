@@ -8,7 +8,7 @@ import {
   Plus, Trash2, Edit, Search, Calendar, X, Eye,
   Send, Home, UserPlus, GraduationCap, Phone, Mail, DollarSign,
   Check, AlertCircle, Menu, RefreshCw, Download, Upload, Award, MessageCircle, Sparkles, ClipboardList,
-  ChevronLeft as AtrasIcon,
+  ChevronLeft as AtrasIcon, TrendingUp,
 } from "lucide-react";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -144,6 +144,17 @@ const calcMora = (f, secciones=[], alumnos=[]) => {
   const pct = Number(sec.mora_porcentaje) / 100;
   const recargo = Number(f.monto_total) * pct * mesesAtraso;
   return Math.round(recargo);
+};
+
+// Mora que realmente se cobró y quedó guardada en un comprobante de pago.
+// Se usa para mostrarla en el recibo y para contarla como ingreso.
+const moraCobrada = (f) => Number(f && f.mora_cobrada) || 0;
+
+// Monto de la comisión ACH configurado para una sucursal (por defecto L 40).
+const achDeSucursal = (sucursales, sucId) => {
+  const s = (sucursales || []).find(x => x.id === sucId);
+  const v = Number(s && s.ach_monto);
+  return v > 0 ? v : 40;
 };
 
 // ── Capa de base de datos (Supabase) ──
@@ -447,6 +458,73 @@ const generarImgEstadoCuenta = (alumno, padre, sec, anio, filas, totales) => {
   return cv.toDataURL('image/png');
 };
 
+// ── Imagen del estado de cuenta por RANGO de años (varios años en una imagen) ──
+const generarImgEstadoCuentaRango = (alumno, padre, sec, bloques, totalesGlobal, rangoTxt) => {
+  const L=(n)=>`L ${Number(n).toLocaleString()}`;
+  const filaH=30, bandaH=30, headRowH=28;
+  const topH=224; const totH=90; const footH=52;
+  const bloqueH=(b)=>bandaH+headRowH+b.filasData.length*filaH+10;
+  const H=topH+bloques.reduce((s,b)=>s+bloqueH(b),0)+totH+footH;
+  const cv=document.createElement('canvas'); cv.width=620; cv.height=H;
+  const c=cv.getContext('2d');
+  c.fillStyle='#fff'; c.fillRect(0,0,620,H);
+  c.fillStyle='#F97316'; c.fillRect(0,0,620,120);
+  c.save(); c.fillStyle='#fff'; cajaRedonda(c,24,18,84,84,14); c.fill(); c.restore();
+  dibujarLogo(c,32,26,68);
+  c.textAlign='left'; c.fillStyle='#fff'; c.font='bold 26px Segoe UI,sans-serif';
+  c.fillText('Seeds English School',124,50);
+  c.fillStyle='#FFE7D1'; c.font='13px Segoe UI,sans-serif';
+  c.fillText('Jesus de Otoro, Intibuca, Honduras',124,72);
+  c.fillStyle='#fff'; c.font='bold 16px Segoe UI,sans-serif';
+  c.fillText(`Estado de cuenta ${rangoTxt}`,124,96);
+  let y=150;
+  c.fillStyle='#1E293B'; c.font='bold 15px Segoe UI,sans-serif';
+  c.fillText(alumno.nombre||'-',24,y); y+=22;
+  c.font='12px Segoe UI,sans-serif'; c.fillStyle='#475569';
+  c.fillText(`Padre/Encargado: ${padre?.nombre||'-'}   -   Tel: ${padre?.telefono||'-'}`,24,y); y+=18;
+  c.fillText(`Seccion: ${sec?.nombre||'-'}   -   Mensualidad: ${alumno.beca?'Becado':L(totalesGlobal.mensual)}`,24,y); y+=26;
+  bloques.forEach(b=>{
+    // Banda del año
+    c.fillStyle='#FFEDD5'; cajaRedonda(c,24,y,572,bandaH-4,6); c.fill();
+    c.fillStyle='#9A3412'; c.font='bold 14px Segoe UI,sans-serif'; c.textAlign='left';
+    c.fillText(`Año ${b.anio}`,36,y+19);
+    c.textAlign='right'; c.font='12px Segoe UI,sans-serif';
+    c.fillText(b.totales.deuda>0?`Pendiente: ${L(b.totales.deuda)}`:'Al día',584,y+19);
+    y+=bandaH;
+    // Encabezado de tabla
+    c.fillStyle='#F1F5F9'; c.fillRect(24,y,572,headRowH);
+    c.fillStyle='#475569'; c.font='bold 12px Segoe UI,sans-serif'; c.textAlign='left';
+    c.fillText('Mes',34,y+18);
+    c.textAlign='center'; c.fillText('Estado',250,y+18); c.fillText('Fecha pago',380,y+18);
+    c.textAlign='right'; c.fillText('Monto',586,y+18);
+    y+=headRowH;
+    c.font='13px Segoe UI,sans-serif';
+    b.filasData.forEach((f,i)=>{
+      if(i%2===1){c.fillStyle='#FAFAFA';c.fillRect(24,y,572,filaH);}
+      c.textAlign='left'; c.fillStyle='#1E293B'; c.font='13px Segoe UI,sans-serif'; c.fillText(f.mes,34,y+20);
+      c.textAlign='center'; c.fillStyle=f.estadoColor; c.font='bold 12px Segoe UI,sans-serif'; c.fillText(f.estadoTxt,250,y+20);
+      c.font='12px Segoe UI,sans-serif'; c.fillStyle='#475569'; c.fillText(f.fecha||'-',380,y+20);
+      c.textAlign='right'; c.fillStyle=f.montoColor||'#1E293B'; c.font='13px Segoe UI,sans-serif'; c.fillText(f.montoTxt,586,y+20);
+      c.strokeStyle='#F1F5F9'; c.beginPath(); c.moveTo(24,y+filaH); c.lineTo(596,y+filaH); c.stroke();
+      y+=filaH;
+    });
+    y+=10;
+  });
+  y+=4;
+  const hayMora=totalesGlobal.mora>0;
+  const boxW=hayMora?282:360, gap=16; let bx=hayMora?(620-(boxW*2+gap))/2:(620-boxW)/2;
+  const box=(label,val,bg,fg)=>{ c.fillStyle=bg; cajaRedonda(c,bx,y,boxW,56,8); c.fill(); c.fillStyle=fg; c.textAlign='center'; c.font='12px Segoe UI,sans-serif'; c.fillText(label,bx+boxW/2,y+22); c.font='bold 20px Segoe UI,sans-serif'; c.fillText(val,bx+boxW/2,y+46); bx+=boxW+gap; };
+  if(hayMora) box(`Mora por atraso (${rangoTxt})`,L(totalesGlobal.mora),'#FEF2F2','#991B1B');
+  box(hayMora?'Total pendiente (con mora)':`Total pendiente (${rangoTxt})`,L(totalesGlobal.deuda),'#FFF7ED','#9A3412');
+  y+=56+16;
+  const fechaGen=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
+  c.fillStyle='#64748B'; c.font='11px Segoe UI,sans-serif'; c.textAlign='center';
+  c.fillText('Generado el '+fechaGen,310,y); y+=16;
+  c.fillStyle='#94A3B8'; c.fillText('Seeds English School - Area Administrativa',310,y);
+  c.strokeStyle='#E2E8F0'; c.lineWidth=2; c.strokeRect(1,1,618,H-2);
+  return cv.toDataURL('image/png');
+};
+
 // ══════════════════════════
 export default function App() {
   const [session, setSession] = useState(null);
@@ -465,7 +543,7 @@ export default function App() {
   }, []);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[] });
+  const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[], otros_ingresos:[] });
   const [sucursalActiva, setSucursalActiva] = useState(null); // id de la sucursal seleccionada
   const [toast, setToast] = useState(null);
   // Rol del usuario: "cargando" | "admin" | "docente" | "sin_acceso"
@@ -492,7 +570,10 @@ export default function App() {
         db.all("materiales"), db.all("ventas_material"),
         db.all("conceptos_graduacion"), db.all("cobros_graduacion")
       ]);
-      setData({sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material,conceptos_graduacion,cobros_graduacion});
+      // otros_ingresos aparte: si la tabla no existe aún (migración no corrida), queda vacío
+      let otros_ingresos=[];
+      try{ otros_ingresos=await db.all("otros_ingresos"); }catch(x){ otros_ingresos=[]; }
+      setData({sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material,conceptos_graduacion,cobros_graduacion,otros_ingresos});
       // Elegir sucursal activa: la guardada, o la primera disponible
       setSucursalActiva(prev=>{
         if(prev && sucursales.some(s=>s.id===prev)) return prev;
@@ -534,6 +615,7 @@ export default function App() {
     {id:"facturas",label:"Facturas",icon:FileText},{id:"materiales",label:"Materiales",icon:CreditCard},
     {id:"graduacion",label:"Graduación",icon:Award},
     {id:"historial",label:"Historial",icon:Calendar},{id:"recordatorios",label:"Recordatorios",icon:Bell},
+    {id:"ingresos",label:"Ingresos extra",icon:TrendingUp},
     {id:"finanzas",label:"Finanzas",icon:DollarSign},{id:"reportes",label:"Reportes",icon:FileText},
     {id:"docentes",label:"Gestión curricular",icon:ClipboardList},
     {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema",icon:LogIn},
@@ -556,6 +638,7 @@ export default function App() {
     conceptos_graduacion: data.conceptos_graduacion.filter(cg=>secIds.has(cg.seccion_id)),
     cobros_graduacion: data.cobros_graduacion.filter(cg=>secIds.has(cg.seccion_id)||alumnoIds.has(cg.alumno_id)),
     gastos: data.gastos.filter(g=>g.sucursal_id===sucursalActiva || (esPrimeraSuc && !g.sucursal_id)),
+    otros_ingresos: (data.otros_ingresos||[]).filter(i=>i.sucursal_id===sucursalActiva || (esPrimeraSuc && !i.sucursal_id)),
     // padres y maestros quedan completos (se comparten entre sucursales)
   };
   const propsSuc = { data: dataSuc, loadData, showToast, sucursalActiva };
@@ -571,6 +654,7 @@ export default function App() {
     graduacion:<GraduacionPage {...propsSuc}/>,
     historial:<HistorialPage {...propsSuc}/>,
     recordatorios:<RecordatoriosPage {...propsSuc}/>,
+    ingresos:<IngresosPage {...propsSuc}/>,
     finanzas:<FinanzasPage {...propsSuc}/>,
     reportes:<ReportesPage {...propsSuc}/>,
     docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
@@ -636,16 +720,19 @@ function resumenParaAsistente(data, nombreSucursal){
   const periodos=[];
   for(let i=5;i>=0;i--){const d=new Date(hoy.getFullYear(),hoy.getMonth()-i,1);periodos.push({mes:MESES[d.getMonth()],anio:d.getFullYear()});}
   const meses=periodos.map(({mes,anio})=>{
-    const mens=suma(data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,anio)),f=>f.monto_total);
+    const compMens=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,anio));
+    const mens=suma(compMens,f=>f.monto_total);
+    const moraCob=suma(compMens,f=>moraCobrada(f));
     const mat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,anio));
     const grad=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,anio));
+    const otrosIng=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,anio));
     const gas=data.gastos.filter(g=>esGastoDe(g,mes,anio));
     const planilla=suma(gas.filter(g=>g.tipo==="salario"),g=>g.monto);
     const renta=suma(gas.filter(g=>g.tipo==="renta"),g=>g.monto);
     const otros=suma(gas.filter(g=>g.tipo!=="salario"&&g.tipo!=="renta"),g=>g.monto);
-    const ingMat=suma(mat,v=>v.precio_venta),ingGrad=suma(grad,v=>gradRecibido(v));
+    const ingMat=suma(mat,v=>v.precio_venta),ingGrad=suma(grad,v=>gradRecibido(v)),ingOtros=suma(otrosIng,i=>i.monto);
     const costoVentas=suma(mat,v=>v.costo)+suma(grad,v=>gradRecibido(v)-gradGananciaReal(v));
-    const ingresos=mens+ingMat+ingGrad;
+    const ingresos=mens+moraCob+ingMat+ingGrad+ingOtros;
     const gastosOp=planilla+renta+otros;
     const utilidad=ingresos-costoVentas-gastosOp;
     // Cobros de mensualidad emitidos para ese mes y cuántos se pagaron
@@ -654,7 +741,7 @@ function resumenParaAsistente(data, nombreSucursal){
     const rentaRegistrada=data.gastos.some(g=>g.tipo==="renta"&&g.mes_correspondiente===mes&&(anioAsignado(g.fecha,g.mes_correspondiente,g.anio_correspondiente)??anio)===anio);
     return {
       mes:`${mes} ${anio}`,
-      ingresos:{mensualidades:r2(mens),materiales:r2(ingMat),graduacion:r2(ingGrad),total:r2(ingresos)},
+      ingresos:{mensualidades:r2(mens),mora_cobrada:r2(moraCob),materiales:r2(ingMat),graduacion:r2(ingGrad),ingresos_extra:r2(ingOtros),total:r2(ingresos)},
       costo_de_ventas:r2(costoVentas),
       gastos_operacion:{planilla:r2(planilla),pagos_de_planilla:gas.filter(g=>g.tipo==="salario").length,renta:r2(renta),otros:r2(otros),total:r2(gastosOp)},
       utilidad_neta:r2(utilidad),
@@ -867,16 +954,19 @@ function Dashboard({data,setPage,loadData,showToast}){
   const ts=data.secciones.filter(s=>s.activa!==false).length;
   const pend=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
   const mes=MESES[new Date().getMonth()];
-  const ingMens=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL)).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+  const compMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL));
+  const ingMens=compMes.reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+  const ingMora=compMes.reduce((s,f)=>s+moraCobrada(f),0);
   const ventMat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
   const gradPag=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const ingGrad=gradPag.reduce((s,v)=>s+gradRecibido(v),0);
   const ganGrad=gradPag.reduce((s,v)=>s+gradGananciaReal(v),0);
-  const ing=ingMens+ingMat+ingGrad;
+  const ingOtros=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,ANIO_ACTUAL)).reduce((s,i)=>s+(Number(i.monto)||0),0);
+  const ing=ingMens+ingMora+ingMat+ingGrad+ingOtros;
   const gastos=data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
-  const ganancia=ingMens+ganMat+ganGrad-gastos;
+  const ganancia=ingMens+ingMora+ganMat+ganGrad+ingOtros-gastos;
   const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString()}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastos.toLocaleString()}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString()}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
   return(<div>
     <AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>
@@ -897,12 +987,15 @@ function ResumenFinanciero({data}){
   const suma=(arr,k)=>arr.reduce((s,x)=>s+(Number(x[k])||0),0);
 
   // Ingresos del mes (mismo criterio que el reporte mensual)
-  const ingMens=suma(data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL)),"monto_total");
+  const compMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL));
+  const ingMens=suma(compMes,"monto_total");
+  const ingMora=suma(compMes,"mora_cobrada");
   const mat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const grad=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const ingGradR=grad.reduce((s,v)=>s+gradRecibido(v),0);
   const costoGradR=grad.reduce((s,v)=>s+(gradRecibido(v)-gradGananciaReal(v)),0);
-  const ingresos=ingMens+suma(mat,"precio_venta")+ingGradR;
+  const ingOtros=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,ANIO_ACTUAL)).reduce((s,i)=>s+(Number(i.monto)||0),0);
+  const ingresos=ingMens+ingMora+suma(mat,"precio_venta")+ingGradR+ingOtros;
   const costoVentas=(suma(mat,"precio_venta")-suma(mat,"ganancia"))+costoGradR;
 
   // Gastos del mes
@@ -1297,12 +1390,12 @@ function FacturasPage({data,loadData,showToast}){
     const al=data.alumnos.find(a=>a.id===f.alumno_id);
     const padre=al?data.padres.find(p=>p.id===al.padre_id):null;
     const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;
-    const mora=calcMora(f, data.secciones, data.alumnos);
+    const mora=f.tipo_factura==="comprobante"?moraCobrada(f):calcMora(f, data.secciones, data.alumnos);
     const dataUrl=generarImgFactura(f,al,padre,sec,mora,tipo);
     setImgPreview({dataUrl,phone:padre?.telefono||"",destinatario:padre?.nombre||al?.nombre||"",numero:f.numero_factura});
   };
 
-  const openComp=(cobro=null)=>{if(cobro){const mora=calcMora(cobro, data.secciones, data.alumnos);setForm({alumno_id:cobro.alumno_id,cobro_id:cobro.id,fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:cobro.mes_correspondiente,monto_total:String((Number(cobro.saldo)>0?Number(cobro.saldo):Number(cobro.monto_total)+mora)),tipo_pago:"efectivo",notas:""});}else{setForm({alumno_id:"",fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()],monto_total:"",tipo_pago:"efectivo",notas:"",cobro_id:""});}setModal("comprobante");};
+  const openComp=(cobro=null)=>{if(cobro){const mora=calcMora(cobro, data.secciones, data.alumnos);const base=Number(cobro.saldo)>0?Number(cobro.saldo):Number(cobro.monto_total);setForm({alumno_id:cobro.alumno_id,cobro_id:cobro.id,fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:cobro.mes_correspondiente,monto_total:String(base),tipo_pago:"efectivo",notas:"",mora,cobrar_mora:mora>0});}else{setForm({alumno_id:"",fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()],monto_total:"",tipo_pago:"efectivo",notas:"",cobro_id:"",mora:0,cobrar_mora:false});}setModal("comprobante");};
 
   const crearCobrosSeccion = async () => {
     if(!bulkSec){showToast("Selecciona una sección","error");return;}
@@ -1338,13 +1431,14 @@ function FacturasPage({data,loadData,showToast}){
     if(!form.alumno_id||!form.mes_correspondiente){showToast("Selecciona cobro","error");return;}
     try{
       const total=parseFloat(form.monto_total)||0;
+      const moraVal=(form.cobrar_mora && Number(form.mora)>0)?Number(form.mora):0;
       const num=`CP-${String(data.facturas.length+1).padStart(4,"0")}`;
-      const fac={id:uid(),numero_factura:num,alumno_id:form.alumno_id,tipo_factura:"comprobante",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:form.fecha_pago,mes_correspondiente:form.mes_correspondiente,monto_total:total,abono:0,saldo:0,tipo_pago:form.tipo_pago,estado:"pagada",notas:form.notas,cobro_id:form.cobro_id||null};
+      const fac={id:uid(),numero_factura:num,alumno_id:form.alumno_id,tipo_factura:"comprobante",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:form.fecha_pago,mes_correspondiente:form.mes_correspondiente,monto_total:total,mora_cobrada:moraVal,abono:0,saldo:0,tipo_pago:form.tipo_pago,estado:"pagada",notas:form.notas,cobro_id:form.cobro_id||null};
       await db.insert("facturas",fac);
       if(form.cobro_id){await db.update("facturas",form.cobro_id,{estado:"pagada",fecha_pago:form.fecha_pago});}
       await loadData();setModal(null);
       setTimeout(()=>mostrarImagen(fac,"comprobante"),300);
-      showToast("Pago confirmado ✓ — Comprobante listo para enviar");
+      showToast(`Pago confirmado ✓${moraVal>0?` (+L ${moraVal.toLocaleString()} mora)`:""} — Comprobante listo para enviar`);
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
@@ -1419,7 +1513,7 @@ function FacturasPage({data,loadData,showToast}){
       {panelTotales}
       <EstadoPadres data={data} fSec={fSec} fMes={fMes}/>
       <div style={card}>{cobros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>{(fSec||fMes)?"No hay cobros con esos filtros.":"No hay cobros. Crea cobros por sección."}</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:750}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["No.","Alumno","Padre","Sección","Mes","Total","Mora","Saldo","Estado",""].map(h=><th key={h} style={{textAlign:["Total","Mora","Saldo"].includes(h)?"right":"left",padding:"5px 4px",color:"#64748B",fontWeight:600,fontSize:10,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
-        <tbody>{[...cobros].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=calcMora(f, data.secciones, data.alumnos);const tot=Number(f.monto_total)+mora;const cols={pagada:"#059669",pendiente:"#DC2626",parcial:"#D97706",anulada:"#64748B"};const isP=f.estado==="pendiente"||f.estado==="parcial";return(
+        <tbody>{[...cobros].reverse().map(f=>{const al=data.alumnos.find(a=>a.id===f.alumno_id);const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=f.tipo_factura==="comprobante"?moraCobrada(f):calcMora(f, data.secciones, data.alumnos);const tot=Number(f.monto_total)+mora;const cols={pagada:"#059669",pendiente:"#DC2626",parcial:"#D97706",anulada:"#64748B"};const isP=f.estado==="pendiente"||f.estado==="parcial";return(
           <tr key={f.id} style={{borderBottom:"1px solid #F1F5F9",background:isP&&mora>0?"#FEF2F2":"transparent"}}>
             <td style={{padding:"5px 4px",fontWeight:600}}>{f.numero_factura}</td>
             <td style={{padding:"5px 4px"}}>{al?.nombre||"—"}</td>
@@ -1490,7 +1584,7 @@ function FacturasPage({data,loadData,showToast}){
     {modal==="comprobante"&&<Modal title="✅ Confirmar pago" onClose={()=>setModal(null)} onSave={saveComp} wide><div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16}}><div>
       {!form.cobro_id&&<div style={{marginBottom:12}}><label style={label}>Cobro pendiente *</label><select onChange={e=>{const c=pendCobros.find(c=>c.id===e.target.value);if(c)openComp(c);}} style={{...input,cursor:"pointer"}}><option value="">Seleccionar...</option>{pendCobros.map(c=>{const al=data.alumnos.find(a=>a.id===c.alumno_id);return<option key={c.id} value={c.id}>{c.numero_factura} — {al?.nombre} — {c.mes_correspondiente}</option>;})}</select></div>}
       {form.cobro_id&&(()=>{const cobro=data.facturas.find(f=>f.id===form.cobro_id);const al=data.alumnos.find(a=>a.id===form.alumno_id);const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;const mora=cobro?calcMora(cobro, data.secciones, data.alumnos):0;return(<div style={{background:"#F0FDF4",borderRadius:8,padding:12,marginBottom:12,fontSize:12,border:"1px solid #BBF7D0"}}><div style={{fontWeight:700,color:"#166534",marginBottom:4}}>✓ {cobro?.numero_factura}</div><div><strong>Alumno:</strong> {al?.nombre} | <strong>Padre:</strong> {p?.nombre}</div><div><strong>Monto:</strong> L {Number(cobro?.monto_total).toLocaleString()}</div>{mora>0&&<div style={{color:"#DC2626",fontWeight:700}}>⚠️ Mora: L {mora}</div>}</div>);})()}
-    </div><div><div style={{marginBottom:12}}><label style={label}>Fecha de pago</label><input type="date" value={form.fecha_pago} onChange={e=>setForm({...form,fecha_pago:e.target.value})} style={input}/></div><Field label="Monto recibido (L)" value={form.monto_total} onChange={v=>setForm({...form,monto_total:v})} type="number"/><div style={{marginBottom:12}}><label style={label}>Tipo de pago</label><select value={form.tipo_pago} onChange={e=>setForm({...form,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div><Field label="Notas" value={form.notas} onChange={v=>setForm({...form,notas:v})} multiline/></div></div></Modal>}
+    </div><div><div style={{marginBottom:12}}><label style={label}>Fecha de pago</label><input type="date" value={form.fecha_pago} onChange={e=>setForm({...form,fecha_pago:e.target.value})} style={input}/></div><Field label="Monto recibido (L)" value={form.monto_total} onChange={v=>setForm({...form,monto_total:v})} type="number"/>{Number(form.mora)>0&&<div onClick={()=>setForm({...form,cobrar_mora:!form.cobrar_mora})} style={{marginBottom:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",border:form.cobrar_mora?"2px solid #DC2626":"1px solid #D1D5DB",background:form.cobrar_mora?"#FEF2F2":"#fff",display:"flex",alignItems:"center",gap:10}}><div style={{width:20,height:20,borderRadius:5,border:form.cobrar_mora?"none":"2px solid #D1D5DB",background:form.cobrar_mora?"#DC2626":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{form.cobrar_mora&&<Check size={14} color="#fff"/>}</div><div><div style={{fontSize:13,fontWeight:700,color:form.cobrar_mora?"#991B1B":"#475569"}}>⏰ Cobré la mora (L {Number(form.mora).toLocaleString()})</div><div style={{fontSize:11,color:"#94A3B8"}}>{form.cobrar_mora?`Aparece en el recibo y suma a ingresos · Total L ${((parseFloat(form.monto_total)||0)+Number(form.mora)).toLocaleString()}`:"Destildala si le perdonaste la mora"}</div></div></div>}<div style={{marginBottom:12}}><label style={label}>Tipo de pago</label><select value={form.tipo_pago} onChange={e=>setForm({...form,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div><Field label="Notas" value={form.notas} onChange={v=>setForm({...form,notas:v})} multiline/></div></div></Modal>}
 
     {imgPreview&&<ImgPreviewModal img={imgPreview} onClose={()=>setImgPreview(null)}/>}
     {viewInv&&<InvoiceView invoice={viewInv} data={data} onClose={()=>setViewInv(null)} onImagen={mostrarImagen}/>}
@@ -1590,7 +1684,7 @@ function ImgPreviewModal({img,onClose}){
 
 // ── VISTA FACTURA ──
 function InvoiceView({invoice,data,onClose,onImagen}){
-  const f=invoice;const al=data.alumnos.find(a=>a.id===f.alumno_id);const padre=al?data.padres.find(p=>p.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=calcMora(f, data.secciones, data.alumnos);
+  const f=invoice;const al=data.alumnos.find(a=>a.id===f.alumno_id);const padre=al?data.padres.find(p=>p.id===al.padre_id):null;const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;const mora=f.tipo_factura==="comprobante"?moraCobrada(f):calcMora(f, data.secciones, data.alumnos);
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:520,maxHeight:"90vh",overflow:"auto"}}><div style={{padding:24}}>
     <div style={{textAlign:"center",borderBottom:"2px solid #F97316",paddingBottom:16,marginBottom:16}}><div style={{fontSize:28}}>🌱</div><h2 style={{fontSize:18,fontWeight:800,color:"#1E293B",margin:"4px 0"}}>Seeds English School</h2><p style={{fontSize:11,color:"#64748B",margin:0}}>Jesús de Otoro, Intibucá</p><p style={{fontSize:13,fontWeight:700,color:"#F97316",margin:"8px 0 0"}}>{f.tipo_factura==="comprobante"?"COMPROBANTE":"FACTURA"} {f.numero_factura}</p></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,fontSize:13,marginBottom:16}}><div><div style={{fontWeight:700,color:"#475569",marginBottom:6}}>Alumno</div><div><strong>Nombre:</strong> {al?.nombre||"—"}</div><div><strong>Padre:</strong> {padre?.nombre||"—"}</div><div><strong>Tel:</strong> {padre?.telefono||"—"}</div><div><strong>Sección:</strong> {sec?.nombre||"—"}</div></div><div><div style={{fontWeight:700,color:"#475569",marginBottom:6}}>Pago</div><div><strong>Emisión:</strong> {f.fecha_emision}</div><div><strong>Pago:</strong> {f.fecha_pago||"—"}</div><div><strong>Mes:</strong> {f.mes_correspondiente}</div><div><strong>Tipo:</strong> {f.tipo_pago}</div></div></div>
@@ -1606,9 +1700,11 @@ function InvoiceView({invoice,data,onClose,onImagen}){
 // ── HISTORIAL ──
 function HistorialPage({data,loadData,showToast}){
   const[selSec,setSelSec]=useState("");const[selAl,setSelAl]=useState("");
-  const[anioSel,setAnioSel]=useState(new Date().getFullYear());
+  const anioHoy=new Date().getFullYear();
+  const[anioDesde,setAnioDesde]=useState(anioHoy);
+  const[anioHasta,setAnioHasta]=useState(anioHoy);
   const[imgPreview,setImgPreview]=useState(null);
-  const[pagoModal,setPagoModal]=useState(null); // {mes, cobroExistente}
+  const[pagoModal,setPagoModal]=useState(null); // {mes, cobroExistente, anio, mora}
   const[pagoForm,setPagoForm]=useState({fecha_pago:new Date().toISOString().split("T")[0],tipo_pago:"efectivo"});
   const als=data.alumnos.filter(a=>!selSec||a.seccion_id===selSec);
   const alumno=selAl?data.alumnos.find(a=>a.id===selAl):null;
@@ -1617,24 +1713,27 @@ function HistorialPage({data,loadData,showToast}){
 
   // Año de una factura: usa anio_correspondiente; si no existe (datos viejos), el de fecha_emision
   const anioDe=(f)=> Number(f.anio_correspondiente) || parseInt(String(f.fecha_emision||"").split("-")[0]) || null;
-  // Lista de años disponibles: desde 2024 hasta el año actual + 1 (para adelantar)
+  // Lista de años disponibles: desde 2020 hasta el año actual + 1 (para adelantar)
   const anioActual=new Date().getFullYear();
   const aniosDisponibles=[];
   for(let y=2020; y<=anioActual+1; y++) aniosDisponibles.push(y);
+  // Rango de años seleccionado (para el control de pagos y el estado de cuenta)
+  const yLo=Math.min(anioDesde,anioHasta), yHi=Math.max(anioDesde,anioHasta);
+  const aniosRango=[]; for(let y=yLo; y<=yHi; y++) aniosRango.push(y);
+  const rangoTxt = yLo===yHi ? `${yLo}` : `${yLo}–${yHi}`;
 
   const verImagen = (f, tipo) => {
     const al=data.alumnos.find(a=>a.id===f.alumno_id);
     const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;
     const s=al?data.secciones.find(ss=>ss.id===al.seccion_id):null;
-    const mora=calcMora(f, data.secciones, data.alumnos);
+    const mora=f.tipo_factura==="comprobante"?moraCobrada(f):calcMora(f, data.secciones, data.alumnos);
     const dataUrl=generarImgFactura(f,al,p,s,mora,tipo);
     setImgPreview({dataUrl,phone:p?.telefono||"",destinatario:p?.nombre||al?.nombre||"",numero:f.numero_factura});
   };
 
   // Estado de cuenta anual (los 12 meses) para enviar al padre — PDF vía impresión
   // Calcula los datos del estado de cuenta (compartido por PDF e imagen)
-  const calcularEstadoCuenta=()=>{
-    const anio=anioSel;
+  const calcularEstadoCuenta=(anio)=>{
     const mensual=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
     const becado=alumno.beca===true;
     let totalPagado=0, totalFaltante=0, totalMora=0;
@@ -1670,32 +1769,47 @@ function HistorialPage({data,loadData,showToast}){
     return {anio,mensual,becado,filasData,totales:{mensual,pagado:totalPagado,faltante:totalFaltante,mora:totalMora,deuda:totalFaltante+totalMora}};
   };
 
+  // Totales globales sumando todos los años del rango
+  const totalesDeBloques=(bloques)=>bloques.reduce((t,b)=>({mensual:b.totales.mensual,pagado:t.pagado+b.totales.pagado,faltante:t.faltante+b.totales.faltante,mora:t.mora+b.totales.mora,deuda:t.deuda+b.totales.deuda}),{mensual:0,pagado:0,faltante:0,mora:0,deuda:0});
+
   // Generar y mostrar la IMAGEN del estado de cuenta (para WhatsApp)
   const estadoCuentaImagen=()=>{
     if(!alumno){showToast("Selecciona un alumno","error");return;}
-    const r=calcularEstadoCuenta();
-    const dataUrl=generarImgEstadoCuenta(alumno,padre,sec,r.anio,r.filasData,r.totales);
-    setImgPreview({dataUrl,phone:padre?.telefono||"",destinatario:padre?.nombre||alumno?.nombre||"",numero:"Estado "+r.anio});
+    const bloques=aniosRango.map(a=>({anio:a,...calcularEstadoCuenta(a)}));
+    const tg=totalesDeBloques(bloques);
+    const dataUrl = bloques.length===1
+      ? generarImgEstadoCuenta(alumno,padre,sec,bloques[0].anio,bloques[0].filasData,bloques[0].totales)
+      : generarImgEstadoCuentaRango(alumno,padre,sec,bloques,tg,rangoTxt);
+    setImgPreview({dataUrl,phone:padre?.telefono||"",destinatario:padre?.nombre||alumno?.nombre||"",numero:"Estado "+rangoTxt});
   };
 
   const estadoCuentaPDF=()=>{
     if(!alumno){showToast("Selecciona un alumno","error");return;}
-    const anio=anioSel;
     const L=(n)=>`L ${Number(n).toLocaleString()}`;
     const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
-    const r=calcularEstadoCuenta();
-    const mensual=r.mensual, becado=r.becado;
-    const totalPagado=r.totales.pagado, totalMora=r.totales.mora, totalDeuda=r.totales.deuda;
-    const filas=r.filasData.map(f=>{
-      let montoHtml=f.montoTxt;
-      if(f.montoTxt.indexOf("mora")>=0){
-        const partes=f.montoTxt.split(" + ");
-        montoHtml=partes[0]+' <span style="color:#DC2626">+ '+(partes[1]||"")+'</span>';
-      }
-      const marca=f.estadoTxt==="Pagado"?"&#10003; ":"";
-      return `<tr><td>${f.mes}</td><td style="text-align:center;color:${f.estadoColor};font-weight:700">${marca}${f.estadoTxt}</td><td style="text-align:right">${f.fecha}</td><td style="text-align:right">${montoHtml}</td></tr>`;
-    }).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Estado de cuenta ${alumno.nombre} ${anio}</title>
+    const bloques=aniosRango.map(a=>({anio:a,...calcularEstadoCuenta(a)}));
+    const mensual=bloques[0]?.mensual||0, becado=bloques[0]?.becado;
+    const tg=totalesDeBloques(bloques);
+    const totalMora=tg.mora, totalDeuda=tg.deuda;
+    const varios=bloques.length>1;
+    const tablaDeBloque=(r)=>{
+      const filas=r.filasData.map(f=>{
+        let montoHtml=f.montoTxt;
+        if(f.montoTxt.indexOf("mora")>=0){
+          const partes=f.montoTxt.split(" + ");
+          montoHtml=partes[0]+' <span style="color:#DC2626">+ '+(partes[1]||"")+'</span>';
+        }
+        const marca=f.estadoTxt==="Pagado"?"&#10003; ":"";
+        return `<tr><td>${f.mes}</td><td style="text-align:center;color:${f.estadoColor};font-weight:700">${marca}${f.estadoTxt}</td><td style="text-align:right">${f.fecha}</td><td style="text-align:right">${montoHtml}</td></tr>`;
+      }).join("");
+      const subt=varios?`<div class="yr">Año ${r.anio}${r.totales.deuda>0?` <span class="yrp">· Pendiente ${L(r.totales.deuda)}</span>`:` <span class="yrok">· Al día</span>`}</div>`:"";
+      return `${subt}<table>
+        <thead><tr><th>Mes</th><th style="text-align:center">Estado</th><th style="text-align:right">Fecha de pago</th><th style="text-align:right">Monto</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>`;
+    };
+    const cuerpo=bloques.map(tablaDeBloque).join("");
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Estado de cuenta ${alumno.nombre} ${rangoTxt}</title>
       <style>
         @page { size: letter portrait; margin: 15mm; }
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
@@ -1706,6 +1820,9 @@ function HistorialPage({data,loadData,showToast}){
         .head p{font-size:12px;color:#64748B;margin-top:3px}
         .info{background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:12px 14px;margin-bottom:18px;font-size:13px}
         .info b{color:#9A3412}
+        .yr{font-size:15px;font-weight:800;color:#9A3412;margin:6px 0 8px;padding-bottom:4px;border-bottom:2px solid #FED7AA}
+        .yr .yrp{font-size:12px;font-weight:600;color:#DC2626}
+        .yr .yrok{font-size:12px;font-weight:600;color:#059669}
         table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:18px}
         th{background:#F1F5F9;text-align:left;padding:8px 10px;font-size:12px;color:#475569}
         td{padding:7px 10px;border-bottom:1px solid #F1F5F9}
@@ -1721,7 +1838,7 @@ function HistorialPage({data,loadData,showToast}){
         <div class="htxt">
           <h1>Seeds English School</h1>
           <p>Jesús de Otoro, Intibucá, Honduras</p>
-          <p style="margin-top:8px;font-size:16px;font-weight:700;color:#1E293B">Estado de cuenta ${anio}</p>
+          <p style="margin-top:8px;font-size:16px;font-weight:700;color:#1E293B">Estado de cuenta ${rangoTxt}</p>
           <p>Generado el ${hoy}</p>
         </div>
       </div>
@@ -1730,13 +1847,10 @@ function HistorialPage({data,loadData,showToast}){
         <div><b>Padre/Encargado:</b> ${padre?.nombre||"—"} &nbsp;·&nbsp; <b>Tel:</b> ${padre?.telefono||"—"}</div>
         <div><b>Sección:</b> ${sec?.nombre||"—"} &nbsp;·&nbsp; <b>Mensualidad:</b> ${becado?"Becado":L(mensual)}</div>
       </div>
-      <table>
-        <thead><tr><th>Mes</th><th style="text-align:center">Estado</th><th style="text-align:right">Fecha de pago</th><th style="text-align:right">Monto</th></tr></thead>
-        <tbody>${filas}</tbody>
-      </table>
+      ${cuerpo}
       <div class="tot">
-        ${totalMora>0?`<div class="box" style="background:#FEF2F2;color:#991B1B"><div class="l">Mora por atraso</div><div class="v">${L(totalMora)}</div></div>`:""}
-        <div class="box" style="background:#FFF7ED;color:#9A3412"><div class="l">Total pendiente${totalMora>0?" (con mora)":""}</div><div class="v">${L(totalDeuda)}</div></div>
+        ${totalMora>0?`<div class="box" style="background:#FEF2F2;color:#991B1B"><div class="l">Mora por atraso${varios?` (${rangoTxt})`:""}</div><div class="v">${L(totalMora)}</div></div>`:""}
+        <div class="box" style="background:#FFF7ED;color:#9A3412"><div class="l">Total pendiente${varios?` (${rangoTxt})`:""}${totalMora>0?" (con mora)":""}</div><div class="v">${L(totalDeuda)}</div></div>
       </div>
       ${totalMora>0?`<p style="font-size:11px;color:#94a3b8;margin-top:10px">* El total pendiente incluye la mora por los meses atrasados.</p>`:""}
       <div class="foot">Seeds English School — Área Administrativa</div>
@@ -1748,17 +1862,19 @@ function HistorialPage({data,loadData,showToast}){
   };
 
   // Abrir modal para marcar un mes como pagado desde el historial
-  const abrirPago=(mes,cobroExistente)=>{
-    setPagoForm({fecha_pago:new Date().toISOString().split("T")[0],tipo_pago:cobroExistente?.tipo_pago||"efectivo",mes_ingreso:MESES[new Date().getMonth()]});
-    setPagoModal({mes,cobroExistente});
+  const abrirPago=(mes,cobroExistente,anio)=>{
+    const mora=cobroExistente?calcMora(cobroExistente,data.secciones,data.alumnos):0;
+    setPagoForm({fecha_pago:new Date().toISOString().split("T")[0],tipo_pago:cobroExistente?.tipo_pago||"efectivo",mes_ingreso:MESES[new Date().getMonth()],cobrar_mora:mora>0});
+    setPagoModal({mes,cobroExistente,anio,mora});
   };
 
   // Marcar pagado: crea el cobro si no existe, y el comprobante, todo en un paso
   const marcarPagado=async()=>{
     if(!alumno){return;}
-    const {mes,cobroExistente}=pagoModal;
+    const {mes,cobroExistente,anio,mora}=pagoModal;
     try{
       const monto=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
+      const moraVal=(pagoForm.cobrar_mora && Number(mora)>0)?Number(mora):0;
       let n=data.facturas.length;
       let cobroId;
       const nuevas=[];
@@ -1767,67 +1883,139 @@ function HistorialPage({data,loadData,showToast}){
       }else{
         // crear el cobro (ya pagado)
         n++; cobroId=uid();
-        nuevas.push({id:cobroId,numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,anio_correspondiente:anioSel,monto_total:monto,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:null});
+        nuevas.push({id:cobroId,numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,anio_correspondiente:anio,monto_total:monto,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:null});
       }
-      // crear el comprobante
+      // crear el comprobante (con la mora cobrada si aplica)
       n++;
       const mesIng=pagoForm.mes_ingreso||MESES[new Date().getMonth()];
-      const comp={id:uid(),numero_factura:`CP-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"comprobante",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,anio_correspondiente:anioSel,mes_ingreso:mesIng,monto_total:monto,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:cobroId};
+      const comp={id:uid(),numero_factura:`CP-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"comprobante",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,anio_correspondiente:anio,mes_ingreso:mesIng,monto_total:monto,mora_cobrada:moraVal,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:cobroId};
       nuevas.push(comp);
       await db.insertMany("facturas",nuevas);
       if(cobroExistente&&cobroExistente.estado!=="pagada"){await db.update("facturas",cobroExistente.id,{estado:"pagada",fecha_pago:pagoForm.fecha_pago});}
       await loadData();setPagoModal(null);
       setTimeout(()=>verImagen(comp,"comprobante"),300);
-      showToast(`✓ ${mes} pagado — comprobante listo`);
+      showToast(`✓ ${mes} ${anio} pagado${moraVal>0?` (+L ${moraVal.toLocaleString()} mora)`:""} — comprobante listo`);
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
   // Marcar un mes como PENDIENTE (crea un cobro pendiente para gestionar la deuda)
-  const marcarPendiente=async(mes)=>{
+  const marcarPendiente=async(mes,anio)=>{
     if(!alumno)return;
     try{
       const monto=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
       const n=data.facturas.length+1;
-      const cobro={id:uid(),numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:`${anioSel}-${String(MESES.indexOf(mes)+1).padStart(2,"0")}-01`,fecha_pago:null,mes_correspondiente:mes,anio_correspondiente:anioSel,monto_total:monto,abono:0,saldo:monto,tipo_pago:"efectivo",estado:"pendiente",notas:"",cobro_id:null};
+      const cobro={id:uid(),numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:`${anio}-${String(MESES.indexOf(mes)+1).padStart(2,"0")}-01`,fecha_pago:null,mes_correspondiente:mes,anio_correspondiente:anio,monto_total:monto,abono:0,saldo:monto,tipo_pago:"efectivo",estado:"pendiente",notas:"",cobro_id:null};
       await db.insert("facturas",cobro);
       await loadData();
-      showToast(`${mes} ${anioSel} marcado como pendiente`);
+      showToast(`${mes} ${anio} marcado como pendiente`);
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
   // Marcar un mes pendiente como "al día" (quita el cobro pendiente de ese mes)
-  const quitarRegistro=async(mes,cobro,comp)=>{
-    if(!confirm(`¿Marcar ${mes} ${anioSel} como al día? Se quitará el pendiente de ese mes.`))return;
+  const quitarRegistro=async(mes,cobro,comp,anio)=>{
+    if(!confirm(`¿Marcar ${mes} ${anio} como al día? Se quitará el pendiente de ese mes.`))return;
     try{
       if(comp) await db.remove("facturas",comp.id);
       if(cobro) await db.remove("facturas",cobro.id);
       await loadData();
-      showToast(`${mes} marcado como al día`);
+      showToast(`${mes} ${anio} marcado como al día`);
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
   // Revocar (borrar) un pago registrado por error - con DOBLE confirmacion
-  const revocarPago=async(mes,cobro,comp)=>{
-    const monto=comp?Number(comp.monto_total):0;
+  const revocarPago=async(mes,cobro,comp,anio)=>{
+    const monto=comp?Number(comp.monto_total)+moraCobrada(comp):0;
     // Primera confirmacion
-    if(!confirm(`⚠️ ¿Revocar el pago de ${mes} ${anioSel} (L ${monto.toLocaleString()})?\n\nEl mes volverá a quedar sin pago y el ingreso se quitará de los reportes.`))return;
+    if(!confirm(`⚠️ ¿Revocar el pago de ${mes} ${anio} (L ${monto.toLocaleString()})?\n\nEl mes volverá a quedar sin pago y el ingreso se quitará de los reportes.`))return;
     // Segunda confirmacion
-    if(!confirm(`Esta acción NO se puede deshacer.\n\n¿Confirmás que querés BORRAR el pago de ${mes} ${anioSel}?`))return;
+    if(!confirm(`Esta acción NO se puede deshacer.\n\n¿Confirmás que querés BORRAR el pago de ${mes} ${anio}?`))return;
     try{
       if(comp) await db.remove("facturas",comp.id);
       if(cobro) await db.remove("facturas",cobro.id);
       await loadData();
-      showToast(`Pago de ${mes} revocado`,"error");
+      showToast(`Pago de ${mes} ${anio} revocado`,"error");
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
-  const tablaMensual = selAl ? MESES.map(mes => {
-    const cobro = data.facturas.find(f=>f.alumno_id===selAl&&f.mes_correspondiente===mes&&anioDe(f)===anioSel&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
-    const comp = data.facturas.find(f=>f.alumno_id===selAl&&f.mes_correspondiente===mes&&anioDe(f)===anioSel&&f.tipo_factura==="comprobante");
+  // Tabla de 12 meses para un año dado (cobro/comprobante de cada mes)
+  const tablaDe = (anio) => MESES.map(mes => {
+    const cobro = data.facturas.find(f=>f.alumno_id===selAl&&f.mes_correspondiente===mes&&anioDe(f)===anio&&(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada");
+    const comp = data.facturas.find(f=>f.alumno_id===selAl&&f.mes_correspondiente===mes&&anioDe(f)===anio&&f.tipo_factura==="comprobante");
     return { mes, cobro, comp };
-  }) : [];
+  });
 
   const monto = alumno ? ((Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0) : 0;
+
+  // Control de pagos de un año (tabla interactiva de 12 meses)
+  const ControlAnio=(anio)=>{
+    const filas=tablaDe(anio);
+    const pagados=filas.filter(t=>t.comp || (!(t.cobro&&t.cobro.estado!=="pagada")&&mesCargado(MESES.indexOf(t.mes),anio))).length;
+    const pendientes=filas.filter(t=>t.cobro&&t.cobro.estado!=="pagada"&&!t.comp).length;
+    return(<div style={card} key={anio}>
+      <h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 14px",display:"flex",alignItems:"center",gap:6}}><Calendar size={16}/>Control de pagos — {anio}</h3>
+      {anio===yLo&&<div style={{background:"#F0F9FF",border:"1px solid #BAE6FD",borderRadius:8,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#075985"}}>
+        Por defecto cada mes está <strong>al día</strong>. Solo marcá los meses que el alumno debe. Marcar aquí NO afecta tus reportes de ganancias — es solo control de deudas. Los pagos reales se registran en <strong>Facturas</strong>.
+      </div>}
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>
+            <th style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:700,width:90}}>Mes</th>
+            <th style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:700}}>Estado</th>
+            <th style={{textAlign:"right",padding:"8px 10px",color:"#64748B",fontWeight:700}}>Monto</th>
+            <th style={{textAlign:"center",padding:"8px 10px",color:"#64748B",fontWeight:700,width:180}}>Acción</th>
+          </tr></thead>
+          <tbody>
+            {filas.map(({mes,cobro,comp})=>{
+              const noCargado = !mesCargado(MESES.indexOf(mes), anio);
+              const esFuturo = noCargado;
+              const pendiente = cobro && cobro.estado!=="pagada";
+              const mora = pendiente ? calcMora(cobro,data.secciones,data.alumnos) : 0;
+              const moraPag = comp ? moraCobrada(comp) : 0;
+              let estadoBadge, montoTxt, accion;
+              if(comp){
+                estadoBadge = <span style={badge("#059669")}>Pagado</span>;
+                montoTxt = <span style={{fontWeight:600}}>L {Number(comp.monto_total).toLocaleString()}{moraPag>0?<span style={{fontSize:10,color:"#059669"}}> +L {moraPag.toLocaleString()} mora</span>:""}</span>;
+                accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center"}}>
+                  <span style={{fontSize:10,color:"#94A3B8"}}>{comp.fecha_pago}</span>
+                  <button onClick={()=>verImagen(comp,"comprobante")} title="Ver comprobante" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 7px",borderRadius:4}}><Send size={11} color="#fff"/></button>
+                  <button onClick={()=>revocarPago(mes,cobro,comp,anio)} title="Revocar este pago (borrarlo)" style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",padding:"3px 7px",borderRadius:4}}><Trash2 size={11} color="#DC2626"/></button>
+                </div>;
+              } else if(pendiente){
+                estadoBadge = <span style={badge("#DC2626")}>Pendiente</span>;
+                montoTxt = <span style={{fontWeight:700,color:"#DC2626"}}>L {Number(cobro.monto_total).toLocaleString()}{mora>0?<span style={{fontSize:10}}> +L {mora.toLocaleString()} mora</span>:""}</span>;
+                accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
+                  <button onClick={()=>verImagen(cobro,"cobro")} title="Enviar cobro por WhatsApp" style={{background:"#25D366",border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:4}}><Phone size={11} color="#fff"/></button>
+                  <button onClick={()=>abrirPago(mes,cobro,anio)} title="Registrar pago recibido (elegís a qué mes suma)" style={{background:"#2563EB",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Registrar pago</button>
+                  <button onClick={()=>quitarRegistro(mes,cobro,comp,anio)} title="Quitar el pendiente sin registrar ingreso (ya estaba saldado)" style={{background:"#F1F5F9",border:"1px solid #CBD5E1",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#475569",fontSize:11,fontWeight:600}}>Sin cobro</button>
+                </div>;
+              } else if(esFuturo){
+                estadoBadge = <span style={{fontSize:11,color:"#A78BFA",fontWeight:600}}>No cargado aún</span>;
+                montoTxt = <span style={{color:"#CBD5E1"}}>—</span>;
+                accion = <button onClick={()=>abrirPago(mes,cobro,anio)} title="Registrar pago adelantado (elegís a qué mes suma)" style={{background:"#7C3AED",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Pagar adelantado</button>;
+              } else {
+                estadoBadge = <span style={badge("#059669")}>Pagado</span>;
+                montoTxt = <span style={{color:"#CBD5E1"}}>—</span>;
+                accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
+                  <button onClick={()=>abrirPago(mes,cobro,anio)} title="Registrar pago recibido (elegís a qué mes suma)" style={{background:"#2563EB",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Registrar pago</button>
+                  <button onClick={()=>marcarPendiente(mes,anio)} title="Marcar como pendiente (deuda)" style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#DC2626",fontSize:11,fontWeight:600}}>Marcar pendiente</button>
+                </div>;
+              }
+              return(<tr key={mes} style={{borderBottom:"1px solid #F1F5F9",background:esFuturo?"#FAFAFF":"transparent"}}>
+                <td style={{padding:"8px 10px",fontWeight:700,color:esFuturo?"#7C3AED":"#1E293B"}}>{mes}</td>
+                <td style={{padding:"8px 10px"}}>{estadoBadge}</td>
+                <td style={{padding:"8px 10px",textAlign:"right"}}>{montoTxt}</td>
+                <td style={{padding:"8px 10px",textAlign:"center"}}>{accion}</td>
+              </tr>);
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{marginTop:14,display:"flex",gap:12,flexWrap:"wrap",fontSize:12}}>
+        <span style={badge("#059669")}>Pagados: {pagados}</span>
+        <span style={badge("#DC2626")}>Pendientes: {pendientes}</span>
+      </div>
+    </div>);
+  };
 
   return(<div>
     <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
@@ -1839,9 +2027,15 @@ function HistorialPage({data,loadData,showToast}){
         <option value="">Seleccionar alumno</option>
         {als.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
       </select>
-      <select value={anioSel} onChange={e=>setAnioSel(parseInt(e.target.value))} style={{...input,width:120,cursor:"pointer"}}>
-        {aniosDisponibles.map(y=><option key={y} value={y}>Año {y}</option>)}
-      </select>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <select value={anioDesde} onChange={e=>{const v=parseInt(e.target.value);setAnioDesde(v);if(v>anioHasta)setAnioHasta(v);}} style={{...input,width:120,cursor:"pointer"}} title="Año desde">
+          {aniosDisponibles.map(y=><option key={y} value={y}>Año {y}</option>)}
+        </select>
+        <span style={{fontSize:12,color:"#94A3B8"}}>a</span>
+        <select value={anioHasta} onChange={e=>{const v=parseInt(e.target.value);setAnioHasta(v);if(v<anioDesde)setAnioDesde(v);}} style={{...input,width:120,cursor:"pointer"}} title="Año hasta">
+          {aniosDisponibles.map(y=><option key={y} value={y}>Año {y}</option>)}
+        </select>
+      </div>
     </div>
     {alumno&&<div style={{...card,borderLeft:"4px solid #F97316"}}>
       <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
@@ -1862,83 +2056,14 @@ function HistorialPage({data,loadData,showToast}){
         </div>
       </div>
     </div>}
-    {selAl&&<div style={card}>
-      <h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 14px",display:"flex",alignItems:"center",gap:6}}><Calendar size={16}/>Control de pagos — {anioSel}</h3>
-      <div style={{background:"#F0F9FF",border:"1px solid #BAE6FD",borderRadius:8,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#075985"}}>
-        Por defecto cada mes está <strong>al día</strong>. Solo marcá los meses que el alumno debe. Marcar aquí NO afecta tus reportes de ganancias — es solo control de deudas. Los pagos reales se registran en <strong>Facturas</strong>.
-      </div>
-      <div style={{overflowX:"auto"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>
-            <th style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:700,width:90}}>Mes</th>
-            <th style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:700}}>Estado</th>
-            <th style={{textAlign:"right",padding:"8px 10px",color:"#64748B",fontWeight:700}}>Monto</th>
-            <th style={{textAlign:"center",padding:"8px 10px",color:"#64748B",fontWeight:700,width:180}}>Acción</th>
-          </tr></thead>
-          <tbody>
-            {tablaMensual.map(({mes,cobro,comp})=>{
-              // "No cargado aun" = el mes todavia no llego a su dia de carga (dia 20)
-              const noCargado = !mesCargado(MESES.indexOf(mes), anioSel);
-              const esFuturo = noCargado;
-              const pendiente = cobro && cobro.estado!=="pagada";
-              // mora del mes pendiente
-              const mora = pendiente ? calcMora(cobro,data.secciones,data.alumnos) : 0;
-              // Estado a mostrar
-              let estadoBadge, montoTxt, accion;
-              if(comp){
-                // Pago real (registrado desde Facturas) — cuenta en reportes
-                estadoBadge = <span style={badge("#059669")}>Pagado</span>;
-                montoTxt = <span style={{fontWeight:600}}>L {Number(comp.monto_total).toLocaleString()}</span>;
-                accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center"}}>
-                  <span style={{fontSize:10,color:"#94A3B8"}}>{comp.fecha_pago}</span>
-                  <button onClick={()=>verImagen(comp,"comprobante")} title="Ver comprobante" style={{background:"#059669",border:"none",cursor:"pointer",padding:"3px 7px",borderRadius:4}}><Send size={11} color="#fff"/></button>
-                  <button onClick={()=>revocarPago(mes,cobro,comp)} title="Revocar este pago (borrarlo)" style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",padding:"3px 7px",borderRadius:4}}><Trash2 size={11} color="#DC2626"/></button>
-                </div>;
-              } else if(pendiente){
-                // Pendiente (debe)
-                estadoBadge = <span style={badge("#DC2626")}>Pendiente</span>;
-                montoTxt = <span style={{fontWeight:700,color:"#DC2626"}}>L {Number(cobro.monto_total).toLocaleString()}{mora>0?<span style={{fontSize:10}}> +L {mora.toLocaleString()} mora</span>:""}</span>;
-                accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
-                  <button onClick={()=>verImagen(cobro,"cobro")} title="Enviar cobro por WhatsApp" style={{background:"#25D366",border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:4}}><Phone size={11} color="#fff"/></button>
-                  <button onClick={()=>abrirPago(mes,cobro)} title="Registrar pago recibido (elegís a qué mes suma)" style={{background:"#2563EB",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Registrar pago</button>
-                  <button onClick={()=>quitarRegistro(mes,cobro,comp)} title="Quitar el pendiente sin registrar ingreso (ya estaba saldado)" style={{background:"#F1F5F9",border:"1px solid #CBD5E1",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#475569",fontSize:11,fontWeight:600}}>Sin cobro</button>
-                </div>;
-              } else if(esFuturo){
-                // Mes futuro no cargado aún - se puede pagar adelantado
-                estadoBadge = <span style={{fontSize:11,color:"#A78BFA",fontWeight:600}}>No cargado aún</span>;
-                montoTxt = <span style={{color:"#CBD5E1"}}>—</span>;
-                accion = <button onClick={()=>abrirPago(mes,cobro)} title="Registrar pago adelantado (elegís a qué mes suma)" style={{background:"#7C3AED",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Pagar adelantado</button>;
-              } else {
-                // Saldado por defecto - se muestra como "Pagado" (no cuenta en reportes)
-                estadoBadge = <span style={badge("#059669")}>Pagado</span>;
-                montoTxt = <span style={{color:"#CBD5E1"}}>—</span>;
-                accion = <div style={{display:"flex",gap:4,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
-                  <button onClick={()=>abrirPago(mes,cobro)} title="Registrar pago recibido (elegís a qué mes suma)" style={{background:"#2563EB",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#fff",fontSize:11,fontWeight:600}}>Registrar pago</button>
-                  <button onClick={()=>marcarPendiente(mes)} title="Marcar como pendiente (deuda)" style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",padding:"4px 8px",borderRadius:5,color:"#DC2626",fontSize:11,fontWeight:600}}>Marcar pendiente</button>
-                </div>;
-              }
-              return(<tr key={mes} style={{borderBottom:"1px solid #F1F5F9",background:esFuturo?"#FAFAFF":"transparent"}}>
-                <td style={{padding:"8px 10px",fontWeight:700,color:esFuturo?"#7C3AED":"#1E293B"}}>{mes}</td>
-                <td style={{padding:"8px 10px"}}>{estadoBadge}</td>
-                <td style={{padding:"8px 10px",textAlign:"right"}}>{montoTxt}</td>
-                <td style={{padding:"8px 10px",textAlign:"center"}}>{accion}</td>
-              </tr>);
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div style={{marginTop:14,display:"flex",gap:12,flexWrap:"wrap",fontSize:12}}>
-        <span style={badge("#059669")}>Pagados: {tablaMensual.filter(t=>t.comp || (!(t.cobro&&t.cobro.estado!=="pagada")&&mesCargado(MESES.indexOf(t.mes),anioSel))).length}</span>
-        <span style={badge("#DC2626")}>Pendientes: {tablaMensual.filter(t=>t.cobro&&t.cobro.estado!=="pagada"&&!t.comp).length}</span>
-      </div>
-    </div>}
+    {selAl&&aniosRango.map(a=>ControlAnio(a))}
     {!selAl&&<div style={card}><h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 8px"}}>Selecciona un alumno</h3><p style={{fontSize:13,color:"#94A3B8"}}>Filtra por sección y selecciona el alumno para ver su control de pagos del año. Por defecto los meses están al día; solo marcá los pendientes.</p></div>}
 
     {/* Modal registrar pago recibido desde historial */}
-    {pagoModal&&alumno&&<Modal title={`💵 Registrar pago recibido — ${pagoModal.mes} ${anioSel}`} onClose={()=>setPagoModal(null)} onSave={marcarPagado}>
+    {pagoModal&&alumno&&<Modal title={`💵 Registrar pago recibido — ${pagoModal.mes} ${pagoModal.anio}`} onClose={()=>setPagoModal(null)} onSave={marcarPagado}>
       <div style={{background:"#EFF6FF",borderRadius:8,padding:12,marginBottom:14,fontSize:13,border:"1px solid #BFDBFE"}}>
         <div><strong>Alumno:</strong> {alumno.nombre}</div>
-        <div><strong>Corresponde a:</strong> {pagoModal.mes} {anioSel}</div>
+        <div><strong>Corresponde a:</strong> {pagoModal.mes} {pagoModal.anio}</div>
         <div><strong>Monto:</strong> L {monto.toLocaleString()}</div>
         <div style={{color:"#1D4ED8",fontSize:12,marginTop:6,fontWeight:600}}>Este pago suma a tus ingresos del "mes al que suma" que elijas abajo. Genera comprobante para el padre.</div>
       </div>
@@ -1947,6 +2072,15 @@ function HistorialPage({data,loadData,showToast}){
         <div><label style={label}>Mes al que suma el ingreso</label><select value={pagoForm.mes_ingreso} onChange={e=>setPagoForm({...pagoForm,mes_ingreso:e.target.value})} style={{...input,cursor:"pointer",borderColor:"#059669"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select><div style={{fontSize:10,color:"#059669",marginTop:2}}>En qué mes cuenta en tus reportes</div></div>
       </div>
       <div style={{marginTop:12}}><label style={label}>Tipo de pago</label><select value={pagoForm.tipo_pago} onChange={e=>setPagoForm({...pagoForm,tipo_pago:e.target.value})} style={{...input,cursor:"pointer"}}>{TIPOS_PAGO.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
+      {Number(pagoModal.mora)>0&&<div onClick={()=>setPagoForm({...pagoForm,cobrar_mora:!pagoForm.cobrar_mora})} style={{marginTop:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",border:pagoForm.cobrar_mora?"2px solid #DC2626":"1px solid #D1D5DB",background:pagoForm.cobrar_mora?"#FEF2F2":"#fff",display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:20,height:20,borderRadius:5,border:pagoForm.cobrar_mora?"none":"2px solid #D1D5DB",background:pagoForm.cobrar_mora?"#DC2626":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          {pagoForm.cobrar_mora&&<Check size={14} color="#fff"/>}
+        </div>
+        <div>
+          <div style={{fontSize:13,fontWeight:700,color:pagoForm.cobrar_mora?"#991B1B":"#475569"}}>⏰ Cobré la mora por atraso (L {Number(pagoModal.mora).toLocaleString()})</div>
+          <div style={{fontSize:11,color:"#94A3B8"}}>{pagoForm.cobrar_mora?`El recibo mostrará la mora y se sumará a tus ingresos. Total: L ${(monto+Number(pagoModal.mora)).toLocaleString()}`:"Destildala si le perdonaste la mora a este alumno"}</div>
+        </div>
+      </div>}
       <div style={{fontSize:11,color:"#94A3B8",marginTop:8}}>El "mes al que suma" empieza en el mes actual. Cambialo si querés que cuente en otro mes.</div>
     </Modal>}
 
@@ -1981,10 +2115,11 @@ function RecordatoriosPage({data,showToast}){
 function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const[tab,setTab]=useState("resumen");const[modal,setModal]=useState(null);
   const[imgPreview,setImgPreview]=useState(null);
-  const[form,setForm]=useState({tipo:"salario",maestro_id:"",descripcion:"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()],mes_deduccion:MESES[new Date().getMonth()]});
+  const[form,setForm]=useState({tipo:"salario",maestro_id:"",descripcion:"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()],mes_deduccion:MESES[new Date().getMonth()],ach:false});
   const mesActual=MESES[new Date().getMonth()];
+  const achMonto=achDeSucursal(data.sucursales,sucursalActiva);
 
-  const openGasto=(tipo="salario")=>{setForm({tipo,maestro_id:"",descripcion:tipo==="renta"?"Renta del local":"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:mesActual,mes_deduccion:mesActual});setModal("gasto");};
+  const openGasto=(tipo="salario")=>{setForm({tipo,maestro_id:"",descripcion:tipo==="renta"?"Renta del local":"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:mesActual,mes_deduccion:mesActual,ach:false});setModal("gasto");};
   const selMaestro=(mid)=>{const m=data.maestros.find(x=>x.id===mid);setForm({...form,maestro_id:mid,monto:String(m?.salario||""),descripcion:`Salario ${m?.nombre||""}`});};
 
   const saveGasto=async()=>{
@@ -1992,13 +2127,20 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
     if(form.tipo==="salario"&&!form.maestro_id){showToast("Selecciona un maestro","error");return;}
     try{
       const gasto={id:uid(),tipo:form.tipo,maestro_id:form.maestro_id||null,descripcion:form.descripcion,monto:parseFloat(form.monto),fecha:form.fecha,mes_correspondiente:form.mes_correspondiente,mes_deduccion:form.mes_deduccion||form.mes_correspondiente,sucursal_id:sucursalActiva};
-      await db.insert("gastos",gasto);
+      const aInsertar=[gasto];
+      // Comisión ACH: si pagó por transferencia, se suma como gasto aparte
+      if(form.ach && achMonto>0){
+        const refTxt=form.tipo==="salario"?(data.maestros.find(x=>x.id===form.maestro_id)?.nombre||form.descripcion):(form.descripcion||"gasto");
+        aInsertar.push({id:uid(),tipo:"comision",maestro_id:null,descripcion:`Comisión ACH (transferencia) · ${refTxt}`,monto:achMonto,fecha:form.fecha,mes_correspondiente:form.mes_correspondiente,mes_deduccion:form.mes_deduccion||form.mes_correspondiente,sucursal_id:sucursalActiva});
+      }
+      await db.insertMany("gastos",aInsertar);
       await loadData();setModal(null);
+      const achTxt=(form.ach&&achMonto>0)?` (+L ${achMonto} ACH)`:"";
       if(form.tipo==="salario"){
         const m=data.maestros.find(x=>x.id===form.maestro_id);
         setTimeout(()=>mostrarPagoImg(gasto,m),300);
-        showToast(`✓ Pago a ${m?.nombre} registrado`);
-      }else{showToast(`✓ Gasto registrado`);}
+        showToast(`✓ Pago a ${m?.nombre} registrado${achTxt}`);
+      }else{showToast(`✓ Gasto registrado${achTxt}`);}
     }catch(e){showToast("Error: "+e.message,"error");}
   };
 
@@ -2038,6 +2180,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const eliminarGasto=async(id)=>{if(!confirm("¿Eliminar gasto?"))return;try{await db.remove("gastos",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
   const ingresosMes=(mes)=>data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL)).reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+  const moraMes=(mes)=>data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL)).reduce((s,f)=>s+moraCobrada(f),0);
   const gastosMes=(mes)=>data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
   const salariosMes=(mes)=>data.gastos.filter(g=>g.tipo==="salario"&&esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
   const rentaMes=(mes)=>data.gastos.filter(g=>g.tipo==="renta"&&esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
@@ -2048,10 +2191,12 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const ganMatMes=(mes)=>matMes(mes).reduce((s,v)=>s+Number(v.ganancia),0);
   const ingGradMes=(mes)=>gradMesF(mes).reduce((s,v)=>s+gradRecibido(v),0);
   const ganGradMes=(mes)=>gradMesF(mes).reduce((s,v)=>s+gradGananciaReal(v),0);
-  // Ingreso total del mes (lo que entra a caja): mensualidades + materiales + graduacion
-  const ingresoTotalMes=(mes)=>ingresosMes(mes)+ingMatMes(mes)+ingGradMes(mes);
-  // Resultado del mes: mensualidades + ganancia de materiales/graduacion - gastos
-  const resultadoMes=(mes)=>ingresosMes(mes)+ganMatMes(mes)+ganGradMes(mes)-gastosMes(mes);
+  // Ingresos extra / justificados del mes (100% ganancia, sin costo)
+  const otrosIngMes=(mes)=>(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,ANIO_ACTUAL)).reduce((s,i)=>s+(Number(i.monto)||0),0);
+  // Ingreso total del mes (lo que entra a caja): mensualidades + mora + materiales + graduacion + ingresos extra
+  const ingresoTotalMes=(mes)=>ingresosMes(mes)+moraMes(mes)+ingMatMes(mes)+ingGradMes(mes)+otrosIngMes(mes);
+  // Resultado del mes: mensualidades + mora + ganancia de materiales/graduacion + ingresos extra - gastos
+  const resultadoMes=(mes)=>ingresosMes(mes)+moraMes(mes)+ganMatMes(mes)+ganGradMes(mes)+otrosIngMes(mes)-gastosMes(mes);
   const tBtn=(a)=>({padding:"10px 18px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #F97316":"3px solid transparent",background:"transparent",color:a?"#F97316":"#64748B"});
 
   return(<div>
@@ -2072,6 +2217,8 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
             <div><span style={{color:"#64748B"}}>Mensualidades:</span> L {ingresosMes(mes).toLocaleString()}</div>
             <div><span style={{color:"#64748B"}}>Materiales:</span> L {ingMatMes(mes).toLocaleString()}</div>
             <div><span style={{color:"#64748B"}}>Graduación:</span> L {ingGradMes(mes).toLocaleString()}</div>
+            {moraMes(mes)>0&&<div><span style={{color:"#64748B"}}>Mora cobrada:</span> L {moraMes(mes).toLocaleString()}</div>}
+            <div><span style={{color:"#64748B"}}>Ingresos extra:</span> L {otrosIngMes(mes).toLocaleString()}</div>
             <div><span style={{color:"#64748B"}}>Salarios:</span> L {salariosMes(mes).toLocaleString()}</div>
             <div><span style={{color:"#64748B"}}>Renta:</span> L {rentaMes(mes).toLocaleString()}</div>
           </div>
@@ -2091,7 +2238,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
         return(<div key={m.id} style={{...card,borderLeft:"4px solid #2563EB"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",marginBottom:10,flexWrap:"wrap",gap:8}}>
             <div><h4 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:0}}>{m.nombre}</h4><div style={{fontSize:12,color:"#64748B"}}>{m.telefono||""} · Salario: <strong style={{color:"#059669"}}>L {Number(m.salario||0).toLocaleString()}</strong></div></div>
-            <button onClick={()=>{setForm({tipo:"salario",maestro_id:m.id,descripcion:`Salario ${m.nombre}`,monto:String(m.salario||""),fecha:new Date().toISOString().split("T")[0],mes_correspondiente:mesActual});setModal("gasto");}} style={btn("#059669")}><DollarSign size={13}/>Pagar</button>
+            <button onClick={()=>{setForm({tipo:"salario",maestro_id:m.id,descripcion:`Salario ${m.nombre}`,monto:String(m.salario||""),fecha:new Date().toISOString().split("T")[0],mes_correspondiente:mesActual,mes_deduccion:mesActual,ach:false});setModal("gasto");}} style={btn("#059669")}><DollarSign size={13}/>Pagar</button>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(70px,1fr))",gap:6}}>
             {MESES.map(mes=>{const pagado=mesesPag.includes(mes);const pago=pagos.find(p=>p.mes_correspondiente===mes);return(
@@ -2113,7 +2260,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
           <button onClick={()=>openGasto("otro")} style={btn("#64748B")}><Plus size={15}/>Otro gasto</button>
         </div>
       </div>
-      <div style={card}>{data.gastos.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay gastos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Tipo","Descripción","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{[...data.gastos].reverse().map(g=>{const tc={salario:"#059669",renta:"#7C3AED",otro:"#64748B"};const tl={salario:"Salario",renta:"Renta",otro:"Otro"};return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px"}}>{g.fecha}</td><td style={{padding:"6px 8px"}}><span style={badge(tc[g.tipo]||"#64748B")}>{tl[g.tipo]||g.tipo}</span></td><td style={{padding:"6px 8px"}}>{g.descripcion}</td><td style={{padding:"6px 8px"}}>{mesGasto(g)||g.mes_correspondiente}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td><td style={{padding:"6px 8px"}}><button onClick={()=>eliminarGasto(g.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td></tr>);})}</tbody></table></div>)}</div>
+      <div style={card}>{data.gastos.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay gastos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Tipo","Descripción","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{[...data.gastos].reverse().map(g=>{const tc={salario:"#059669",renta:"#7C3AED",otro:"#64748B",comision:"#0891B2"};const tl={salario:"Salario",renta:"Renta",otro:"Otro",comision:"ACH"};return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px"}}>{g.fecha}</td><td style={{padding:"6px 8px"}}><span style={badge(tc[g.tipo]||"#64748B")}>{tl[g.tipo]||g.tipo}</span></td><td style={{padding:"6px 8px"}}>{g.descripcion}</td><td style={{padding:"6px 8px"}}>{mesGasto(g)||g.mes_correspondiente}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td><td style={{padding:"6px 8px"}}><button onClick={()=>eliminarGasto(g.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td></tr>);})}</tbody></table></div>)}</div>
     </div>}
 
     {modal==="gasto"&&<Modal title={form.tipo==="salario"?"💰 Pagar maestro":form.tipo==="renta"?"🏠 Registrar renta":"📋 Registrar gasto"} onClose={()=>setModal(null)} onSave={saveGasto}>
@@ -2126,6 +2273,16 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
         <div style={{marginBottom:12}}><label style={label}>Mes al que se resta</label><select value={form.mes_deduccion} onChange={e=>setForm({...form,mes_deduccion:e.target.value})} style={{...input,cursor:"pointer",borderColor:"#7C3AED"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select><div style={{fontSize:10,color:"#7C3AED",marginTop:2}}>En qué mes cuenta en tus gastos</div></div>
       </div>
       <div style={{marginBottom:12}}><label style={label}>Fecha</label><input type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} style={input}/></div>
+      {/* Comisión ACH por transferencia */}
+      <div onClick={()=>setForm({...form,ach:!form.ach})} style={{marginBottom:4,padding:"10px 12px",borderRadius:8,cursor:"pointer",border:form.ach?"2px solid #0891B2":"1px solid #D1D5DB",background:form.ach?"#ECFEFF":"#fff",display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:20,height:20,borderRadius:5,border:form.ach?"none":"2px solid #D1D5DB",background:form.ach?"#0891B2":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          {form.ach&&<Check size={14} color="#fff"/>}
+        </div>
+        <div>
+          <div style={{fontSize:13,fontWeight:700,color:form.ach?"#0E7490":"#475569"}}>🏦 Pagué por transferencia (comisión ACH L {achMonto})</div>
+          <div style={{fontSize:11,color:"#94A3B8"}}>{form.ach?`Se agregará un gasto aparte de L ${achMonto} por la comisión del banco`:"Márcalo si el banco te cobró comisión por esta transferencia"}</div>
+        </div>
+      </div>
     </Modal>}
 
     {imgPreview&&<ImgPreviewModal img={imgPreview} onClose={()=>setImgPreview(null)}/>}
@@ -2135,7 +2292,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
 // ── SISTEMA (usuarios, respaldos) ──
 function SistemaPage({data,loadData,showToast,session}){
   const exportar=()=>{
-    const backup={fecha:new Date().toISOString(),version:4,...data};
+    const backup={fecha:new Date().toISOString(),version:5,...data};
     const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
     const a=document.createElement('a');
     a.download=`seeds_respaldo_${new Date().toISOString().split("T")[0]}.json`;
@@ -2147,7 +2304,7 @@ function SistemaPage({data,loadData,showToast,session}){
     if(!confirm("Esto restaurará los datos del respaldo (se combinan con los actuales). ¿Continuar?"))return;
     try{
       const text=await file.text();const backup=JSON.parse(text);
-      for(const table of ["sucursales","secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material","conceptos_graduacion","cobros_graduacion"]){
+      for(const table of ["sucursales","secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material","conceptos_graduacion","cobros_graduacion","otros_ingresos"]){
         if(backup[table]?.length) await db.upsertMany(table,backup[table]);
       }
       await loadData();showToast("✓ Respaldo restaurado");
@@ -2184,6 +2341,7 @@ function SistemaPage({data,loadData,showToast,session}){
         <span style={badge("#059669")}>{data.facturas.length} facturas</span>
         <span style={badge("#7C3AED")}>{data.gastos.length} gastos</span>
         <span style={badge("#64748B")}>{data.maestros.length} maestros</span>
+        <span style={badge("#059669")}>{(data.otros_ingresos||[]).length} ingresos extra</span>
       </div>
     </div>
   </div>);
@@ -2199,9 +2357,23 @@ function ConfiguracionPage({data,loadData,showToast,sucursalActiva}){
   const[gradForm,setGradForm]=useState({nombre:"",precio_venta:"",costo:"",seccion_id:""});
   const[sucModal,setSucModal]=useState(null); // "new" o id
   const[sucForm,setSucForm]=useState({nombre:"",descripcion:""});
+  const sucActiva=data.sucursales.find(s=>s.id===sucursalActiva);
+  const[achVal,setAchVal]=useState(String(sucActiva?.ach_monto ?? 40));
+  // Si cambia la sucursal activa, reflejar su ACH en el campo
+  useEffect(()=>{setAchVal(String(sucActiva?.ach_monto ?? 40));},[sucursalActiva, sucActiva?.ach_monto]);
 
   // Solo las secciones de la sucursal activa
   const seccionesSuc=data.secciones.filter(s=>s.sucursal_id===sucursalActiva);
+
+  const guardarAch=async()=>{
+    if(!sucursalActiva){showToast("Selecciona una sucursal","error");return;}
+    const monto=parseFloat(achVal);
+    if(!(monto>=0)){showToast("Pon un monto válido para el ACH","error");return;}
+    try{
+      await db.update("sucursales",sucursalActiva,{ach_monto:monto});
+      await loadData();showToast(`✓ Comisión ACH guardada: L ${monto}`);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
 
   const abrirSuc=(s=null)=>{if(s){setSucForm({nombre:s.nombre,descripcion:s.descripcion||""});setSucModal(s.id);}else{setSucForm({nombre:"",descripcion:""});setSucModal("new");}};
   const guardarSuc=async()=>{
@@ -2282,6 +2454,24 @@ function ConfiguracionPage({data,loadData,showToast,sucursalActiva}){
             <button onClick={()=>borrarSuc(s.id)} style={{background:"none",border:"none",cursor:"pointer",padding:3}}><Trash2 size={13} color="#EF4444"/></button>
           </div>);
         })}
+      </div>
+    </div>
+
+    {/* COMISIÓN ACH (transferencias) */}
+    <div style={card}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+        <div style={{maxWidth:420}}>
+          <h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:"0 0 4px"}}>🏦 Comisión bancaria (ACH)</h3>
+          <p style={{fontSize:12,color:"#64748B",margin:0}}>Lo que te cobra el banco por cada transferencia (ej. al pagar la planilla). Al registrar un gasto podés marcar "pagué por transferencia" y se suma esta comisión. Cámbiala aquí si el banco la modifica.</p>
+          <p style={{fontSize:11,color:"#94A3B8",margin:"4px 0 0"}}>Sucursal: <strong>{sucActiva?.nombre||"—"}</strong></p>
+        </div>
+        <div style={{display:"flex",alignItems:"flex-end",gap:8}}>
+          <div>
+            <label style={label}>Comisión ACH (L)</label>
+            <input type="number" value={achVal} onChange={e=>setAchVal(e.target.value)} style={{...input,width:110}} placeholder="40"/>
+          </div>
+          <button onClick={guardarAch} style={btn("#2563EB")}><Check size={15}/>Guardar</button>
+        </div>
       </div>
     </div>
 
@@ -3022,6 +3212,9 @@ function ReportesPage({data,showToast}){
   // Ingresos por mensualidades: cuentan en el mes en que ENTRÓ el pago (fecha_pago real)
   const compsMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mesSel,anioSel));
   const ingMensualidades=compsMes.reduce((s,f)=>s+Number(f.monto_total||0),0);
+  // Mora efectivamente cobrada en esos pagos (ingreso extra, 100% ganancia)
+  const compsConMora=compsMes.filter(f=>moraCobrada(f)>0);
+  const ingMora=compsMes.reduce((s,f)=>s+moraCobrada(f),0);
 
   // Materiales: solo PAGADOS, contados por la fecha real de pago.
   const ventasMes=data.ventas_material.filter(v=>v.estado==="pagado"&&esIngresoDe(v,mesSel,anioSel));
@@ -3038,6 +3231,10 @@ function ReportesPage({data,showToast}){
   const pendGraduacion=gradPendMes.reduce((s,v)=>s+(Number(v.precio_venta)-gradRecibido(v)),0);
   const ingGraduacion=gradMes.reduce((s,v)=>s+gradRecibido(v),0);
   const costoGraduacion=gradMes.reduce((s,v)=>s+(gradRecibido(v)-gradGananciaReal(v)),0);
+
+  // Ingresos extra / justificados: 100% ganancia, sin costo asociado
+  const otrosIngArr=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mesSel,anioSel));
+  const ingExtra=otrosIngArr.reduce((s,i)=>s+Number(i.monto||0),0);
 
   // Gastos: por el mes asignado (los salarios se asignan al mes que corresponden)
   const gastosMes=data.gastos.filter(g=>esGastoDe(g,mesSel,anioSel));
@@ -3072,8 +3269,8 @@ function ReportesPage({data,showToast}){
   ];
   const totalEgresos=egresos.reduce((s,e)=>s+e.total,0);
 
-  // Ingreso total = mensualidades + venta de materiales + graduación (precio completo)
-  const ingresoTotal=ingMensualidades+ingMateriales+ingGraduacion;
+  // Ingreso total = mensualidades + mora cobrada + venta de materiales + graduación + ingresos extra
+  const ingresoTotal=ingMensualidades+ingMora+ingMateriales+ingGraduacion+ingExtra;
   // Resultado neto = ingreso total - egresos (gastos + costo de materiales/graduación)
   const resultado=ingresoTotal-totalEgresos;
   const pctIng=(v)=>ingresoTotal>0?`${(v/ingresoTotal*100).toFixed(1)}%`:"—";
@@ -3149,8 +3346,10 @@ function ReportesPage({data,showToast}){
       <tbody>
         ${fSec("I. Ingresos")}
         ${fCuenta("Mensualidades cobradas",ingMensualidades,false,`${compsMes.length} ${compsMes.length===1?"pago recibido":"pagos recibidos"}`)}
+        ${ingMora>0?fCuenta("Mora por atraso cobrada",ingMora,false,`${compsConMora.length} ${compsConMora.length===1?"pago con mora":"pagos con mora"}`):""}
         ${fCuenta("Venta de materiales",ingMateriales,false,`${(u=>`${u} ${u===1?"unidad pagada":"unidades pagadas"}`)(ventasMes.reduce((s,v)=>s+(Number(v.cantidad)||1),0))}`)}
         ${fCuenta("Cobros de graduación",ingGraduacion,false,`${gradMes.length} ${gradMes.length===1?"alumno":"alumnos"}`)}
+        ${ingExtra>0?fCuenta("Ingresos extra / justificados",ingExtra,false,`${otrosIngArr.length} ${otrosIngArr.length===1?"registro":"registros"}`)+otrosIngArr.map(i=>fDet({label:i.descripcion||"Ingreso",sub:`${i.categoria||"Otro"} · ${fechaCorta(i.fecha)}`,monto:Number(i.monto)},false)).join(""):""}
         ${fTotal("Total ingresos",ingresoTotal)}
 
         ${fSec("II. Costo de ventas")}
@@ -3375,6 +3574,93 @@ function ReportesPage({data,showToast}){
 }
 
 // ── COMPONENTES ──
+// ── INGRESOS EXTRA / JUSTIFICADOS ──
+function IngresosPage({data,loadData,showToast,sucursalActiva}){
+  const mesActual=MESES[new Date().getMonth()];
+  const[modal,setModal]=useState(false);
+  const[fMes,setFMes]=useState("");
+  const CATEGORIAS=["Donación","Evento","Inscripción","Servicio extra","Venta","Reembolso","Otro"];
+  const nuevoForm=()=>({descripcion:"",monto:"",categoria:"Donación",fecha:new Date().toISOString().split("T")[0],mes_ingreso:mesActual,alumno_id:"",notas:""});
+  const[form,setForm]=useState(nuevoForm());
+
+  const lista=(data.otros_ingresos||[]).filter(i=>!fMes||i.mes_ingreso===fMes);
+  const total=lista.reduce((s,i)=>s+(Number(i.monto)||0),0);
+
+  const abrir=()=>{setForm(nuevoForm());setModal(true);};
+  const guardar=async()=>{
+    if(!form.descripcion.trim()){showToast("Ponle una descripción","error");return;}
+    if(!(parseFloat(form.monto)>0)){showToast("Ingresa el monto","error");return;}
+    try{
+      const anio=parseInt(String(form.fecha).split("-")[0])||ANIO_ACTUAL;
+      const row={id:uid(),descripcion:form.descripcion.trim(),monto:parseFloat(form.monto),categoria:form.categoria,fecha:form.fecha,fecha_pago:form.fecha,mes_ingreso:form.mes_ingreso,anio_correspondiente:anio,alumno_id:form.alumno_id||null,sucursal_id:sucursalActiva,notas:form.notas||""};
+      await db.insert("otros_ingresos",row);
+      await loadData();setModal(false);
+      showToast(`✓ Ingreso registrado — suma a ${form.mes_ingreso}`);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+  const eliminar=async(id)=>{if(!confirm("¿Eliminar este ingreso?"))return;try{await db.remove("otros_ingresos",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
+
+  const catColor={ "Donación":"#059669","Evento":"#7C3AED","Inscripción":"#2563EB","Servicio extra":"#D97706","Venta":"#0891B2","Reembolso":"#DC2626","Otro":"#64748B" };
+
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+      <div>
+        <h3 style={{fontSize:16,fontWeight:700,color:"#1E293B",margin:0}}>💵 Ingresos extra</h3>
+        <p style={{fontSize:12,color:"#64748B",margin:"2px 0 0"}}>Ingresos justificados fuera de mensualidades (donaciones, eventos, etc.). Suman a tus reportes.</p>
+      </div>
+      <button onClick={abrir} style={btn("#059669")}><Plus size={15}/>Nuevo ingreso</button>
+    </div>
+
+    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
+      <select value={fMes} onChange={e=>setFMes(e.target.value)} style={{...input,width:160,cursor:"pointer"}}>
+        <option value="">Todos los meses</option>
+        {MESES.map(m=><option key={m} value={m}>{m}</option>)}
+      </select>
+      {fMes&&<button onClick={()=>setFMes("")} style={{...btnO,padding:"6px 12px",fontSize:12}}><X size={13}/>Limpiar</button>}
+      <div style={{...card,margin:0,borderLeft:"3px solid #059669",padding:"8px 14px"}}>
+        <span style={{fontSize:11,color:"#64748B"}}>Total{fMes?` ${fMes}`:""}: </span>
+        <span style={{fontSize:18,fontWeight:800,color:"#059669"}}>L {total.toLocaleString()}</span>
+      </div>
+    </div>
+
+    <div style={card}>
+      {lista.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay ingresos extra{fMes?` en ${fMes}`:""}. Agrega el primero con "Nuevo ingreso".</p>:(
+        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Categoría","Descripción","Alumno/Padre","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+          <tbody>{[...lista].reverse().map(i=>{const al=i.alumno_id?data.alumnos.find(a=>a.id===i.alumno_id):null;const p=al?data.padres.find(pp=>pp.id===al.padre_id):null;return(<tr key={i.id} style={{borderBottom:"1px solid #F1F5F9"}}>
+            <td style={{padding:"6px 8px"}}>{i.fecha}</td>
+            <td style={{padding:"6px 8px"}}><span style={badge(catColor[i.categoria]||"#64748B")}>{i.categoria||"—"}</span></td>
+            <td style={{padding:"6px 8px"}}>{i.descripcion}</td>
+            <td style={{padding:"6px 8px",fontSize:11,color:"#64748B"}}>{al?al.nombre+(p?` (${p.nombre})`:""):"—"}</td>
+            <td style={{padding:"6px 8px"}}>{i.mes_ingreso}</td>
+            <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#059669"}}>L {Number(i.monto).toLocaleString()}</td>
+            <td style={{padding:"6px 8px",textAlign:"center"}}><button onClick={()=>eliminar(i.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td>
+          </tr>);})}</tbody>
+        </table></div>
+      )}
+    </div>
+
+    {modal&&<Modal title="💵 Nuevo ingreso extra" onClose={()=>setModal(false)} onSave={guardar}>
+      <Field label="Descripción *" value={form.descripcion} onChange={v=>setForm({...form,descripcion:v})} placeholder="Ej: Donación evento navideño"/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <Field label="Monto (L) *" value={form.monto} onChange={v=>setForm({...form,monto:v})} type="number" placeholder="2000"/>
+        <div style={{marginBottom:12}}><label style={label}>Categoría</label><select value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})} style={{...input,cursor:"pointer"}}>{CATEGORIAS.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div style={{marginBottom:12}}><label style={label}>Fecha</label><input type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} style={input}/><div style={{fontSize:10,color:"#94A3B8",marginTop:2}}>Cuándo entró</div></div>
+        <div style={{marginBottom:12}}><label style={label}>Mes al que suma</label><select value={form.mes_ingreso} onChange={e=>setForm({...form,mes_ingreso:e.target.value})} style={{...input,cursor:"pointer",borderColor:"#059669"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select><div style={{fontSize:10,color:"#059669",marginTop:2}}>En qué mes cuenta</div></div>
+      </div>
+      <div style={{marginBottom:12}}><label style={label}>Alumno/Padre relacionado (opcional)</label>
+        <select value={form.alumno_id} onChange={e=>setForm({...form,alumno_id:e.target.value})} style={{...input,cursor:"pointer"}}>
+          <option value="">— Ninguno —</option>
+          {[...data.alumnos].sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(a=>{const sec=data.secciones.find(s=>s.id===a.seccion_id);return<option key={a.id} value={a.id}>{a.nombre}{sec?` · ${sec.nombre}`:""}</option>;})}
+        </select>
+      </div>
+      <Field label="Notas (opcional)" value={form.notas} onChange={v=>setForm({...form,notas:v})} multiline/>
+    </Modal>}
+  </div>);
+}
+
 function Modal({title,onClose,onSave,children,wide}){
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:wide?640:440,maxHeight:"90vh",overflow:"auto"}}><div style={{padding:"16px 20px",borderBottom:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3 style={{fontSize:15,fontWeight:700,margin:0,color:"#1E293B"}}>{title}</h3><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><X size={18} color="#64748B"/></button></div><div style={{padding:20}}>{children}</div><div style={{padding:"0 20px 16px",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={onClose} style={btnO}>Cancelar</button><button onClick={onSave} style={btn()}>Guardar</button></div></div></div>);
 }
