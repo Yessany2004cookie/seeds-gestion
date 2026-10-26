@@ -1418,7 +1418,7 @@ function FacturasPage({data,loadData,showToast}){
       const rows = sinCobro.map(al=>{
         count++;
         const montoAl = (Number(al.monto_personalizado)>0) ? Number(al.monto_personalizado) : Number(sec.mensualidad);
-        return {id:uid(),numero_factura:`FC-${String(count).padStart(4,"0")}`,alumno_id:al.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:null,mes_correspondiente:mes,monto_total:montoAl,abono:0,saldo:montoAl,tipo_pago:"efectivo",estado:"pendiente",notas:"",cobro_id:null};
+        return {id:uid(),numero_factura:`FC-${String(count).padStart(4,"0")}`,alumno_id:al.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:null,mes_correspondiente:mes,monto_total:montoAl,mora_cobrada:0,abono:0,saldo:montoAl,tipo_pago:"efectivo",estado:"pendiente",notas:"",cobro_id:null};
       });
       await db.insertMany("facturas",rows);
       await loadData();
@@ -1883,7 +1883,7 @@ function HistorialPage({data,loadData,showToast}){
       }else{
         // crear el cobro (ya pagado)
         n++; cobroId=uid();
-        nuevas.push({id:cobroId,numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,anio_correspondiente:anio,monto_total:monto,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:null});
+        nuevas.push({id:cobroId,numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:pagoForm.fecha_pago,mes_correspondiente:mes,anio_correspondiente:anio,monto_total:monto,mora_cobrada:0,abono:0,saldo:0,tipo_pago:pagoForm.tipo_pago,estado:"pagada",notas:"",cobro_id:null});
       }
       // crear el comprobante (con la mora cobrada si aplica)
       n++;
@@ -1904,7 +1904,7 @@ function HistorialPage({data,loadData,showToast}){
     try{
       const monto=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
       const n=data.facturas.length+1;
-      const cobro={id:uid(),numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:`${anio}-${String(MESES.indexOf(mes)+1).padStart(2,"0")}-01`,fecha_pago:null,mes_correspondiente:mes,anio_correspondiente:anio,monto_total:monto,abono:0,saldo:monto,tipo_pago:"efectivo",estado:"pendiente",notas:"",cobro_id:null};
+      const cobro={id:uid(),numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:`${anio}-${String(MESES.indexOf(mes)+1).padStart(2,"0")}-01`,fecha_pago:null,mes_correspondiente:mes,anio_correspondiente:anio,monto_total:monto,mora_cobrada:0,abono:0,saldo:monto,tipo_pago:"efectivo",estado:"pendiente",notas:"",cobro_id:null};
       await db.insert("facturas",cobro);
       await loadData();
       showToast(`${mes} ${anio} marcado como pendiente`);
