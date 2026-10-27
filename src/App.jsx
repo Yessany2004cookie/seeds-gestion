@@ -543,7 +543,7 @@ export default function App() {
   }, []);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[], otros_ingresos:[] });
+  const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[], otros_ingresos:[], gastos_graduacion:[] });
   const [sucursalActiva, setSucursalActiva] = useState(null); // id de la sucursal seleccionada
   const [toast, setToast] = useState(null);
   // Rol del usuario: "cargando" | "admin" | "docente" | "sin_acceso"
@@ -570,10 +570,12 @@ export default function App() {
         db.all("materiales"), db.all("ventas_material"),
         db.all("conceptos_graduacion"), db.all("cobros_graduacion")
       ]);
-      // otros_ingresos aparte: si la tabla no existe aún (migración no corrida), queda vacío
+      // tablas nuevas aparte: si aún no existen (migración no corrida), quedan vacías
       let otros_ingresos=[];
       try{ otros_ingresos=await db.all("otros_ingresos"); }catch(x){ otros_ingresos=[]; }
-      setData({sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material,conceptos_graduacion,cobros_graduacion,otros_ingresos});
+      let gastos_graduacion=[];
+      try{ gastos_graduacion=await db.all("gastos_graduacion"); }catch(x){ gastos_graduacion=[]; }
+      setData({sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material,conceptos_graduacion,cobros_graduacion,otros_ingresos,gastos_graduacion});
       // Elegir sucursal activa: la guardada, o la primera disponible
       setSucursalActiva(prev=>{
         if(prev && sucursales.some(s=>s.id===prev)) return prev;
@@ -639,6 +641,7 @@ export default function App() {
     cobros_graduacion: data.cobros_graduacion.filter(cg=>secIds.has(cg.seccion_id)||alumnoIds.has(cg.alumno_id)),
     gastos: data.gastos.filter(g=>g.sucursal_id===sucursalActiva || (esPrimeraSuc && !g.sucursal_id)),
     otros_ingresos: (data.otros_ingresos||[]).filter(i=>i.sucursal_id===sucursalActiva || (esPrimeraSuc && !i.sucursal_id)),
+    gastos_graduacion: (data.gastos_graduacion||[]).filter(g=>g.sucursal_id===sucursalActiva || (esPrimeraSuc && !g.sucursal_id)),
     // padres y maestros quedan completos (se comparten entre sucursales)
   };
   const propsSuc = { data: dataSuc, loadData, showToast, sucursalActiva };
@@ -2304,7 +2307,7 @@ function SistemaPage({data,loadData,showToast,session}){
     if(!confirm("Esto restaurará los datos del respaldo (se combinan con los actuales). ¿Continuar?"))return;
     try{
       const text=await file.text();const backup=JSON.parse(text);
-      for(const table of ["sucursales","secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material","conceptos_graduacion","cobros_graduacion","otros_ingresos"]){
+      for(const table of ["sucursales","secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material","conceptos_graduacion","cobros_graduacion","otros_ingresos","gastos_graduacion"]){
         if(backup[table]?.length) await db.upsertMany(table,backup[table]);
       }
       await loadData();showToast("✓ Respaldo restaurado");
@@ -2342,6 +2345,7 @@ function SistemaPage({data,loadData,showToast,session}){
         <span style={badge("#7C3AED")}>{data.gastos.length} gastos</span>
         <span style={badge("#64748B")}>{data.maestros.length} maestros</span>
         <span style={badge("#059669")}>{(data.otros_ingresos||[]).length} ingresos extra</span>
+        <span style={badge("#7C3AED")}>{(data.gastos_graduacion||[]).length} gastos graduación</span>
       </div>
     </div>
   </div>);
@@ -2877,6 +2881,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
   const[imgPreview,setImgPreview]=useState(null);
   const[filtroSec,setFiltroSec]=useState("");
   const[compForm,setCompForm]=useState(null);
+  const[gastoForm,setGastoForm]=useState(null); // gasto del evento de graduación
   // form individual: sección, alumno, conceptos seleccionados, mes, vencimiento
   const[form,setForm]=useState({seccion_id:"",alumno_id:"",conceptos:[],mes_correspondiente:MESES[new Date().getMonth()],dia_vencimiento:"28",tipo_pago:"efectivo",notas:"",pagar_ya:false});
   // bulk: sección, conceptos, mes, vencimiento, alumnos
@@ -2976,6 +2981,18 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 
   const anular=async(v)=>{if(!confirm("¿Anular este cobro de graduación?"))return;try{await db.update("cobros_graduacion",v.id,{estado:"anulado"});await loadData();showToast("Anulado","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
+  // ── Gastos del evento (fondo del evento) ──
+  const abrirGasto=()=>setGastoForm({descripcion:"",monto:"",comentario:"",fecha:new Date().toISOString().split("T")[0],seccion_id:""});
+  const guardarGasto=async()=>{
+    if(!gastoForm.descripcion.trim()){showToast("¿En qué se gastó?","error");return;}
+    if(!(parseFloat(gastoForm.monto)>0)){showToast("Ingresa el monto","error");return;}
+    try{
+      await db.insert("gastos_graduacion",{id:uid(),descripcion:gastoForm.descripcion.trim(),monto:parseFloat(gastoForm.monto),comentario:gastoForm.comentario||"",fecha:gastoForm.fecha,seccion_id:gastoForm.seccion_id||null,sucursal_id:sucursalActiva});
+      await loadData();setGastoForm(null);showToast("✓ Gasto del evento registrado");
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+  const eliminarGasto=async(id)=>{if(!confirm("¿Eliminar este gasto del evento?"))return;try{await db.remove("gastos_graduacion",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
+
   const todas=data.cobros_graduacion.filter(v=>!filtroSec||v.seccion_id===filtroSec);
   // Pendientes = sin pagar + abonados (aún deben saldo). Pagados = saldados por completo.
   const saldoDe=(v)=>(Number(v.precio_venta)||0)-(Number(v.abonado)||0);
@@ -2986,6 +3003,71 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
   const totGanancia=[...pagados,...todas.filter(v=>v.estado==="abonado")].reduce((s,v)=>s+gradGananciaReal(v),0);
   // Pendiente de cobro = suma de saldos sin pagar
   const totPend=cobros.reduce((s,v)=>s+saldoDe(v),0);
+
+  // ── Fondo del evento (global: todas las secciones de esta sucursal, sin importar el filtro) ──
+  // Saldo disponible = "Total para uso del evento" = lo recibido menos la ganancia (el costo cobrado).
+  const gradGlobal=data.cobros_graduacion.filter(v=>v.estado==="pagado"||v.estado==="abonado");
+  const dispEvento=gradGlobal.reduce((s,v)=>s+(gradRecibido(v)-gradGananciaReal(v)),0);
+  const gastosEvento=data.gastos_graduacion||[];
+  const gastadoEvento=gastosEvento.reduce((s,g)=>s+(Number(g.monto)||0),0);
+  const restanteEvento=dispEvento-gastadoEvento;
+
+  // Reporte PDF de gastos del evento (saldo disponible / gastado / restante + detalle)
+  const reporteGastosPDF=()=>{
+    const L=(n)=>`L ${Number(n||0).toLocaleString()}`;
+    const esc=(t)=>String(t??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
+    const sucNombre=data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||"";
+    const filas=[...gastosEvento].sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||""))).map(g=>{
+      const sec=g.seccion_id?data.secciones.find(s=>s.id===g.seccion_id):null;
+      return `<tr><td>${g.fecha||"—"}</td><td>${esc(g.descripcion||"—")}${sec?` <span style="color:#7C3AED;font-size:11px">· ${esc(sec.nombre)}</span>`:""}</td><td>${esc(g.comentario||"—")}</td><td style="text-align:right;white-space:nowrap">${L(g.monto)}</td></tr>`;
+    }).join("");
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte de gastos — Graduación</title>
+      <style>
+        @page { size: letter portrait; margin: 15mm; }
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
+        body{color:#1E293B}
+        .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #7C3AED;padding-bottom:14px;margin-bottom:18px}
+        .head h1{font-size:21px;color:#5B21B6}
+        .head p{font-size:12px;color:#64748B;margin-top:3px}
+        .tot{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+        .box{flex:1;min-width:150px;border-radius:10px;padding:14px;text-align:center}
+        .box .l{font-size:11px;opacity:.9}
+        .box .v{font-size:22px;font-weight:800;margin-top:3px}
+        table{width:100%;border-collapse:collapse;font-size:12.5px}
+        th{background:#F1F5F9;text-align:left;padding:8px 10px;font-size:11px;color:#475569}
+        th.r,td.r{text-align:right}
+        td{padding:7px 10px;border-bottom:1px solid #F1F5F9;vertical-align:top}
+        tfoot td{font-weight:800;border-top:2px solid #E2E8F0;padding-top:10px}
+        .foot{margin-top:26px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #eee;padding-top:12px}
+      </style></head><body>
+      <div class="head">
+        <div style="width:96px;height:96px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:14px"><img src="${LOGO_SEEDS}" alt="Seeds" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
+        <div>
+          <h1>Seeds English School</h1>
+          <p>Jesús de Otoro, Intibucá, Honduras</p>
+          <p style="margin-top:8px;font-size:16px;font-weight:700;color:#1E293B">Reporte de gastos — Graduación${sucNombre?` · ${esc(sucNombre)}`:""}</p>
+          <p>Generado el ${hoy}</p>
+        </div>
+      </div>
+      <div class="tot">
+        <div class="box" style="background:#EDE9FE;color:#5B21B6"><div class="l">Saldo disponible (para uso del evento)</div><div class="v">${L(dispEvento)}</div></div>
+        <div class="box" style="background:#FEF2F2;color:#991B1B"><div class="l">Saldo gastado</div><div class="v">${L(gastadoEvento)}</div></div>
+        <div class="box" style="background:${restanteEvento>=0?"#ECFDF5":"#FEF2F2"};color:${restanteEvento>=0?"#065F46":"#991B1B"}"><div class="l">Saldo restante</div><div class="v">${L(restanteEvento)}</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Fecha</th><th>En qué se gastó</th><th>Dónde / cómo se compró</th><th class="r">Monto</th></tr></thead>
+        <tbody>${filas||`<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:18px">Aún no hay gastos registrados</td></tr>`}</tbody>
+        <tfoot><tr><td colspan="3">Total gastado</td><td class="r">${L(gastadoEvento)}</td></tr></tfoot>
+      </table>
+      ${restanteEvento<0?`<p style="font-size:11px;color:#DC2626;margin-top:10px">* Los gastos superan el fondo disponible del evento por ${L(Math.abs(restanteEvento))}.</p>`:""}
+      <div class="foot">Seeds English School — Área Administrativa</div>
+      </body></html>`;
+    const w=window.open("","_blank");
+    if(!w){showToast("Permite las ventanas emergentes para el PDF","error");return;}
+    w.document.write(html); w.document.close();
+    setTimeout(()=>{w.focus();w.print();},400);
+  };
   const tBtn=(a)=>({padding:"10px 20px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #7C3AED":"3px solid transparent",background:"transparent",color:a?"#7C3AED":"#64748B"});
 
   // Selector de conceptos (checkboxes) reutilizable
@@ -3022,9 +3104,10 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       <div style={{...card,borderLeft:"3px solid #EA580C",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Total para uso del evento</div><div style={{fontSize:20,fontWeight:800,color:"#EA580C"}}>L {(totVenta-totGanancia).toLocaleString()}</div><div style={{fontSize:10,color:"#94A3B8"}}>costo de certificados/entrega</div></div>
     </div>
 
-    <div style={{display:"flex",borderBottom:"1px solid #E2E8F0",marginBottom:16}}>
+    <div style={{display:"flex",borderBottom:"1px solid #E2E8F0",marginBottom:16,flexWrap:"wrap"}}>
       <button onClick={()=>setTab("cobros")} style={tBtn(tab==="cobros")}>📄 Cobros pendientes ({cobros.length})</button>
       <button onClick={()=>setTab("pagados")} style={tBtn(tab==="pagados")}>✅ Pagados ({pagados.length})</button>
+      <button onClick={()=>setTab("gastos")} style={tBtn(tab==="gastos")}>💸 Gastos del evento ({gastosEvento.length})</button>
     </div>
 
     {tab==="cobros"&&<div style={card}>
@@ -3064,6 +3147,54 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
         </table></div>
       )}
     </div>}
+
+    {tab==="gastos"&&<div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12,marginBottom:14}}>
+        <div style={{...card,borderLeft:"3px solid #7C3AED",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Saldo disponible</div><div style={{fontSize:20,fontWeight:800,color:"#7C3AED"}}>L {dispEvento.toLocaleString()}</div><div style={{fontSize:10,color:"#94A3B8"}}>para uso del evento</div></div>
+        <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Saldo gastado</div><div style={{fontSize:20,fontWeight:800,color:"#DC2626"}}>L {gastadoEvento.toLocaleString()}</div><div style={{fontSize:10,color:"#94A3B8"}}>{gastosEvento.length} {gastosEvento.length===1?"gasto":"gastos"}</div></div>
+        <div style={{...card,borderLeft:`3px solid ${restanteEvento>=0?"#059669":"#DC2626"}`,margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Saldo restante</div><div style={{fontSize:20,fontWeight:800,color:restanteEvento>=0?"#059669":"#DC2626"}}>L {restanteEvento.toLocaleString()}</div><div style={{fontSize:10,color:restanteEvento>=0?"#94A3B8":"#DC2626"}}>{restanteEvento>=0?"disponible":"sobregirado"}</div></div>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+        <div style={{fontSize:11.5,color:"#64748B",maxWidth:460}}>Fondo global del evento (todas las secciones). La ganancia de graduación sigue contando en tus reportes; esto es solo el control del dinero de uso del evento.</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={reporteGastosPDF} style={{...btnO,fontSize:12,padding:"7px 12px"}}><Download size={14}/>Reporte PDF</button>
+          <button onClick={abrirGasto} style={btn("#7C3AED")}><Plus size={15}/>Registrar gasto</button>
+        </div>
+      </div>
+      <div style={card}>
+        {gastosEvento.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>Aún no hay gastos del evento. Registrá el primero con "Registrar gasto".</p>:(
+          <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","En qué se gastó","Dónde / cómo se compró","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+            <tbody>{[...gastosEvento].sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||""))).map(g=>{const sec=g.seccion_id?data.secciones.find(s=>s.id===g.seccion_id):null;return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}>
+              <td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>{g.fecha||"—"}</td>
+              <td style={{padding:"6px 8px"}}>{g.descripcion}{sec&&<span style={{...badge("#7C3AED"),marginLeft:4,fontSize:9}}>{sec.nombre}</span>}</td>
+              <td style={{padding:"6px 8px",fontSize:11,color:"#64748B"}}>{g.comentario||"—"}</td>
+              <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td>
+              <td style={{padding:"6px 8px",textAlign:"center"}}><button onClick={()=>eliminarGasto(g.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td>
+            </tr>);})}</tbody>
+          </table></div>
+        )}
+      </div>
+    </div>}
+
+    {/* Modal registrar gasto del evento */}
+    {gastoForm&&<Modal title="💸 Registrar gasto del evento" onClose={()=>setGastoForm(null)} onSave={guardarGasto}>
+      <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:10,fontSize:12,color:"#6D28D9",marginBottom:14}}>
+        Saldo disponible del evento: <strong>L {dispEvento.toLocaleString()}</strong> · Restante tras lo gastado: <strong>L {restanteEvento.toLocaleString()}</strong>
+      </div>
+      <Field label="¿En qué se gastó? *" value={gastoForm.descripcion} onChange={v=>setGastoForm({...gastoForm,descripcion:v})} placeholder="Ej: Certificados impresos"/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <Field label="Monto (L) *" value={gastoForm.monto} onChange={v=>setGastoForm({...gastoForm,monto:v})} type="number" placeholder="1500"/>
+        <div style={{marginBottom:12}}><label style={label}>Fecha</label><input type="date" value={gastoForm.fecha} onChange={e=>setGastoForm({...gastoForm,fecha:e.target.value})} style={input}/></div>
+      </div>
+      <Field label="¿Dónde o cómo se compró? (comentario)" value={gastoForm.comentario} onChange={v=>setGastoForm({...gastoForm,comentario:v})} placeholder="Ej: Librería Central, pagado en efectivo" multiline/>
+      <div style={{marginBottom:4}}><label style={label}>Sección relacionada (opcional)</label>
+        <select value={gastoForm.seccion_id} onChange={e=>setGastoForm({...gastoForm,seccion_id:e.target.value})} style={{...input,cursor:"pointer"}}>
+          <option value="">— Todo el evento —</option>
+          {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+        </select>
+      </div>
+    </Modal>}
 
     {/* Modal cobrar a una sección */}
     {modal==="bulk"&&<Modal title="👥 Cobrar graduación a una sección" onClose={()=>setModal(null)} onSave={crearBulk} wide>
