@@ -3022,11 +3022,8 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
   const ganNeta=totVenta-gastadoFiltro;
   const fmtL=(n)=>Number(n||0).toLocaleString("es-HN",{maximumFractionDigits:2});
 
-  // Reporte PDF de gastos del evento (saldo disponible / gastado / restante + detalle)
-  const reporteGastosPDF=()=>{
-    const L=(n)=>`L ${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-    const esc=(t)=>String(t??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
+  // Resumen por mes + explicación del evento (lo usan el reporte de gastos y el informe de graduación)
+  const armarResumenEvento=(L,esc)=>{
     // Resumen por mes: lo cobrado (mes en que entró) vs lo gastado (mes del evento al que corresponde)
     const porMes={};
     gradGlobal.forEach(v=>{const k=mesIngreso(v)||"Sin mes";(porMes[k]=porMes[k]||{c:0,g:0}).c+=gradRecibido(v);});
@@ -3043,6 +3040,14 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       `Resultado del evento: se cobró ${L(dispEvento)} y se gastó ${L(gastadoEvento)}, con una ${restanteEvento>=0?"ganancia":"pérdida"} real de ${L(Math.abs(restanteEvento))}.`,
       pendEvento>0?`Quedan ${L(pendEvento)} pendientes de cobro de graduación. Como los gastos del evento ya están pagados, lo que se cobre se registra como ingreso del mes en que se reciba${enContra.length?" y compensa lo que se cubrió con mensualidades":""}.`:""
     ].filter(Boolean).map(t=>`<p>${t}</p>`).join("");
+    return {mesesRes,filasMes,explicacion,pendEvento};
+  };
+  // Reporte PDF de gastos del evento (saldo disponible / gastado / restante + detalle)
+  const reporteGastosPDF=()=>{
+    const L=(n)=>`L ${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    const esc=(t)=>String(t??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
+    const {filasMes,explicacion}=armarResumenEvento(L,esc);
     const sucNombre=data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||"";
     const filas=[...gastosEvento].sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||""))).map(g=>{
       const sec=g.seccion_id?data.secciones.find(s=>s.id===g.seccion_id):null;
@@ -3107,6 +3112,113 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
   };
   const tBtn=(a)=>({padding:"10px 20px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #7C3AED":"3px solid transparent",background:"transparent",color:a?"#7C3AED":"#64748B"});
 
+  // Informe completo de graduación (todas las secciones): resumen, secciones, alumnos, gastos y explicación
+  const informeGraduacionPDF=()=>{
+    const L=(n)=>`L ${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    const esc=(t)=>String(t??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
+    const sucNombre=data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||"";
+    const {filasMes,explicacion,pendEvento}=armarResumenEvento(L,esc);
+    const vigentes=data.cobros_graduacion.filter(v=>v.estado!=="anulado");
+    const totalACobrar=vigentes.reduce((s,v)=>s+(Number(v.precio_venta)||0),0);
+    const nPag=vigentes.filter(v=>v.estado==="pagado").length, nAb=vigentes.filter(v=>v.estado==="abonado").length, nPend=vigentes.filter(v=>v.estado==="pendiente").length;
+    const pctCob=totalACobrar>0?Math.round(dispEvento/totalACobrar*100):0;
+    const neg=(n)=>n>=0?L(n):`(${L(Math.abs(n))})`;
+    const nomAl=(id)=>data.alumnos.find(a=>a.id===id)?.nombre||"—";
+    const fCorta=(f)=>f?String(f).split("-").reverse().join("/"):"—";
+    const nomSec=(id)=>data.secciones.find(s=>s.id===id)?.nombre||"Sin sección";
+    // Por sección
+    const secIds=[...new Set(vigentes.map(v=>v.seccion_id||""))];
+    const secs=secIds.map(id=>{const vs=vigentes.filter(v=>(v.seccion_id||"")===id);return{id,nombre:nomSec(id),vs,n:vs.length,pag:vs.filter(v=>v.estado==="pagado").length,total:vs.reduce((s,v)=>s+(Number(v.precio_venta)||0),0),cob:vs.reduce((s,v)=>s+gradRecibido(v),0)};}).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+    const gastosGenerales=gastosEvento.filter(g=>!g.seccion_id).reduce((s,g)=>s+(Number(g.monto)||0),0);
+    const filasSec=secs.map(x=>`<tr><td>${esc(x.nombre)}</td><td class="c">${x.n}</td><td class="c">${x.pag}/${x.n}</td><td class="r">${L(x.total)}</td><td class="r">${L(x.cob)}</td><td class="r" style="color:#991B1B">${L(x.total-x.cob)}</td></tr>`).join("");
+    const estadoTxt=(v)=>v.estado==="pagado"?`<span class="ok">Pagado</span>`:v.estado==="abonado"?`<span class="ab">Abonado</span>`:`<span class="pe">Pendiente</span>`;
+    const tablasAlumnos=secs.map(x=>`<h3>${esc(x.nombre)} <span>· ${x.n} ${x.n===1?"alumno":"alumnos"}</span></h3>
+      <table><thead><tr><th>No.</th><th>Alumno</th><th>Conceptos</th><th>Estado</th><th>Fecha de pago</th><th class="r">Precio</th><th class="r">Pagado</th><th class="r">Saldo</th></tr></thead>
+      <tbody>${[...x.vs].sort((a,b)=>nomAl(a.alumno_id).localeCompare(nomAl(b.alumno_id))).map(v=>{const det=Array.isArray(v.detalle)?v.detalle.map(d=>d.nombre).join(" + "):"";const rec=gradRecibido(v);const sal=(Number(v.precio_venta)||0)-rec;return `<tr><td>${esc(v.numero||"")}</td><td>${esc(nomAl(v.alumno_id))}</td><td class="sm">${esc(det||"—")}</td><td>${estadoTxt(v)}</td><td>${v.estado==="pendiente"?"—":fCorta(v.fecha_pago)}</td><td class="r">${L(v.precio_venta)}</td><td class="r">${L(rec)}</td><td class="r">${sal>0?L(sal):"—"}</td></tr>`;}).join("")}</tbody>
+      <tfoot><tr><td colspan="5">Subtotal ${esc(x.nombre)}</td><td class="r">${L(x.total)}</td><td class="r">${L(x.cob)}</td><td class="r">${L(x.total-x.cob)}</td></tr></tfoot></table>`).join("");
+    const filasGastos=[...gastosEvento].sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||""))).map(g=>`<tr><td>${fCorta(g.fecha)}</td><td>${esc(mesGasto(g)||"—")}</td><td>${esc(g.descripcion||"—")}</td><td>${esc(g.seccion_id?nomSec(g.seccion_id):"Todo el evento")}</td><td class="sm">${esc(g.comentario||"—")}</td><td class="r">${L(g.monto)}</td></tr>`).join("");
+    const proyectada=totalACobrar-gastadoEvento;
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Informe de graduación</title>
+      <style>
+        @page { size: letter portrait; margin: 14mm; }
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
+        body{color:#1E293B;font-size:12px}
+        .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #7C3AED;padding-bottom:14px;margin-bottom:16px}
+        .head h1{font-size:21px;color:#5B21B6}
+        .head p{font-size:12px;color:#64748B;margin-top:3px}
+        .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px}
+        .k{border-radius:10px;padding:11px 12px}
+        .k .l{font-size:10.5px;opacity:.85}
+        .k .v{font-size:19px;font-weight:800;margin-top:2px}
+        .k .s{font-size:10px;opacity:.75;margin-top:2px}
+        h2{font-size:14.5px;color:#5B21B6;margin:20px 0 8px;padding-bottom:4px;border-bottom:1px solid #E9D5FF}
+        h3{font-size:12.5px;color:#1E293B;margin:14px 0 6px}
+        h3 span{font-weight:400;color:#64748B}
+        table{width:100%;border-collapse:collapse;font-size:11.5px}
+        th{background:#F1F5F9;text-align:left;padding:6px 8px;font-size:10.5px;color:#475569}
+        td{padding:5px 8px;border-bottom:1px solid #F1F5F9;vertical-align:top}
+        th.r,td.r{text-align:right;white-space:nowrap}
+        th.c,td.c{text-align:center}
+        td.sm{font-size:10.5px;color:#64748B}
+        tfoot td{font-weight:800;border-top:2px solid #E2E8F0;padding-top:7px}
+        .ok{color:#065F46;font-weight:700}.ab{color:#B45309;font-weight:700}.pe{color:#991B1B;font-weight:700}
+        .nota{background:#F8FAFC;border-left:3px solid #7C3AED;border-radius:6px;padding:11px 13px;line-height:1.55;color:#334155}
+        .nota p+p{margin-top:6px}
+        .sec{page-break-inside:avoid}
+        .foot{margin-top:24px;text-align:center;font-size:10.5px;color:#94a3b8;border-top:1px solid #eee;padding-top:10px}
+      </style></head><body>
+      <div class="head">
+        <div style="width:90px;height:90px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:14px"><img src="${LOGO_SEEDS}" alt="Seeds" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
+        <div>
+          <h1>Seeds English School</h1>
+          <p>Jesús de Otoro, Intibucá, Honduras</p>
+          <p style="margin-top:8px;font-size:16px;font-weight:700;color:#1E293B">Informe de graduación${sucNombre?` · ${esc(sucNombre)}`:""}</p>
+          <p>Generado el ${hoy} · Cifras en Lempiras</p>
+        </div>
+      </div>
+
+      <h2>1. Resumen general</h2>
+      <div class="kpis">
+        <div class="k" style="background:#F1F5F9;color:#1E293B"><div class="l">Total a cobrar</div><div class="v">${L(totalACobrar)}</div><div class="s">${vigentes.length} alumnos · ${secs.length} ${secs.length===1?"sección":"secciones"}</div></div>
+        <div class="k" style="background:#EDE9FE;color:#5B21B6"><div class="l">Cobrado</div><div class="v">${L(dispEvento)}</div><div class="s">${pctCob}% del total · ${nPag} pagados${nAb?` · ${nAb} con abono`:""}</div></div>
+        <div class="k" style="background:#FEF2F2;color:#991B1B"><div class="l">Pendiente de cobro</div><div class="v">${L(pendEvento)}</div><div class="s">${nPend+nAb} ${nPend+nAb===1?"alumno":"alumnos"} por pagar</div></div>
+        <div class="k" style="background:#FFF7ED;color:#9A3412"><div class="l">Gastos del evento</div><div class="v">${L(gastadoEvento)}</div><div class="s">${gastosEvento.length} ${gastosEvento.length===1?"gasto":"gastos"} registrados</div></div>
+        <div class="k" style="background:${restanteEvento>=0?"#ECFDF5":"#FEF2F2"};color:${restanteEvento>=0?"#065F46":"#991B1B"}"><div class="l">Ganancia real (cobrado − gastos)</div><div class="v">${neg(restanteEvento)}</div><div class="s">a la fecha de este informe</div></div>
+        <div class="k" style="background:#F0F9FF;color:#075985"><div class="l">Ganancia proyectada</div><div class="v">${neg(proyectada)}</div><div class="s">si se cobra todo lo pendiente</div></div>
+      </div>
+
+      <div class="sec"><h2>2. Resumen por sección</h2>
+      <table><thead><tr><th>Sección</th><th class="c">Alumnos</th><th class="c">Pagados</th><th class="r">Total a cobrar</th><th class="r">Cobrado</th><th class="r">Pendiente</th></tr></thead>
+        <tbody>${filasSec||`<tr><td colspan="6" style="text-align:center;color:#94a3b8">Sin cobros de graduación</td></tr>`}</tbody>
+        <tfoot><tr><td>Total</td><td class="c">${vigentes.length}</td><td class="c">${nPag}/${vigentes.length}</td><td class="r">${L(totalACobrar)}</td><td class="r">${L(dispEvento)}</td><td class="r">${L(pendEvento)}</td></tr></tfoot>
+      </table></div>
+
+      <div class="sec"><h2>3. Cobrado y gastado por mes</h2>
+      <table><thead><tr><th>Mes</th><th class="r">Cobrado de graduación</th><th class="r">Gastos del evento</th><th class="r">Resultado del mes</th></tr></thead>
+        <tbody>${filasMes}</tbody>
+        <tfoot><tr><td>Total del evento</td><td class="r">${L(dispEvento)}</td><td class="r">(${L(gastadoEvento)})</td><td class="r">${neg(restanteEvento)}</td></tr></tfoot>
+      </table>
+      <h3>Explicación</h3>
+      <div class="nota">${explicacion}</div></div>
+
+      <div class="sec"><h2>4. Gastos del evento</h2>
+      <table><thead><tr><th>Fecha de pago</th><th>Mes del evento</th><th>En qué se gastó</th><th>Sección</th><th>Dónde / cómo</th><th class="r">Monto</th></tr></thead>
+        <tbody>${filasGastos||`<tr><td colspan="6" style="text-align:center;color:#94a3b8">Aún no hay gastos registrados</td></tr>`}</tbody>
+        <tfoot><tr><td colspan="5">Total gastado${gastosGenerales>0?` <span style="font-weight:400;color:#64748B">(de estos, ${L(gastosGenerales)} son de todo el evento)</span>`:""}</td><td class="r">${L(gastadoEvento)}</td></tr></tfoot>
+      </table></div>
+
+      <h2>5. Detalle de alumnos por sección</h2>
+      ${tablasAlumnos||`<p style="color:#94a3b8">Sin cobros de graduación</p>`}
+
+      <div class="foot">Seeds English School — Área Administrativa · Los ingresos se registran en el mes en que se cobran y los gastos en el mes del evento al que corresponden.</div>
+      </body></html>`;
+    const w=window.open("","_blank");
+    if(!w){showToast("Permite las ventanas emergentes para el informe","error");return;}
+    w.document.write(html); w.document.close();
+    setTimeout(()=>{w.focus();w.print();},500);
+  };
+
   // Selector de conceptos (checkboxes) reutilizable
   const selectorConceptos=(secId,seleccion,onToggle)=>{
     const cs=conceptosSeccion(secId);
@@ -3129,6 +3241,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
         {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
       </select>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <button onClick={informeGraduacionPDF} style={btnO}><FileText size={15}/>Informe de graduación</button>
         <button onClick={abrirBulk} style={btn("#7C3AED")}><Users size={15}/>Cobrar a una sección</button>
         <button onClick={abrir} style={btn("#7C3AED")}><Plus size={15}/>Registrar graduación</button>
       </div>
