@@ -2985,15 +2985,16 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
   const anular=async(v)=>{if(!confirm("¿Anular este cobro de graduación?"))return;try{await db.update("cobros_graduacion",v.id,{estado:"anulado"});await loadData();showToast("Anulado","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
   // ── Gastos del evento (fondo del evento) ──
-  const abrirGasto=()=>setGastoForm({descripcion:"",monto:"",comentario:"",fecha:new Date().toISOString().split("T")[0],seccion_id:""});
+  const abrirGasto=()=>setGastoForm({descripcion:"",monto:"",comentario:"",fecha:new Date().toISOString().split("T")[0],seccion_id:"",mes_correspondiente:""});
   const guardarGasto=async()=>{
     if(!gastoForm.descripcion.trim()){showToast("¿En qué se gastó?","error");return;}
     if(!(parseFloat(gastoForm.monto)>0)){showToast("Ingresa el monto","error");return;}
     try{
-      await db.insert("gastos_graduacion",{id:uid(),descripcion:gastoForm.descripcion.trim(),monto:parseFloat(gastoForm.monto),comentario:gastoForm.comentario||"",fecha:gastoForm.fecha,seccion_id:gastoForm.seccion_id||null,sucursal_id:sucursalActiva});
+      await db.insert("gastos_graduacion",{id:uid(),descripcion:gastoForm.descripcion.trim(),monto:parseFloat(gastoForm.monto),comentario:gastoForm.comentario||"",fecha:gastoForm.fecha,seccion_id:gastoForm.seccion_id||null,sucursal_id:sucursalActiva,mes_correspondiente:gastoForm.mes_correspondiente||null});
       await loadData();setGastoForm(null);showToast("✓ Gasto del evento registrado");
     }catch(e){showToast("Error: "+e.message,"error");}
   };
+  const cambiarMesGasto=async(g,mes)=>{try{await db.update("gastos_graduacion",g.id,{mes_correspondiente:mes||null});await loadData();showToast(mes?`✓ Gasto asignado a ${mes}`:"✓ Gasto según su fecha");}catch(e){showToast("Error: "+e.message,"error");}};
   const eliminarGasto=async(id)=>{if(!confirm("¿Eliminar este gasto del evento?"))return;try{await db.remove("gastos_graduacion",id);await loadData();showToast("Eliminado","error");}catch(e){showToast("Error: "+e.message,"error");}};
 
   const todas=data.cobros_graduacion.filter(v=>!filtroSec||v.seccion_id===filtroSec);
@@ -3173,9 +3174,10 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       <div style={card}>
         {gastosEvento.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>Aún no hay gastos del evento. Registrá el primero con "Registrar gasto".</p>:(
           <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-            <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","En qué se gastó","Dónde / cómo se compró","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+            <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Mes del evento","En qué se gastó","Dónde / cómo se compró","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
             <tbody>{[...gastosEvento].sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||""))).map(g=>{const sec=g.seccion_id?data.secciones.find(s=>s.id===g.seccion_id):null;return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}>
               <td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>{g.fecha||"—"}</td>
+              <td style={{padding:"6px 8px"}}><select value={g.mes_correspondiente||""} onChange={e=>cambiarMesGasto(g,e.target.value)} title="Mes del evento al que corresponde este gasto" style={{...input,padding:"3px 6px",fontSize:11,width:"auto",cursor:"pointer"}}><option value="">{mesDeFecha(g.fecha)||"—"} (fecha)</option>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select></td>
               <td style={{padding:"6px 8px"}}>{g.descripcion}{sec&&<span style={{...badge("#7C3AED"),marginLeft:4,fontSize:9}}>{sec.nombre}</span>}</td>
               <td style={{padding:"6px 8px",fontSize:11,color:"#64748B"}}>{g.comentario||"—"}</td>
               <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td>
@@ -3195,6 +3197,13 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <Field label="Monto (L) *" value={gastoForm.monto} onChange={v=>setGastoForm({...gastoForm,monto:v})} type="number" placeholder="1500"/>
         <div style={{marginBottom:12}}><label style={label}>Fecha</label><input type="date" value={gastoForm.fecha} onChange={e=>setGastoForm({...gastoForm,fecha:e.target.value})} style={input}/></div>
+      </div>
+      <div style={{marginBottom:12}}><label style={label}>Mes del evento al que corresponde</label>
+        <select value={gastoForm.mes_correspondiente} onChange={e=>setGastoForm({...gastoForm,mes_correspondiente:e.target.value})} style={{...input,cursor:"pointer"}}>
+          <option value="">El mismo mes de la fecha de pago</option>
+          {MESES.map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+        <div style={{fontSize:10.5,color:"#94A3B8",marginTop:3}}>Ej: si la graduación fue en octubre pero pagaste algo en noviembre, elige Octubre.</div>
       </div>
       <Field label="¿Dónde o cómo se compró? (comentario)" value={gastoForm.comentario} onChange={v=>setGastoForm({...gastoForm,comentario:v})} placeholder="Ej: Librería Central, pagado en efectivo" multiline/>
       <div style={{marginBottom:4}}><label style={label}>Sección relacionada (opcional)</label>
@@ -3373,6 +3382,14 @@ function ReportesPage({data,showToast}){
   const gastosGradMesSel=gastosGradDe(data,mesSel,anioSel);
   const costoGraduacion=gastosGradMesSel.reduce((s,g)=>s+(Number(g.monto)||0),0);
 
+  // Nota del evento de graduación: explica en el reporte de dónde salió cada parte
+  const gradEvCobros=data.cobros_graduacion.filter(v=>v.estado==="pagado"||v.estado==="abonado");
+  const gradEvPorMes=(()=>{const m={};gradEvCobros.forEach(v=>{const k=mesIngreso(v)||"Sin mes";m[k]=(m[k]||0)+gradRecibido(v);});return MESES.filter(x=>m[x]).map(x=>({mes:x,monto:m[x]})).concat(m["Sin mes"]?[{mes:"Sin mes",monto:m["Sin mes"]}]:[]);})();
+  const gradEvCobrado=gradEvCobros.reduce((s,v)=>s+gradRecibido(v),0);
+  const gradEvGastos=(data.gastos_graduacion||[]).reduce((s,g)=>s+(Number(g.monto)||0),0);
+  const gradEvGan=gradEvCobrado-gradEvGastos;
+  const gradEvPend=data.cobros_graduacion.filter(v=>v.estado==="pendiente"||v.estado==="abonado").reduce((s,v)=>s+((Number(v.precio_venta)||0)-gradRecibido(v)),0);
+  const gradResMes=ingGraduacion-costoGraduacion;
   // Ingresos extra / justificados: 100% ganancia, sin costo asociado
   const otrosIngArr=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mesSel,anioSel));
   const ingExtra=otrosIngArr.reduce((s,i)=>s+Number(i.monto||0),0);
@@ -3518,6 +3535,25 @@ function ReportesPage({data,showToast}){
       </tbody>
     </table>
 
+    ${(ingGraduacion>0||costoGraduacion>0)?`<h3 class="tit">Nota sobre el evento de graduación</h3>
+    <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
+      <tbody>
+        ${fSec("En este mes")}
+        <tr class="cta"><td>Cobrado de graduación este mes</td><td></td><td class="num">${M(ingGraduacion)}</td><td></td></tr>
+        <tr class="cta"><td>Gastos reales del evento asignados a este mes</td><td></td><td class="num">${Mneg(costoGraduacion)}</td><td></td></tr>
+        ${fTotal("Resultado de graduación en el mes",Math.abs(gradResMes),"tot",gradResMes<0)}
+        ${fSec("Evento completo (todas las secciones)")}
+        ${gradEvPorMes.map(x=>`<tr class="det"><td>Cobrado en ${esc(x.mes)}</td><td class="num">${M(x.monto)}</td><td></td><td></td></tr>`).join("")}
+        <tr class="cta"><td>Total cobrado del evento</td><td></td><td class="num">${M(gradEvCobrado)}</td><td></td></tr>
+        <tr class="cta"><td>Total gastado en el evento</td><td></td><td class="num">${Mneg(gradEvGastos)}</td><td></td></tr>
+        ${fTotal("Ganancia real del evento hasta hoy",Math.abs(gradEvGan),"tot",gradEvGan<0)}
+        ${gradEvPend>0?`<tr class="det"><td><span class="nota">Pendiente de cobro de graduación: ${M(gradEvPend)}. Cuando se cobre, entra como ingreso del mes en que se pague.</span></td><td></td><td></td><td></td></tr>`:""}
+      </tbody>
+    </table>
+    <p class="pie">${gradResMes<0
+      ?`Los gastos del evento asignados a ${esc(mesSel)} superan lo cobrado de graduación en este mes por ${M(Math.abs(gradResMes))}. Esa diferencia se cubrió con los demás ingresos del mes (mensualidades). No es una pérdida del evento: la mayor parte de la graduación se cobró en meses anteriores, donde aparece como ingreso sin costo, y ese dinero se usó en esos meses. Sumando todos los meses, el evento deja la ganancia indicada arriba.`
+      :`Los ingresos de graduación se registran en el mes en que se cobran y sus gastos en el mes del evento al que corresponden. La ganancia real del evento es lo cobrado menos todo lo gastado.`}</p>`:""}
+
     <h3 class="tit">V. Análisis gráfico</h3>
     <div class="grafica">${svgGrafica}</div>
 
@@ -3530,7 +3566,7 @@ function ReportesPage({data,showToast}){
         ${gradMes.length?gradMes.map(v=>{const al=data.alumnos.find(a=>a.id===v.alumno_id);const det=Array.isArray(v.detalle)?v.detalle:[];return `<tr class="det"><td>${esc(al?.nombre||"—")}${det.length?`<span class="nota">${esc(det.map(d=>d.nombre).join(" + "))}</span>`:""}</td><td class="num">${M(v.precio_venta)}</td><td></td><td></td></tr>`;}).join(""):`<tr class="det"><td><span class="nota">Sin graduaciones cobradas este mes</span></td><td></td><td></td><td></td></tr>`}
       </tbody>
     </table>
-    <p class="pie">Criterios: los ingresos cuentan en el mes al que se asignó el pago; los gastos en el mes al que se restan. En costo de ventas solo se resta lo que cuestan los materiales y la graduación (editorial / certificados). Las cifras entre paréntesis son restas.</p>`;
+    <p class="pie">Criterios: los ingresos cuentan en el mes al que se asignó el pago; los gastos en el mes al que se restan. En costo de ventas se resta lo que cuestan los materiales y los gastos reales registrados del evento de graduación. Las cifras entre paréntesis son restas.</p>`;
 
   const EDO_CSS=`
     .edo{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px;color:#1E293B}
