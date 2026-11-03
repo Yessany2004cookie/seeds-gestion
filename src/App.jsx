@@ -3011,6 +3011,12 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
   const gastosEvento=data.gastos_graduacion||[];
   const gastadoEvento=gastosEvento.reduce((s,g)=>s+(Number(g.monto)||0),0);
   const restanteEvento=dispEvento-gastadoEvento;
+  // Gastos del evento que corresponden al filtro actual (todas o una sección)
+  const gastosFiltro=filtroSec?gastosEvento.filter(g=>g.seccion_id===filtroSec):gastosEvento;
+  const gastadoFiltro=gastosFiltro.reduce((s,g)=>s+(Number(g.monto)||0),0);
+  // Ganancia real = lo cobrado menos lo que realmente se gastó en el evento
+  const ganNeta=totVenta-gastadoFiltro;
+  const fmtL=(n)=>Number(n||0).toLocaleString("es-HN",{maximumFractionDigits:2});
 
   // Reporte PDF de gastos del evento (saldo disponible / gastado / restante + detalle)
   const reporteGastosPDF=()=>{
@@ -3099,9 +3105,9 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:16}}>
       <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Pendiente de cobro</div><div style={{fontSize:20,fontWeight:800,color:"#DC2626"}}>L {totPend.toLocaleString()}</div></div>
-      <div style={{...card,borderLeft:"3px solid #7C3AED",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Total cobrado</div><div style={{fontSize:20,fontWeight:800,color:"#7C3AED"}}>L {totVenta.toLocaleString()}</div></div>
-      <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ganancia cobrada</div><div style={{fontSize:20,fontWeight:800,color:"#059669"}}>L {totGanancia.toLocaleString()}</div></div>
-      <div style={{...card,borderLeft:"3px solid #EA580C",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Total para uso del evento</div><div style={{fontSize:20,fontWeight:800,color:"#EA580C"}}>L {(totVenta-totGanancia).toLocaleString()}</div><div style={{fontSize:10,color:"#94A3B8"}}>costo de certificados/entrega</div></div>
+      <div style={{...card,borderLeft:"3px solid #7C3AED",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Total cobrado</div><div style={{fontSize:20,fontWeight:800,color:"#7C3AED"}}>L {fmtL(totVenta)}</div></div>
+      <div style={{...card,borderLeft:"3px solid #059669",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Ganancia cobrada</div><div style={{fontSize:20,fontWeight:800,color:ganNeta>=0?"#059669":"#DC2626"}}>L {fmtL(ganNeta)}</div><div style={{fontSize:10,color:"#94A3B8"}}>cobrado − gastos del evento</div></div>
+      <div style={{...card,borderLeft:"3px solid #EA580C",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Gastos del evento</div><div style={{fontSize:20,fontWeight:800,color:"#EA580C"}}>L {fmtL(gastadoFiltro)}</div><div style={{fontSize:10,color:"#94A3B8"}}>{gastosFiltro.length} {gastosFiltro.length===1?"gasto registrado":"gastos registrados"}</div></div>
     </div>
 
     <div style={{display:"flex",borderBottom:"1px solid #E2E8F0",marginBottom:16,flexWrap:"wrap"}}>
