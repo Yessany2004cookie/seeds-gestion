@@ -61,6 +61,9 @@ const gradGananciaReal = (v) => {
   const recibido = gradRecibido(v);
   return (Number(v.ganancia) || 0) * (recibido / pv);
 };
+// Costo REAL de graduación de un mes: los gastos del evento registrados con fecha en ese mes
+const gastosGradDe = (data, mes, anio) => (data.gastos_graduacion || []).filter(g => esGastoDe(g, mes, anio));
+const costoGradDe = (data, mes, anio) => gastosGradDe(data, mes, anio).reduce((s, g) => s + (Number(g.monto) || 0), 0);
 // Año de un cobro (mensualidad): el guardado, o el de su fecha de emisión
 const anioCobro = (f) => Number(f.anio_correspondiente) || anioAsignado(f.fecha_emision, f.mes_correspondiente) || ANIO_ACTUAL;
 const TIPOS_PAGO = [{value:"efectivo",label:"Efectivo"},{value:"transferencia",label:"Transferencia"},{value:"tarjeta",label:"Tarjeta"},{value:"deposito",label:"Depósito"}];
@@ -734,7 +737,7 @@ function resumenParaAsistente(data, nombreSucursal){
     const renta=suma(gas.filter(g=>g.tipo==="renta"),g=>g.monto);
     const otros=suma(gas.filter(g=>g.tipo!=="salario"&&g.tipo!=="renta"),g=>g.monto);
     const ingMat=suma(mat,v=>v.precio_venta),ingGrad=suma(grad,v=>gradRecibido(v)),ingOtros=suma(otrosIng,i=>i.monto);
-    const costoVentas=suma(mat,v=>v.costo)+suma(grad,v=>gradRecibido(v)-gradGananciaReal(v));
+    const costoVentas=suma(mat,v=>v.costo)+costoGradDe(data,mes,anio);
     const ingresos=mens+moraCob+ingMat+ingGrad+ingOtros;
     const gastosOp=planilla+renta+otros;
     const utilidad=ingresos-costoVentas-gastosOp;
@@ -965,7 +968,7 @@ function Dashboard({data,setPage,loadData,showToast}){
   const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
   const gradPag=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const ingGrad=gradPag.reduce((s,v)=>s+gradRecibido(v),0);
-  const ganGrad=gradPag.reduce((s,v)=>s+gradGananciaReal(v),0);
+  const ganGrad=ingGrad-costoGradDe(data,mes,ANIO_ACTUAL);
   const ingOtros=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,ANIO_ACTUAL)).reduce((s,i)=>s+(Number(i.monto)||0),0);
   const ing=ingMens+ingMora+ingMat+ingGrad+ingOtros;
   const gastos=data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
@@ -996,7 +999,7 @@ function ResumenFinanciero({data}){
   const mat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const grad=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,ANIO_ACTUAL));
   const ingGradR=grad.reduce((s,v)=>s+gradRecibido(v),0);
-  const costoGradR=grad.reduce((s,v)=>s+(gradRecibido(v)-gradGananciaReal(v)),0);
+  const costoGradR=costoGradDe(data,mes,ANIO_ACTUAL);
   const ingOtros=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,ANIO_ACTUAL)).reduce((s,i)=>s+(Number(i.monto)||0),0);
   const ingresos=ingMens+ingMora+suma(mat,"precio_venta")+ingGradR+ingOtros;
   const costoVentas=(suma(mat,"precio_venta")-suma(mat,"ganancia"))+costoGradR;
@@ -2193,7 +2196,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const ingMatMes=(mes)=>matMes(mes).reduce((s,v)=>s+Number(v.precio_venta),0);
   const ganMatMes=(mes)=>matMes(mes).reduce((s,v)=>s+Number(v.ganancia),0);
   const ingGradMes=(mes)=>gradMesF(mes).reduce((s,v)=>s+gradRecibido(v),0);
-  const ganGradMes=(mes)=>gradMesF(mes).reduce((s,v)=>s+gradGananciaReal(v),0);
+  const ganGradMes=(mes)=>ingGradMes(mes)-costoGradDe(data,mes,ANIO_ACTUAL);
   // Ingresos extra / justificados del mes (100% ganancia, sin costo)
   const otrosIngMes=(mes)=>(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,ANIO_ACTUAL)).reduce((s,i)=>s+(Number(i.monto)||0),0);
   // Ingreso total del mes (lo que entra a caja): mensualidades + mora + materiales + graduacion + ingresos extra
@@ -3005,9 +3008,9 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
   const totPend=cobros.reduce((s,v)=>s+saldoDe(v),0);
 
   // ── Fondo del evento (global: todas las secciones de esta sucursal, sin importar el filtro) ──
-  // Saldo disponible = "Total para uso del evento" = lo recibido menos la ganancia (el costo cobrado).
+  // Saldo disponible = todo lo recibido de graduación; restante = lo que queda después de los gastos reales (= ganancia).
   const gradGlobal=data.cobros_graduacion.filter(v=>v.estado==="pagado"||v.estado==="abonado");
-  const dispEvento=gradGlobal.reduce((s,v)=>s+(gradRecibido(v)-gradGananciaReal(v)),0);
+  const dispEvento=gradGlobal.reduce((s,v)=>s+gradRecibido(v),0);
   const gastosEvento=data.gastos_graduacion||[];
   const gastadoEvento=gastosEvento.reduce((s,g)=>s+(Number(g.monto)||0),0);
   const restanteEvento=dispEvento-gastadoEvento;
@@ -3057,7 +3060,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
         </div>
       </div>
       <div class="tot">
-        <div class="box" style="background:#EDE9FE;color:#5B21B6"><div class="l">Saldo disponible (para uso del evento)</div><div class="v">${L(dispEvento)}</div></div>
+        <div class="box" style="background:#EDE9FE;color:#5B21B6"><div class="l">Total cobrado de graduación</div><div class="v">${L(dispEvento)}</div></div>
         <div class="box" style="background:#FEF2F2;color:#991B1B"><div class="l">Saldo gastado</div><div class="v">${L(gastadoEvento)}</div></div>
         <div class="box" style="background:${restanteEvento>=0?"#ECFDF5":"#FEF2F2"};color:${restanteEvento>=0?"#065F46":"#991B1B"}"><div class="l">Saldo restante</div><div class="v">${L(restanteEvento)}</div></div>
       </div>
@@ -3066,7 +3069,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
         <tbody>${filas||`<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:18px">Aún no hay gastos registrados</td></tr>`}</tbody>
         <tfoot><tr><td colspan="3">Total gastado</td><td class="r">${L(gastadoEvento)}</td></tr></tfoot>
       </table>
-      ${restanteEvento<0?`<p style="font-size:11px;color:#DC2626;margin-top:10px">* Los gastos superan el fondo disponible del evento por ${L(Math.abs(restanteEvento))}.</p>`:""}
+      ${restanteEvento<0?`<p style="font-size:11px;color:#DC2626;margin-top:10px">* Los gastos superan lo cobrado de graduación por ${L(Math.abs(restanteEvento))}.</p>`:""}
       <div class="foot">Seeds English School — Área Administrativa</div>
       </body></html>`;
     const w=window.open("","_blank");
@@ -3156,12 +3159,12 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 
     {tab==="gastos"&&<div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12,marginBottom:14}}>
-        <div style={{...card,borderLeft:"3px solid #7C3AED",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Saldo disponible</div><div style={{fontSize:20,fontWeight:800,color:"#7C3AED"}}>L {dispEvento.toLocaleString()}</div><div style={{fontSize:10,color:"#94A3B8"}}>para uso del evento</div></div>
-        <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Saldo gastado</div><div style={{fontSize:20,fontWeight:800,color:"#DC2626"}}>L {gastadoEvento.toLocaleString()}</div><div style={{fontSize:10,color:"#94A3B8"}}>{gastosEvento.length} {gastosEvento.length===1?"gasto":"gastos"}</div></div>
-        <div style={{...card,borderLeft:`3px solid ${restanteEvento>=0?"#059669":"#DC2626"}`,margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Saldo restante</div><div style={{fontSize:20,fontWeight:800,color:restanteEvento>=0?"#059669":"#DC2626"}}>L {restanteEvento.toLocaleString()}</div><div style={{fontSize:10,color:restanteEvento>=0?"#94A3B8":"#DC2626"}}>{restanteEvento>=0?"disponible":"sobregirado"}</div></div>
+        <div style={{...card,borderLeft:"3px solid #7C3AED",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Saldo disponible</div><div style={{fontSize:20,fontWeight:800,color:"#7C3AED"}}>L {fmtL(dispEvento)}</div><div style={{fontSize:10,color:"#94A3B8"}}>total cobrado de graduación</div></div>
+        <div style={{...card,borderLeft:"3px solid #DC2626",margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Saldo gastado</div><div style={{fontSize:20,fontWeight:800,color:"#DC2626"}}>L {fmtL(gastadoEvento)}</div><div style={{fontSize:10,color:"#94A3B8"}}>{gastosEvento.length} {gastosEvento.length===1?"gasto":"gastos"}</div></div>
+        <div style={{...card,borderLeft:`3px solid ${restanteEvento>=0?"#059669":"#DC2626"}`,margin:0}}><div style={{fontSize:12,color:"#64748B"}}>Saldo restante</div><div style={{fontSize:20,fontWeight:800,color:restanteEvento>=0?"#059669":"#DC2626"}}>L {fmtL(restanteEvento)}</div><div style={{fontSize:10,color:restanteEvento>=0?"#94A3B8":"#DC2626"}}>{restanteEvento>=0?"ganancia real del evento":"faltante (se cubrió con otra caja)"}</div></div>
       </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
-        <div style={{fontSize:11.5,color:"#64748B",maxWidth:460}}>Fondo global del evento (todas las secciones). La ganancia de graduación sigue contando en tus reportes; esto es solo el control del dinero de uso del evento.</div>
+        <div style={{fontSize:11.5,color:"#64748B",maxWidth:460}}>Fondo global del evento (todas las secciones). Estos gastos se restan como costo de graduación en tus reportes, en el mes de su fecha.</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <button onClick={reporteGastosPDF} style={{...btnO,fontSize:12,padding:"7px 12px"}}><Download size={14}/>Reporte PDF</button>
           <button onClick={abrirGasto} style={btn("#7C3AED")}><Plus size={15}/>Registrar gasto</button>
@@ -3186,7 +3189,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
     {/* Modal registrar gasto del evento */}
     {gastoForm&&<Modal title="💸 Registrar gasto del evento" onClose={()=>setGastoForm(null)} onSave={guardarGasto}>
       <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:10,fontSize:12,color:"#6D28D9",marginBottom:14}}>
-        Saldo disponible del evento: <strong>L {dispEvento.toLocaleString()}</strong> · Restante tras lo gastado: <strong>L {restanteEvento.toLocaleString()}</strong>
+        Saldo disponible del evento: <strong>L {fmtL(dispEvento)}</strong> · Restante tras lo gastado: <strong>L {fmtL(restanteEvento)}</strong>
       </div>
       <Field label="¿En qué se gastó? *" value={gastoForm.descripcion} onChange={v=>setGastoForm({...gastoForm,descripcion:v})} placeholder="Ej: Certificados impresos"/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -3367,7 +3370,8 @@ function ReportesPage({data,showToast}){
   // Pendiente = saldo sin cobrar (precio - lo abonado)
   const pendGraduacion=gradPendMes.reduce((s,v)=>s+(Number(v.precio_venta)-gradRecibido(v)),0);
   const ingGraduacion=gradMes.reduce((s,v)=>s+gradRecibido(v),0);
-  const costoGraduacion=gradMes.reduce((s,v)=>s+(gradRecibido(v)-gradGananciaReal(v)),0);
+  const gastosGradMesSel=gastosGradDe(data,mesSel,anioSel);
+  const costoGraduacion=gastosGradMesSel.reduce((s,g)=>s+(Number(g.monto)||0),0);
 
   // Ingresos extra / justificados: 100% ganancia, sin costo asociado
   const otrosIngArr=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mesSel,anioSel));
@@ -3395,8 +3399,7 @@ function ReportesPage({data,showToast}){
   const detMateriales=(()=>{const m={};ventasMes.forEach(v=>{const cant=Number(v.cantidad)||1;const cu=Number(v.costo)/cant,pu=Number(v.precio_venta)/cant;const k=`${v.nombre_material}|${cu}|${pu}`;if(!m[k])m[k]={nombre:v.nombre_material||"Material",cu,pu,cant:0,costo:0};m[k].cant+=cant;m[k].costo+=Number(v.costo);});
     return Object.values(m).sort((a,b)=>b.costo-a.costo).map(x=>({label:x.nombre,sub:`${x.cant} ${x.cant===1?"unidad":"unidades"} × ${L2(x.cu)} c/u a la editorial · vendidos a ${L2(x.pu)} c/u (ganancia ${L2((x.pu-x.cu)*x.cant)})`,monto:x.costo}));})();
   // Graduación: por concepto y costo unitario → "5 × L 400 c/u"
-  const detGraduacion=(()=>{const m={};gradMes.forEach(v=>{const det=Array.isArray(v.detalle)&&v.detalle.length?v.detalle:[{nombre:"Graduación",costo:v.costo,precio_venta:v.precio_venta}];det.forEach(d=>{const cu=Number(d.costo)||0,pu=Number(d.precio_venta)||0;const k=`${d.nombre}|${cu}|${pu}`;if(!m[k])m[k]={nombre:d.nombre||"Concepto",cu,pu,n:0};m[k].n++;});});
-    return Object.values(m).sort((a,b)=>b.cu*b.n-a.cu*a.n).map(x=>({label:x.nombre,sub:`${x.n} ${x.n===1?"alumno":"alumnos"} × ${L2(x.cu)} c/u de costo · cobrado a ${L2(x.pu)} c/u (ganancia ${L2((x.pu-x.cu)*x.n)})`,monto:x.cu*x.n}));})();
+  const detGraduacion=[...gastosGradMesSel].sort((a,b)=>Number(b.monto)-Number(a.monto)).map(g=>{const sec=g.seccion_id?data.secciones.find(x=>x.id===g.seccion_id):null;return{label:g.descripcion||"Gasto del evento",sub:[sec?.nombre,g.comentario,g.fecha?`pagado el ${fechaCorta(g.fecha)}`:""].filter(Boolean).join(" · "),monto:Number(g.monto)||0};});
   const egresos=[
     {k:"salarios",label:"Salarios a maestros",total:totSalarios,items:detSalarios},
     {k:"renta",label:"Renta",total:totRenta,items:detRenta},
