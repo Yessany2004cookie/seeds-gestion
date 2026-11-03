@@ -66,20 +66,23 @@ const enMesFecha = (fecha, mes, anio) => { const [y, m] = String(fecha || "").sp
 const hastaFinDe = (fecha, mes, anio) => { const [y, m] = String(fecha || "").split("-").map(Number); if (!y) return false; const mi = MESES.indexOf(mes) + 1; return y < anio || (y === anio && m <= mi); };
 const movimientosCaja = (data) => {
   const L = [];
-  (data.facturas || []).filter(f => f.tipo_factura === "comprobante" && f.fecha_pago).forEach(f => L.push({ f: f.fecha_pago, k: "entrada", v: (Number(f.monto_total) || 0) + (Number(f.mora_cobrada) || 0) }));
-  (data.ventas_material || []).filter(v => v.estado === "pagado" && v.fecha_pago).forEach(v => { L.push({ f: v.fecha_pago, k: "entrada", v: Number(v.precio_venta) || 0 }); L.push({ f: v.fecha_pago, k: "material", v: Number(v.costo) || 0 }); });
-  (data.cobros_graduacion || []).filter(v => gradCuenta(v) && v.fecha_pago).forEach(v => L.push({ f: v.fecha_pago, k: "entrada", v: gradRecibido(v) }));
-  (data.otros_ingresos || []).forEach(i => L.push({ f: i.fecha_pago || i.fecha, k: "entrada", v: Number(i.monto) || 0 }));
+  (data.facturas || []).filter(f => f.tipo_factura === "comprobante" && f.fecha_pago).forEach(f => { L.push({ f: f.fecha_pago, k: "entrada", c: "Mensualidades", v: Number(f.monto_total) || 0 }); if (Number(f.mora_cobrada) > 0) L.push({ f: f.fecha_pago, k: "entrada", c: "Mora cobrada", v: Number(f.mora_cobrada) }); });
+  (data.ventas_material || []).filter(v => v.estado === "pagado" && v.fecha_pago).forEach(v => { L.push({ f: v.fecha_pago, k: "entrada", c: "Materiales vendidos", v: Number(v.precio_venta) || 0 }); L.push({ f: v.fecha_pago, k: "material", v: Number(v.costo) || 0 }); });
+  (data.cobros_graduacion || []).filter(v => gradCuenta(v) && v.fecha_pago).forEach(v => L.push({ f: v.fecha_pago, k: "entrada", c: "Graduación", v: gradRecibido(v) }));
+  (data.otros_ingresos || []).forEach(i => L.push({ f: i.fecha_pago || i.fecha, k: "entrada", c: "Ingresos extra", v: Number(i.monto) || 0 }));
   (data.gastos || []).forEach(g => L.push({ f: g.fecha, k: g.tipo === "deuda" ? "deuda" : "gasto", g, v: Number(g.monto) || 0 }));
   (data.gastos_graduacion || []).forEach(g => L.push({ f: g.fecha, k: "graduacion", v: Number(g.monto) || 0 }));
   return L;
 };
 const cajaDelMes = (data, mes, anio) => {
-  const L = movimientosCaja(data); const r = { entradas: 0, gastosMes: 0, atrasados: 0, deudas: 0, material: 0, graduacion: 0, saldo: 0, detAtrasados: [], detDeudas: [] };
+  const L = movimientosCaja(data); const r = { entradas: 0, gastosMes: 0, atrasados: 0, deudas: 0, material: 0, graduacion: 0, saldo: 0, detAtrasados: [], detDeudas: [], ent: {}, sal: {} };
+  const TS = { salario: "Salarios", renta: "Renta", deuda: "Pagos de deudas anteriores", material: "Costo de materiales", graduacion: "Gastos de graduación" };
   L.forEach(x => {
     const sig = x.k === "entrada" ? 1 : -1;
     if (hastaFinDe(x.f, mes, anio)) r.saldo += sig * x.v;
     if (!enMesFecha(x.f, mes, anio)) return;
+    if (x.k === "entrada") r.ent[x.c] = (r.ent[x.c] || 0) + x.v;
+    else { const t = x.k === "gasto" ? (TS[x.g.tipo] || "Otros gastos") : TS[x.k]; r.sal[t] = (r.sal[t] || 0) + x.v; }
     if (x.k === "entrada") r.entradas += x.v;
     else if (x.k === "deuda") { r.deudas += x.v; r.detDeudas.push(x.g); }
     else if (x.k === "material") r.material += x.v;
@@ -2260,56 +2263,57 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
       <button onClick={()=>setTab("gastos")} style={tBtn(tab==="gastos")}>📋 Todos los gastos</button>
     </div>
 
-    {tab==="resumen"&&(()=>{const Lc=(n)=>`L ${(Math.round((Number(n)||0)*100)/100).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-      const fila=(t,v,o={})=><div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"4px 0",fontWeight:o.b?800:400,borderTop:o.b?"2px solid #E2E8F0":"none",color:o.c||"#1E293B"}}><span>{t}{o.n&&<span style={{display:"block",fontSize:11,color:"#94A3B8",fontWeight:400}}>{o.n}</span>}</span><span style={{whiteSpace:"nowrap"}}>{v}</span></div>;
-      return(<div style={{...card,borderLeft:`4px solid ${disponible>=0?"#059669":"#DC2626"}`,marginBottom:14}}>
-        <div style={{fontSize:15,fontWeight:800,color:"#1E293B",marginBottom:2}}>💡 ¿Dónde está la ganancia?</div>
-        <div style={{fontSize:12,color:"#64748B",marginBottom:10}}>De {mesesConActividad[0]||"—"} a {MESES[mesHoy]} {ANIO_ACTUAL}: lo que ganaron los meses, a dónde se fue y cuánto queda libre de verdad.</div>
-        <div style={{fontSize:13,maxWidth:560}}>
-          {fila("Ganancia real sumada de los meses",Lc(ganAcum),{n:`ya restados los ${Lc(deudasAnio)} que se pagaron en deudas de antes`})}
-          {Math.abs(difFechas)>=0.01&&fila("(±) Diferencias por fechas de pago",difFechas>=0?Lc(difFechas):`(${Lc(Math.abs(difFechas))})`,{n:"cobros o pagos registrados con fecha de otro mes"})}
-          {fila("= Dinero en caja hoy",Lc(cajaHoy),{b:true})}
-          {rentasPend.map(x=>fila(`(−) Renta de ${x.mes} por pagar`,`(${Lc(x.monto)})`,{c:"#DC2626",n:"ya se usó: está reservada para esta renta"}))}
-          {fila(disponible>=0?"= Ganancia libre (disponible real)":"= Faltante",disponible>=0?Lc(disponible):`(${Lc(Math.abs(disponible))})`,{b:true,c:disponible>=0?"#059669":"#DC2626"})}
-        </div>
-        <div style={{fontSize:11.5,color:"#475569",background:"#F8FAFC",borderRadius:6,padding:"8px 10px",marginTop:10}}>{disponible>=0?`Después de pagar deudas y la renta pendiente quedan ${Lc(disponible)} libres.`:`No hay ganancia libre: lo que dejaron los meses se usó para pagar deudas de antes, y lo que queda en caja ya está comprometido para la renta. Faltan ${Lc(Math.abs(disponible))} para cubrirla.`}</div>
-      </div>);})()}
-    {tab==="resumen"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:14}}>
-      {MESES.slice(0,new Date().getMonth()+1).reverse().map(mes=>{
-        const r2=(n)=>Math.round((Number(n)||0)*100)/100;
-        const Lm=(n)=>`L ${r2(n).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-        const entradas=[["Mensualidades",ingresosMes(mes)],["Mora cobrada",moraMes(mes)],["Materiales vendidos",ingMatMes(mes)],["Graduación",ingGradMes(mes)],["Ingresos extra",otrosIngMes(mes)]];
-        const deudasM=data.gastos.filter(g=>g.tipo==="deuda"&&esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
-        const otrosG=gastosMes(mes)-salariosMes(mes)-rentaMes(mes)-deudasM;
-        const salidas=[["Salarios",salariosMes(mes)],["Renta",rentaMes(mes)],["Otros gastos",otrosG],["Pagos de deudas anteriores",deudasM],["Costo de materiales",ingMatMes(mes)-ganMatMes(mes)],["Gastos de graduación",costoGradDe(data,mes,ANIO_ACTUAL)]];
-        const ing=r2(entradas.reduce((s,x)=>s+x[1],0));const gas=r2(salidas.reduce((s,x)=>s+x[1],0));const net=r2(ing-gas);
-        const fila=(x,c)=><div key={x[0]} style={{display:"flex",justifyContent:"space-between",gap:6,opacity:r2(x[1])===0?.45:1}}><span style={{color:"#64748B"}}>{x[0]}</span><span style={{color:c,whiteSpace:"nowrap"}}>{Lm(x[1])}</span></div>;
-        return(<div key={mes} style={{...card,borderLeft:`4px solid ${net>=0?"#059669":"#DC2626"}`}}>
-          <div style={{fontSize:14,fontWeight:700,color:"#1E293B",marginBottom:8}}>{mes}</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr",gap:3,fontSize:12}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#059669",textTransform:"uppercase",letterSpacing:.4}}>Entradas</div>
-            {entradas.map(x=>fila(x,"#1E293B"))}
-            <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,borderTop:"1px solid #E2E8F0",paddingTop:3,marginBottom:6}}><span>Total entradas</span><span style={{color:"#059669"}}>{Lm(ing)}</span></div>
-            <div style={{fontSize:11,fontWeight:700,color:"#DC2626",textTransform:"uppercase",letterSpacing:.4}}>Salidas</div>
-            {salidas.map(x=>fila(x,"#1E293B"))}
-            <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,borderTop:"1px solid #E2E8F0",paddingTop:3}}><span>Total salidas</span><span style={{color:"#DC2626"}}>{Lm(gas)}</span></div>
+    {tab==="resumen"&&(()=>{
+      const Lc=(n)=>`L ${(Math.round((Number(n)||0)*100)/100).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+      const Ln=(n)=>n<0?`(${Lc(Math.abs(n))})`:Lc(n);
+      // Rentas pendientes acumuladas hasta un mes (meses ya pasados sin renta registrada)
+      const pendHasta=(mes)=>rentasPend.filter(x=>MESES.indexOf(x.mes)<=MESES.indexOf(mes));
+      const fila=(t,v,o={})=><div key={t} style={{display:"flex",justifyContent:"space-between",gap:8,opacity:o.dim?.45:1,fontWeight:o.b?800:400,color:o.c||"inherit",borderTop:o.b?"1px solid #E2E8F0":"none",paddingTop:o.b?3:0}}><span style={{color:o.c||(o.b?"#1E293B":"#64748B")}}>{t}</span><span style={{whiteSpace:"nowrap"}}>{v}</span></div>;
+      const ORD_E=["Mensualidades","Mora cobrada","Materiales vendidos","Graduación","Ingresos extra"];
+      const ORD_S=["Salarios","Renta","Otros gastos","Pagos de deudas anteriores","Costo de materiales","Gastos de graduación"];
+      const quedaHoy=cajaHoy-totRentasPend;
+      return(<div>
+        <div style={{...card,borderLeft:`4px solid ${quedaHoy>=0?"#059669":"#DC2626"}`,marginBottom:14}}>
+          <div style={{fontSize:15,fontWeight:800,color:"#1E293B",marginBottom:8}}>💵 Lo que realmente queda hoy</div>
+          <div style={{fontSize:13,maxWidth:520,display:"grid",gap:3}}>
+            {fila("Dinero en caja hoy",Lc(cajaHoy))}
+            {rentasPend.map(x=>fila(`(−) Renta de ${x.mes} por pagar`,`(${Lc(x.monto)})`,{c:"#DC2626"}))}
+            {fila(quedaHoy>=0?"= Queda libre":"= Faltante",Ln(quedaHoy),{b:true,c:quedaHoy>=0?"#059669":"#DC2626"})}
           </div>
-          <div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:net>=0?"#ECFDF5":"#FEF2F2",fontSize:12,color:net>=0?"#059669":"#DC2626",textAlign:"right"}}><div style={{fontSize:11,opacity:.8}}>{Lm(ing)} − {Lm(gas)}</div><div style={{fontWeight:700,fontSize:14}}>{net>=0?"Ganancia":"Pérdida"}: {Lm(Math.abs(net))}</div></div>
-          {(()=>{const rp=rentaPendMes(mes);if(!rp)return null;const adj=net-rp;return(<div style={{marginTop:6,padding:"6px 10px",borderRadius:6,background:"#FFF7ED",border:"1px solid #FED7AA",fontSize:12,color:"#9A3412"}}>
-            <div style={{display:"flex",justifyContent:"space-between"}}><span>(−) Renta de {mes} por pagar</span><span>({Lm(rp)})</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,marginTop:2,color:adj>=0?"#059669":"#DC2626"}}><span>{adj>=0?"Ganancia real después de renta":"Pérdida real después de renta"}</span><span>{Lm(Math.abs(adj))}</span></div>
-          </div>);})()}
-          {(()=>{const c=cajaDelMes(data,mes,ANIO_ACTUAL);if(!c.entradas&&!c.salidas)return null;return(<div style={{marginTop:8,padding:"7px 10px",borderRadius:6,background:"#F8FAFC",border:"1px solid #E2E8F0",fontSize:11.5,display:"grid",gap:2}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#0F172A",textTransform:"uppercase",letterSpacing:.4}}>Caja (dinero real)</div>
-            <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#64748B"}}>Entró en el mes</span><span>{Lm(c.entradas)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#64748B"}}>Salió en el mes</span><span>({Lm(c.salidas)})</span></div>
-            {c.atrasados>0&&<div style={{display:"flex",justifyContent:"space-between",color:"#B45309"}}><span>↳ incluye gastos de meses anteriores</span><span>{Lm(c.atrasados)}</span></div>}
-            {c.deudas>0&&<div style={{display:"flex",justifyContent:"space-between",color:"#B45309"}}><span>↳ incluye pagos de deudas</span><span>{Lm(c.deudas)}</span></div>}
-            <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,borderTop:"1px solid #E2E8F0",paddingTop:3}}><span>Saldo en caja al cierre</span><span style={{color:c.saldo>=0?"#0F172A":"#DC2626"}}>{Lm(c.saldo)}</span></div>
-          </div>);})()}
-        </div>);
-      })}
-    </div>}
+          <div style={{fontSize:11.5,color:"#475569",background:"#F8FAFC",borderRadius:6,padding:"8px 10px",marginTop:10}}>{quedaHoy>=0?`Después de la renta pendiente quedan ${Lc(quedaHoy)} libres.`:`No hay ganancia: lo que queda en caja ya es para la renta y faltan ${Lc(Math.abs(quedaHoy))}.`}{deudasAnio>0?` Este año se han pagado ${Lc(deudasAnio)} en deudas de antes.`:""}</div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:14}}>
+        {MESES.slice(0,mesHoy+1).reverse().map(mes=>{
+          const c=cajaDelMes(data,mes,ANIO_ACTUAL);const im=MESES.indexOf(mes);
+          // Lo que este mes (o anteriores) todavía debía al cierre: gastos de meses ≤ este pagados después, + rentas sin registrar
+          const NOM={salario:"Salarios",renta:"Renta",comision:"Comisión ACH"};
+          const debidos=data.gastos.filter(g=>g.tipo!=="deuda"&&g.fecha&&MESES.indexOf(mesGasto(g))>=0&&MESES.indexOf(mesGasto(g))<=im&&(anioAsignado(g.fecha,mesGasto(g),g.anio_correspondiente)??ANIO_ACTUAL)===ANIO_ACTUAL&&!hastaFinDe(g.fecha,mes,ANIO_ACTUAL));
+          const grp={};debidos.forEach(g=>{const k=`${NOM[g.tipo]||"Otros gastos"} de ${mesGasto(g)}`;grp[k]=(grp[k]||0)+(Number(g.monto)||0);});
+          const pend=[...Object.entries(grp).map(([k,v])=>({t:`(−) ${k}`,sub:"se pagó después",monto:v})),...pendHasta(mes).map(x=>({t:`(−) Renta de ${x.mes}`,sub:"todavía sin pagar",monto:x.monto}))];
+          const totPend=pend.reduce((s,x)=>s+x.monto,0);const queda=c.saldo-totPend;
+          const inicio=c.saldo-c.neto;
+          return(<div key={mes} style={{...card,borderLeft:`4px solid ${queda>=0?"#059669":"#DC2626"}`}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#1E293B",marginBottom:8}}>{mes}</div>
+            <div style={{display:"grid",gap:3,fontSize:12}}>
+              {fila("Había en caja al iniciar",Ln(inicio))}
+              <div style={{fontSize:11,fontWeight:700,color:"#059669",textTransform:"uppercase",letterSpacing:.4,marginTop:4}}>Entró en el mes</div>
+              {ORD_E.map(k=>fila(k,Lc(c.ent[k]||0),{dim:!(c.ent[k]>0)}))}
+              {fila("Total que entró",Lc(c.entradas),{b:true,c:"#059669"})}
+              <div style={{fontSize:11,fontWeight:700,color:"#DC2626",textTransform:"uppercase",letterSpacing:.4,marginTop:4}}>Salió en el mes</div>
+              {ORD_S.map(k=>fila(k,Lc(c.sal[k]||0),{dim:!(c.sal[k]>0)}))}
+              {c.atrasados>0&&<div style={{fontSize:10.5,color:"#B45309"}}>Incluye {Lc(c.atrasados)} de gastos de otros meses pagados ahora.</div>}
+              {fila("Total que salió",`(${Lc(c.salidas)})`,{b:true,c:"#DC2626"})}
+              {pend.length>0&&<div style={{fontSize:11,fontWeight:700,color:"#B45309",textTransform:"uppercase",letterSpacing:.4,marginTop:4}}>Debía al cierre del mes</div>}
+              {pend.map(x=>fila(`${x.t} · ${x.sub}`,`(${Lc(x.monto)})`,{c:"#B45309"}))}
+            </div>
+            <div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:queda>=0?"#ECFDF5":"#FEF2F2",fontSize:12,color:queda>=0?"#059669":"#DC2626",textAlign:"right"}}>
+              <div style={{fontSize:11,opacity:.8}}>{Ln(inicio)} + {Lc(c.entradas)} − {Lc(c.salidas)}{totPend?` − ${Lc(totPend)}`:""}</div>
+              <div style={{fontWeight:800,fontSize:14}}>{queda>=0?"Queda en caja al cierre":"Faltante al cierre"}: {Lc(Math.abs(queda))}</div>
+            </div>
+          </div>);
+        })}
+        </div>
+      </div>);})()}
 
     {tab==="maestros"&&<div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
