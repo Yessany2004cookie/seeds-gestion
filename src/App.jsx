@@ -2235,6 +2235,22 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const ingresoTotalMes=(mes)=>ingresosMes(mes)+moraMes(mes)+ingMatMes(mes)+ingGradMes(mes)+otrosIngMes(mes);
   // Resultado del mes: mensualidades + mora + ganancia de materiales/graduacion + ingresos extra - gastos
   const resultadoMes=(mes)=>ingresosMes(mes)+moraMes(mes)+ganMatMes(mes)+ganGradMes(mes)+otrosIngMes(mes)-gastosMes(mes);
+  // Renta pendiente: mes ya pasado, con actividad, sin renta registrada para ese mes → cuenta por pagar
+  const rentasReg=data.gastos.filter(g=>g.tipo==="renta");
+  const ultimaRentaF=[...rentasReg].sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||"")))[0];
+  const mesHoy=new Date().getMonth();
+  const rentaPendMes=(mes)=>{const i=MESES.indexOf(mes);if(i>=mesHoy||!ultimaRentaF)return 0;if(ingresoTotalMes(mes)<=0)return 0;
+    const pagada=rentasReg.some(g=>g.mes_correspondiente===mes&&(anioAsignado(g.fecha,g.mes_correspondiente,g.anio_correspondiente)??ANIO_ACTUAL)===ANIO_ACTUAL);
+    return pagada?0:Number(ultimaRentaF.monto)||0;};
+  // Conciliación: ganancia de los meses → pagos de deudas → caja → lo que falta pagar → disponible real
+  const mesesConActividad=MESES.slice(0,mesHoy+1).filter(m=>ingresoTotalMes(m)>0||gastosMes(m)>0);
+  const ganAcum=mesesConActividad.reduce((s,m)=>s+resultadoMes(m),0);
+  const deudasAnio=data.gastos.filter(g=>g.tipo==="deuda"&&(anioAsignado(g.fecha,mesDeFecha(g.fecha))??ANIO_ACTUAL)===ANIO_ACTUAL).reduce((s,g)=>s+(Number(g.monto)||0),0);
+  const cajaHoy=cajaDelMes(data,MESES[mesHoy],ANIO_ACTUAL).saldo;
+  const difFechas=Math.round((cajaHoy-(ganAcum-deudasAnio))*100)/100;
+  const rentasPend=mesesConActividad.map(m=>({mes:m,monto:rentaPendMes(m)})).filter(x=>x.monto>0);
+  const totRentasPend=rentasPend.reduce((s,x)=>s+x.monto,0);
+  const disponible=cajaHoy-totRentasPend;
   const tBtn=(a)=>({padding:"10px 18px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #F97316":"3px solid transparent",background:"transparent",color:a?"#F97316":"#64748B"});
 
   return(<div>
@@ -2244,6 +2260,21 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
       <button onClick={()=>setTab("gastos")} style={tBtn(tab==="gastos")}>📋 Todos los gastos</button>
     </div>
 
+    {tab==="resumen"&&(()=>{const Lc=(n)=>`L ${(Math.round((Number(n)||0)*100)/100).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+      const fila=(t,v,o={})=><div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"4px 0",fontWeight:o.b?800:400,borderTop:o.b?"2px solid #E2E8F0":"none",color:o.c||"#1E293B"}}><span>{t}{o.n&&<span style={{display:"block",fontSize:11,color:"#94A3B8",fontWeight:400}}>{o.n}</span>}</span><span style={{whiteSpace:"nowrap"}}>{v}</span></div>;
+      return(<div style={{...card,borderLeft:`4px solid ${disponible>=0?"#059669":"#DC2626"}`,marginBottom:14}}>
+        <div style={{fontSize:15,fontWeight:800,color:"#1E293B",marginBottom:2}}>💡 ¿Dónde está la ganancia?</div>
+        <div style={{fontSize:12,color:"#64748B",marginBottom:10}}>De {mesesConActividad[0]||"—"} a {MESES[mesHoy]} {ANIO_ACTUAL}: lo que ganaron los meses, a dónde se fue y cuánto queda libre de verdad.</div>
+        <div style={{fontSize:13,maxWidth:560}}>
+          {fila("Ganancia sumada de los meses",Lc(ganAcum),{n:"lo que dejó cada mes después de sus propios gastos"})}
+          {fila("(−) Pagos de deudas de antes",`(${Lc(deudasAnio)})`,{n:"rentas de mayo y junio, deudas anteriores, abonos",c:"#B45309"})}
+          {Math.abs(difFechas)>=0.01&&fila("(±) Diferencias por fechas de pago",difFechas>=0?Lc(difFechas):`(${Lc(Math.abs(difFechas))})`,{n:"cobros o pagos registrados con fecha de otro mes"})}
+          {fila("= Dinero en caja hoy",Lc(cajaHoy),{b:true})}
+          {rentasPend.map(x=>fila(`(−) Renta de ${x.mes} por pagar`,`(${Lc(x.monto)})`,{c:"#DC2626",n:"ya se usó: está reservada para esta renta"}))}
+          {fila(disponible>=0?"= Ganancia libre (disponible real)":"= Faltante",disponible>=0?Lc(disponible):`(${Lc(Math.abs(disponible))})`,{b:true,c:disponible>=0?"#059669":"#DC2626"})}
+        </div>
+        <div style={{fontSize:11.5,color:"#475569",background:"#F8FAFC",borderRadius:6,padding:"8px 10px",marginTop:10}}>{disponible>=0?`Después de pagar deudas y la renta pendiente quedan ${Lc(disponible)} libres.`:`No hay ganancia libre: la ganancia de los meses se usó para pagar deudas de antes, y lo que queda en caja ya está comprometido para la renta. Faltan ${Lc(Math.abs(disponible))} para cubrirla.`}</div>
+      </div>);})()}
     {tab==="resumen"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:14}}>
       {MESES.slice(0,new Date().getMonth()+1).reverse().map(mes=>{
         const r2=(n)=>Math.round((Number(n)||0)*100)/100;
@@ -2264,6 +2295,10 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
             <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,borderTop:"1px solid #E2E8F0",paddingTop:3}}><span>Total salidas</span><span style={{color:"#DC2626"}}>{Lm(gas)}</span></div>
           </div>
           <div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:net>=0?"#ECFDF5":"#FEF2F2",fontSize:12,color:net>=0?"#059669":"#DC2626",textAlign:"right"}}><div style={{fontSize:11,opacity:.8}}>{Lm(ing)} − {Lm(gas)}</div><div style={{fontWeight:700,fontSize:14}}>{net>=0?"Ganancia":"Pérdida"}: {Lm(Math.abs(net))}</div></div>
+          {(()=>{const rp=rentaPendMes(mes);if(!rp)return null;const adj=net-rp;return(<div style={{marginTop:6,padding:"6px 10px",borderRadius:6,background:"#FFF7ED",border:"1px solid #FED7AA",fontSize:12,color:"#9A3412"}}>
+            <div style={{display:"flex",justifyContent:"space-between"}}><span>(−) Renta de {mes} por pagar</span><span>({Lm(rp)})</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,marginTop:2,color:adj>=0?"#059669":"#DC2626"}}><span>{adj>=0?"Ganancia real después de renta":"Pérdida real después de renta"}</span><span>{Lm(Math.abs(adj))}</span></div>
+          </div>);})()}
           {(()=>{const c=cajaDelMes(data,mes,ANIO_ACTUAL);if(!c.entradas&&!c.salidas)return null;return(<div style={{marginTop:8,padding:"7px 10px",borderRadius:6,background:"#F8FAFC",border:"1px solid #E2E8F0",fontSize:11.5,display:"grid",gap:2}}>
             <div style={{fontSize:11,fontWeight:700,color:"#0F172A",textTransform:"uppercase",letterSpacing:.4}}>Caja (dinero real)</div>
             <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#64748B"}}>Entró en el mes</span><span>{Lm(c.entradas)}</span></div>
