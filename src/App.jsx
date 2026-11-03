@@ -972,8 +972,10 @@ function Dashboard({data,setPage,loadData,showToast}){
   const ingOtros=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,ANIO_ACTUAL)).reduce((s,i)=>s+(Number(i.monto)||0),0);
   const ing=ingMens+ingMora+ingMat+ingGrad+ingOtros;
   const gastos=data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
-  const ganancia=ingMens+ingMora+ganMat+ganGrad+ingOtros-gastos;
-  const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString()}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastos.toLocaleString()}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString()}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
+  // Salidas totales = gastos + costo de materiales + gastos de graduación (así Ingresos − Gastos = Ganancia)
+  const gastosTot=gastos+(ingMat-ganMat)+(ingGrad-ganGrad);
+  const ganancia=ing-gastosTot;
+  const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastosTot.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
   return(<div>
     <AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
@@ -2214,21 +2216,24 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
 
     {tab==="resumen"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:14}}>
       {MESES.slice(0,new Date().getMonth()+1).reverse().map(mes=>{
-        const ing=ingresoTotalMes(mes);const gas=gastosMes(mes);const net=resultadoMes(mes);
+        const r2=(n)=>Math.round((Number(n)||0)*100)/100;
+        const Lm=(n)=>`L ${r2(n).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+        const entradas=[["Mensualidades",ingresosMes(mes)],["Mora cobrada",moraMes(mes)],["Materiales vendidos",ingMatMes(mes)],["Graduación",ingGradMes(mes)],["Ingresos extra",otrosIngMes(mes)]];
+        const otrosG=gastosMes(mes)-salariosMes(mes)-rentaMes(mes);
+        const salidas=[["Salarios",salariosMes(mes)],["Renta",rentaMes(mes)],["Otros gastos",otrosG],["Costo de materiales",ingMatMes(mes)-ganMatMes(mes)],["Gastos de graduación",costoGradDe(data,mes,ANIO_ACTUAL)]];
+        const ing=r2(entradas.reduce((s,x)=>s+x[1],0));const gas=r2(salidas.reduce((s,x)=>s+x[1],0));const net=r2(ing-gas);
+        const fila=(x,c)=><div key={x[0]} style={{display:"flex",justifyContent:"space-between",gap:6,opacity:r2(x[1])===0?.45:1}}><span style={{color:"#64748B"}}>{x[0]}</span><span style={{color:c,whiteSpace:"nowrap"}}>{Lm(x[1])}</span></div>;
         return(<div key={mes} style={{...card,borderLeft:`4px solid ${net>=0?"#059669":"#DC2626"}`}}>
           <div style={{fontSize:14,fontWeight:700,color:"#1E293B",marginBottom:8}}>{mes}</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,fontSize:12}}>
-            <div><span style={{color:"#64748B"}}>Ingresos:</span> <strong style={{color:"#059669"}}>L {ing.toLocaleString()}</strong></div>
-            <div><span style={{color:"#64748B"}}>Gastos:</span> <strong style={{color:"#DC2626"}}>L {gas.toLocaleString()}</strong></div>
-            <div><span style={{color:"#64748B"}}>Mensualidades:</span> L {ingresosMes(mes).toLocaleString()}</div>
-            <div><span style={{color:"#64748B"}}>Materiales:</span> L {ingMatMes(mes).toLocaleString()}</div>
-            <div><span style={{color:"#64748B"}}>Graduación:</span> L {ingGradMes(mes).toLocaleString()}</div>
-            {moraMes(mes)>0&&<div><span style={{color:"#64748B"}}>Mora cobrada:</span> L {moraMes(mes).toLocaleString()}</div>}
-            <div><span style={{color:"#64748B"}}>Ingresos extra:</span> L {otrosIngMes(mes).toLocaleString()}</div>
-            <div><span style={{color:"#64748B"}}>Salarios:</span> L {salariosMes(mes).toLocaleString()}</div>
-            <div><span style={{color:"#64748B"}}>Renta:</span> L {rentaMes(mes).toLocaleString()}</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr",gap:3,fontSize:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#059669",textTransform:"uppercase",letterSpacing:.4}}>Entradas</div>
+            {entradas.map(x=>fila(x,"#1E293B"))}
+            <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,borderTop:"1px solid #E2E8F0",paddingTop:3,marginBottom:6}}><span>Total entradas</span><span style={{color:"#059669"}}>{Lm(ing)}</span></div>
+            <div style={{fontSize:11,fontWeight:700,color:"#DC2626",textTransform:"uppercase",letterSpacing:.4}}>Salidas</div>
+            {salidas.map(x=>fila(x,"#1E293B"))}
+            <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,borderTop:"1px solid #E2E8F0",paddingTop:3}}><span>Total salidas</span><span style={{color:"#DC2626"}}>{Lm(gas)}</span></div>
           </div>
-          <div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:net>=0?"#ECFDF5":"#FEF2F2",fontWeight:700,fontSize:14,color:net>=0?"#059669":"#DC2626",textAlign:"right"}}>{net>=0?"Ganancia":"Pérdida"}: L {Math.abs(net).toLocaleString()}</div>
+          <div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:net>=0?"#ECFDF5":"#FEF2F2",fontSize:12,color:net>=0?"#059669":"#DC2626",textAlign:"right"}}><div style={{fontSize:11,opacity:.8}}>{Lm(ing)} − {Lm(gas)}</div><div style={{fontWeight:700,fontSize:14}}>{net>=0?"Ganancia":"Pérdida"}: {Lm(Math.abs(net))}</div></div>
         </div>);
       })}
     </div>}
