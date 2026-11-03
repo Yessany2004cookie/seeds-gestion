@@ -43,7 +43,7 @@ const anioAsignado = (fecha, mes, respaldo) => {
 const ANIO_ACTUAL = new Date().getFullYear();
 // ¿El ingreso / gasto cuenta en ese mes y año? (sin fecha ni año guardado, cuenta)
 const esIngresoDe = (r, mes, anio) => mesIngreso(r) === mes && (anioAsignado(r.fecha_pago || r.fecha_venta || r.fecha_emision, mesIngreso(r), r.anio_correspondiente) ?? anio) === anio;
-const esGastoDe = (g, mes, anio) => mesGasto(g) === mes && (anioAsignado(g.fecha, mesGasto(g), g.anio_correspondiente) ?? anio) === anio;
+const esGastoDe = (g, mes, anio) => g.tipo !== "deuda" && mesGasto(g) === mes && (anioAsignado(g.fecha, mesGasto(g), g.anio_correspondiente) ?? anio) === anio;
 // --- Graduación con abonos parciales ---
 // ¿Un cobro de graduación cuenta como ingreso? Si está pagado o abonado (parcial).
 const gradCuenta = (v) => v.estado === "pagado" || v.estado === "abonado";
@@ -60,6 +60,35 @@ const gradGananciaReal = (v) => {
   if (pv <= 0) return Number(v.ganancia) || 0;
   const recibido = gradRecibido(v);
   return (Number(v.ganancia) || 0) * (recibido / pv);
+};
+// ── Flujo de caja: el dinero que realmente entró y salió, por la FECHA de pago ──
+const enMesFecha = (fecha, mes, anio) => { const [y, m] = String(fecha || "").split("-").map(Number); return y === anio && MESES[(m || 0) - 1] === mes; };
+const hastaFinDe = (fecha, mes, anio) => { const [y, m] = String(fecha || "").split("-").map(Number); if (!y) return false; const mi = MESES.indexOf(mes) + 1; return y < anio || (y === anio && m <= mi); };
+const movimientosCaja = (data) => {
+  const L = [];
+  (data.facturas || []).filter(f => f.tipo_factura === "comprobante" && f.fecha_pago).forEach(f => L.push({ f: f.fecha_pago, k: "entrada", v: (Number(f.monto_total) || 0) + (Number(f.mora_cobrada) || 0) }));
+  (data.ventas_material || []).filter(v => v.estado === "pagado" && v.fecha_pago).forEach(v => { L.push({ f: v.fecha_pago, k: "entrada", v: Number(v.precio_venta) || 0 }); L.push({ f: v.fecha_pago, k: "material", v: Number(v.costo) || 0 }); });
+  (data.cobros_graduacion || []).filter(v => gradCuenta(v) && v.fecha_pago).forEach(v => L.push({ f: v.fecha_pago, k: "entrada", v: gradRecibido(v) }));
+  (data.otros_ingresos || []).forEach(i => L.push({ f: i.fecha_pago || i.fecha, k: "entrada", v: Number(i.monto) || 0 }));
+  (data.gastos || []).forEach(g => L.push({ f: g.fecha, k: g.tipo === "deuda" ? "deuda" : "gasto", g, v: Number(g.monto) || 0 }));
+  (data.gastos_graduacion || []).forEach(g => L.push({ f: g.fecha, k: "graduacion", v: Number(g.monto) || 0 }));
+  return L;
+};
+const cajaDelMes = (data, mes, anio) => {
+  const L = movimientosCaja(data); const r = { entradas: 0, gastosMes: 0, atrasados: 0, deudas: 0, material: 0, graduacion: 0, saldo: 0, detAtrasados: [], detDeudas: [] };
+  L.forEach(x => {
+    const sig = x.k === "entrada" ? 1 : -1;
+    if (hastaFinDe(x.f, mes, anio)) r.saldo += sig * x.v;
+    if (!enMesFecha(x.f, mes, anio)) return;
+    if (x.k === "entrada") r.entradas += x.v;
+    else if (x.k === "deuda") { r.deudas += x.v; r.detDeudas.push(x.g); }
+    else if (x.k === "material") r.material += x.v;
+    else if (x.k === "graduacion") r.graduacion += x.v;
+    else if (mesGasto(x.g) === mes) r.gastosMes += x.v;
+    else { r.atrasados += x.v; r.detAtrasados.push(x.g); }
+  });
+  r.salidas = r.gastosMes + r.atrasados + r.deudas + r.material + r.graduacion; r.neto = r.entradas - r.salidas;
+  return r;
 };
 // Costo REAL de graduación de un mes: los gastos del evento registrados con fecha en ese mes
 const gastosGradDe = (data, mes, anio) => (data.gastos_graduacion || []).filter(g => esGastoDe(g, mes, anio));
@@ -2127,14 +2156,15 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const mesActual=MESES[new Date().getMonth()];
   const achMonto=achDeSucursal(data.sucursales,sucursalActiva);
 
-  const openGasto=(tipo="salario")=>{setForm({tipo,maestro_id:"",descripcion:tipo==="renta"?"Renta del local":"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:mesActual,mes_deduccion:mesActual,ach:false});setModal("gasto");};
+  const openGasto=(tipo="salario")=>{setForm({tipo,maestro_id:"",descripcion:tipo==="renta"?"Renta del local":tipo==="deuda"?"Pago de deuda":"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:mesActual,mes_deduccion:mesActual,ach:false});setModal("gasto");};
   const selMaestro=(mid)=>{const m=data.maestros.find(x=>x.id===mid);setForm({...form,maestro_id:mid,monto:String(m?.salario||""),descripcion:`Salario ${m?.nombre||""}`});};
 
   const saveGasto=async()=>{
     if(!form.monto||parseFloat(form.monto)<=0){showToast("Ingresa el monto","error");return;}
     if(form.tipo==="salario"&&!form.maestro_id){showToast("Selecciona un maestro","error");return;}
     try{
-      const gasto={id:uid(),tipo:form.tipo,maestro_id:form.maestro_id||null,descripcion:form.descripcion,monto:parseFloat(form.monto),fecha:form.fecha,mes_correspondiente:form.mes_correspondiente,mes_deduccion:form.mes_deduccion||form.mes_correspondiente,sucursal_id:sucursalActiva};
+      const mesDeuda=mesDeFecha(form.fecha)||form.mes_correspondiente;
+      const gasto={id:uid(),tipo:form.tipo,maestro_id:form.maestro_id||null,descripcion:form.descripcion,monto:parseFloat(form.monto),fecha:form.fecha,mes_correspondiente:form.tipo==="deuda"?mesDeuda:form.mes_correspondiente,mes_deduccion:form.tipo==="deuda"?mesDeuda:(form.mes_deduccion||form.mes_correspondiente),sucursal_id:sucursalActiva};
       const aInsertar=[gasto];
       // Comisión ACH: si pagó por transferencia, se suma como gasto aparte
       if(form.ach && achMonto>0){
@@ -2234,6 +2264,14 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
             <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,borderTop:"1px solid #E2E8F0",paddingTop:3}}><span>Total salidas</span><span style={{color:"#DC2626"}}>{Lm(gas)}</span></div>
           </div>
           <div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:net>=0?"#ECFDF5":"#FEF2F2",fontSize:12,color:net>=0?"#059669":"#DC2626",textAlign:"right"}}><div style={{fontSize:11,opacity:.8}}>{Lm(ing)} − {Lm(gas)}</div><div style={{fontWeight:700,fontSize:14}}>{net>=0?"Ganancia":"Pérdida"}: {Lm(Math.abs(net))}</div></div>
+          {(()=>{const c=cajaDelMes(data,mes,ANIO_ACTUAL);if(!c.entradas&&!c.salidas)return null;return(<div style={{marginTop:8,padding:"7px 10px",borderRadius:6,background:"#F8FAFC",border:"1px solid #E2E8F0",fontSize:11.5,display:"grid",gap:2}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#0F172A",textTransform:"uppercase",letterSpacing:.4}}>Caja (dinero real)</div>
+            <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#64748B"}}>Entró en el mes</span><span>{Lm(c.entradas)}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#64748B"}}>Salió en el mes</span><span>({Lm(c.salidas)})</span></div>
+            {c.atrasados>0&&<div style={{display:"flex",justifyContent:"space-between",color:"#B45309"}}><span>↳ incluye gastos de meses anteriores</span><span>{Lm(c.atrasados)}</span></div>}
+            {c.deudas>0&&<div style={{display:"flex",justifyContent:"space-between",color:"#B45309"}}><span>↳ incluye pagos de deudas</span><span>{Lm(c.deudas)}</span></div>}
+            <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,borderTop:"1px solid #E2E8F0",paddingTop:3}}><span>Saldo en caja al cierre</span><span style={{color:c.saldo>=0?"#0F172A":"#DC2626"}}>{Lm(c.saldo)}</span></div>
+          </div>);})()}
         </div>);
       })}
     </div>}
@@ -2269,20 +2307,22 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>openGasto("renta")} style={btn("#7C3AED")}><Plus size={15}/>Renta</button>
           <button onClick={()=>openGasto("otro")} style={btn("#64748B")}><Plus size={15}/>Otro gasto</button>
+          <button onClick={()=>openGasto("deuda")} style={btn("#B45309")}><Plus size={15}/>Pago de deuda</button>
         </div>
       </div>
-      <div style={card}>{data.gastos.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay gastos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Tipo","Descripción","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{[...data.gastos].reverse().map(g=>{const tc={salario:"#059669",renta:"#7C3AED",otro:"#64748B",comision:"#0891B2"};const tl={salario:"Salario",renta:"Renta",otro:"Otro",comision:"ACH"};return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px"}}>{g.fecha}</td><td style={{padding:"6px 8px"}}><span style={badge(tc[g.tipo]||"#64748B")}>{tl[g.tipo]||g.tipo}</span></td><td style={{padding:"6px 8px"}}>{g.descripcion}</td><td style={{padding:"6px 8px"}}>{mesGasto(g)||g.mes_correspondiente}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td><td style={{padding:"6px 8px"}}><button onClick={()=>eliminarGasto(g.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td></tr>);})}</tbody></table></div>)}</div>
+      <div style={card}>{data.gastos.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay gastos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Tipo","Descripción","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{[...data.gastos].reverse().map(g=>{const tc={salario:"#059669",renta:"#7C3AED",otro:"#64748B",comision:"#0891B2",deuda:"#B45309"};const tl={salario:"Salario",renta:"Renta",otro:"Otro",comision:"ACH",deuda:"Pago de deuda"};return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px"}}>{g.fecha}</td><td style={{padding:"6px 8px"}}><span style={badge(tc[g.tipo]||"#64748B")}>{tl[g.tipo]||g.tipo}</span></td><td style={{padding:"6px 8px"}}>{g.descripcion}</td><td style={{padding:"6px 8px"}}>{mesGasto(g)||g.mes_correspondiente}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td><td style={{padding:"6px 8px"}}><button onClick={()=>eliminarGasto(g.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td></tr>);})}</tbody></table></div>)}</div>
     </div>}
 
-    {modal==="gasto"&&<Modal title={form.tipo==="salario"?"💰 Pagar maestro":form.tipo==="renta"?"🏠 Registrar renta":"📋 Registrar gasto"} onClose={()=>setModal(null)} onSave={saveGasto}>
+    {modal==="gasto"&&<Modal title={form.tipo==="salario"?"💰 Pagar maestro":form.tipo==="renta"?"🏠 Registrar renta":form.tipo==="deuda"?"💳 Pago de deuda anterior":"📋 Registrar gasto"} onClose={()=>setModal(null)} onSave={saveGasto}>
       {form.tipo==="salario"&&<div style={{marginBottom:12}}><label style={label}>Maestro *</label><select value={form.maestro_id} onChange={e=>selMaestro(e.target.value)} style={{...input,cursor:"pointer"}}><option value="">Seleccionar</option>{data.maestros.map(m=><option key={m.id} value={m.id}>{m.nombre} — L {Number(m.salario||0).toLocaleString()}</option>)}</select></div>}
       {form.maestro_id&&form.tipo==="salario"&&(()=>{const m=data.maestros.find(x=>x.id===form.maestro_id);const pagos=data.gastos.filter(g=>g.tipo==="salario"&&g.maestro_id===m?.id).map(g=>g.mes_correspondiente);return(<div style={{background:"#F0FDF4",borderRadius:8,padding:10,marginBottom:12,fontSize:12,border:"1px solid #BBF7D0"}}><strong>{m?.nombre}</strong> — L {Number(m?.salario).toLocaleString()}<br/>Meses pagados: {pagos.length>0?pagos.join(", "):"Ninguno"}</div>);})()}
       <Field label="Descripción" value={form.descripcion} onChange={v=>setForm({...form,descripcion:v})}/>
       <Field label="Monto (L)" value={form.monto} onChange={v=>setForm({...form,monto:v})} type="number"/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      {form.tipo==="deuda"&&<div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:8,padding:10,fontSize:12,color:"#92400E",marginBottom:12}}>Un pago de deuda <strong>no es gasto del mes</strong>: no baja la ganancia (ese gasto ya se contó cuando se generó la deuda). Solo sale de la caja en la fecha de pago. Si es la renta, luz o salario de un mes anterior que no se registró, regístralo mejor como Renta / Otro gasto con su mes.</div>}
+      {form.tipo!=="deuda"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <div style={{marginBottom:12}}><label style={label}>Mes que corresponde</label><select value={form.mes_correspondiente} onChange={e=>setForm({...form,mes_correspondiente:e.target.value,mes_deduccion:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select><div style={{fontSize:10,color:"#94A3B8",marginTop:2}}>A qué mes pertenece (ej: renta de septiembre)</div></div>
         <div style={{marginBottom:12}}><label style={label}>Mes al que se resta</label><select value={form.mes_deduccion} onChange={e=>setForm({...form,mes_deduccion:e.target.value})} style={{...input,cursor:"pointer",borderColor:"#7C3AED"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select><div style={{fontSize:10,color:form.mes_deduccion!==form.mes_correspondiente?"#DC2626":"#7C3AED",marginTop:2}}>{form.mes_deduccion!==form.mes_correspondiente?`Ojo: se restará de ${form.mes_deduccion}, no de ${form.mes_correspondiente}. Lo normal es el mismo mes aunque se pague después.`:"Se resta del mismo mes al que corresponde, aunque lo pagues después"}</div></div>
-      </div>
+      </div>}
       <div style={{marginBottom:12}}><label style={label}>Fecha</label><input type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} style={input}/></div>
       {/* Comisión ACH por transferencia */}
       <div onClick={()=>setForm({...form,ach:!form.ach})} style={{marginBottom:4,padding:"10px 12px",borderRadius:8,cursor:"pointer",border:form.ach?"2px solid #0891B2":"1px solid #D1D5DB",background:form.ach?"#ECFEFF":"#fff",display:"flex",alignItems:"center",gap:10}}>
@@ -3535,6 +3575,7 @@ function ReportesPage({data,showToast}){
   const gradEvGan=gradEvCobrado-gradEvGastos;
   const gradEvPend=data.cobros_graduacion.filter(v=>v.estado==="pendiente"||v.estado==="abonado").reduce((s,v)=>s+((Number(v.precio_venta)||0)-gradRecibido(v)),0);
   const gradResMes=ingGraduacion-costoGraduacion;
+  const cajaRep=cajaDelMes(data,mesSel,anioSel);
   // Ingresos extra / justificados: 100% ganancia, sin costo asociado
   const otrosIngArr=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mesSel,anioSel));
   const ingExtra=otrosIngArr.reduce((s,i)=>s+Number(i.monto||0),0);
@@ -3679,6 +3720,21 @@ function ReportesPage({data,showToast}){
         ${totPorPagar>0?`<tr class="sub"><td>Utilidad ajustada (si se paga lo pendiente)</td><td></td><td class="num">${resultado-totPorPagar>=0?M(resultado-totPorPagar):Mneg(Math.abs(resultado-totPorPagar))}</td><td class="pct">${P(resultado-totPorPagar)}</td></tr>`:""}
       </tbody>
     </table>
+
+    <h3 class="tit">Flujo de caja del mes <span class="nota">(dinero que realmente entró y salió, por fecha de pago)</span></h3>
+    <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
+      <tbody>
+        <tr class="cta"><td>Saldo en caja al inicio del mes</td><td></td><td class="num">${cajaRep.saldo-cajaRep.neto>=0?M(cajaRep.saldo-cajaRep.neto):Mneg(Math.abs(cajaRep.saldo-cajaRep.neto))}</td><td></td></tr>
+        <tr class="cta"><td>(+) Dinero que entró en el mes</td><td></td><td class="num">${M(cajaRep.entradas)}</td><td></td></tr>
+        <tr class="cta"><td>(−) Gastos del mes pagados en el mes</td><td></td><td class="num">${Mneg(cajaRep.gastosMes+cajaRep.material+cajaRep.graduacion)}</td><td></td></tr>
+        <tr class="cta"><td>(−) Gastos de meses anteriores pagados ahora<span class="nota">Cuentas por pagar que se cancelaron este mes. No bajan la ganancia de este mes: ya se restaron en su mes.</span></td><td></td><td class="num">${Mneg(cajaRep.atrasados)}</td><td></td></tr>
+        ${cajaRep.detAtrasados.map(g=>`<tr class="det"><td>${esc(g.descripcion||"Gasto")}<span class="nota">gasto de ${esc(mesGasto(g)||"—")} · pagado el ${fechaCorta(g.fecha)}</span></td><td class="num">${Mneg(g.monto)}</td><td></td><td></td></tr>`).join("")}
+        <tr class="cta"><td>(−) Pagos de deudas anteriores<span class="nota">No son gasto del mes: reducen una deuda que ya existía.</span></td><td></td><td class="num">${Mneg(cajaRep.deudas)}</td><td></td></tr>
+        ${cajaRep.detDeudas.map(g=>`<tr class="det"><td>${esc(g.descripcion||"Pago de deuda")}<span class="nota">pagado el ${fechaCorta(g.fecha)}</span></td><td class="num">${Mneg(g.monto)}</td><td></td><td></td></tr>`).join("")}
+        ${fTotal("Saldo en caja al cierre del mes",Math.abs(cajaRep.saldo),"tot",cajaRep.saldo<0)}
+      </tbody>
+    </table>
+    <p class="pie">La utilidad del mes y el dinero en caja no son iguales: la utilidad resta cada gasto en el mes al que pertenece; la caja muestra cuándo salió el dinero (pagos atrasados, deudas). Las cuentas por pagar pendientes aparecen en la sección IV.</p>
 
     ${(ingGraduacion>0||costoGraduacion>0)?`<h3 class="tit">Nota sobre el evento de graduación</h3>
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
