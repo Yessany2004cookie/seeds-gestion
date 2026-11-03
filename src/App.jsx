@@ -3024,15 +3024,31 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 
   // Reporte PDF de gastos del evento (saldo disponible / gastado / restante + detalle)
   const reporteGastosPDF=()=>{
-    const L=(n)=>`L ${Number(n||0).toLocaleString()}`;
+    const L=(n)=>`L ${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
     const esc=(t)=>String(t??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
+    // Resumen por mes: lo cobrado (mes en que entró) vs lo gastado (mes del evento al que corresponde)
+    const porMes={};
+    gradGlobal.forEach(v=>{const k=mesIngreso(v)||"Sin mes";(porMes[k]=porMes[k]||{c:0,g:0}).c+=gradRecibido(v);});
+    gastosEvento.forEach(g=>{const k=mesGasto(g)||"Sin mes";(porMes[k]=porMes[k]||{c:0,g:0}).g+=Number(g.monto)||0;});
+    const mesesRes=[...MESES,"Sin mes"].filter(m=>porMes[m]).map(m=>({mes:m,...porMes[m],r:porMes[m].c-porMes[m].g}));
+    const pendEvento=data.cobros_graduacion.filter(v=>v.estado==="pendiente"||v.estado==="abonado").reduce((s,v)=>s+((Number(v.precio_venta)||0)-gradRecibido(v)),0);
+    const filasMes=mesesRes.map(x=>`<tr><td>${esc(x.mes)}</td><td class="r">${L(x.c)}</td><td class="r">${x.g?`(${L(x.g)})`:"—"}</td><td class="r" style="font-weight:700;color:${x.r>=0?"#065F46":"#991B1B"}">${x.r>=0?L(x.r):`(${L(Math.abs(x.r))})`}</td></tr>`).join("");
+    const conCobro=mesesRes.filter(x=>x.r>0).map(x=>x.mes), enContra=mesesRes.filter(x=>x.r<0);
+    const lista=(arr)=>arr.length<=1?arr.join(""):arr.slice(0,-1).join(", ")+" y "+arr[arr.length-1];
+    const explicacion=[
+      `Los ingresos de graduación se registran en el mes en que se cobraron y los gastos en el mes del evento al que corresponden.`,
+      ...enContra.map(x=>`En ${esc(x.mes)} los gastos del evento (${L(x.g)}) superaron lo cobrado de graduación en ese mes (${L(x.c)}) por ${L(Math.abs(x.r))}. Esa diferencia se cubrió con otros ingresos de la escuela (mensualidades) de ese mes.`),
+      enContra.length&&conCobro.length?`No representa una pérdida del evento: la mayor parte de la graduación se cobró en ${esc(lista(conCobro))}, donde aparece como ingreso sin costo, y ese dinero se utilizó en esos meses.`:"",
+      `Resultado del evento: se cobró ${L(dispEvento)} y se gastó ${L(gastadoEvento)}, con una ${restanteEvento>=0?"ganancia":"pérdida"} real de ${L(Math.abs(restanteEvento))}.`,
+      pendEvento>0?`Quedan ${L(pendEvento)} pendientes de cobro de graduación. Como los gastos del evento ya están pagados, lo que se cobre se registra como ingreso del mes en que se reciba${enContra.length?" y compensa lo que se cubrió con mensualidades":""}.`:""
+    ].filter(Boolean).map(t=>`<p>${t}</p>`).join("");
     const sucNombre=data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||"";
     const filas=[...gastosEvento].sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||""))).map(g=>{
       const sec=g.seccion_id?data.secciones.find(s=>s.id===g.seccion_id):null;
-      return `<tr><td>${g.fecha||"—"}</td><td>${esc(g.descripcion||"—")}${sec?` <span style="color:#7C3AED;font-size:11px">· ${esc(sec.nombre)}</span>`:""}</td><td>${esc(g.comentario||"—")}</td><td style="text-align:right;white-space:nowrap">${L(g.monto)}</td></tr>`;
+      return `<tr><td>${g.fecha||"—"}</td><td>${esc(mesGasto(g)||"—")}</td><td>${esc(g.descripcion||"—")}${sec?` <span style="color:#7C3AED;font-size:11px">· ${esc(sec.nombre)}</span>`:""}</td><td>${esc(g.comentario||"—")}</td><td style="text-align:right;white-space:nowrap">${L(g.monto)}</td></tr>`;
     }).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte de gastos — Graduación</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte del evento — Graduación</title>
       <style>
         @page { size: letter portrait; margin: 15mm; }
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
@@ -3049,6 +3065,9 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
         th.r,td.r{text-align:right}
         td{padding:7px 10px;border-bottom:1px solid #F1F5F9;vertical-align:top}
         tfoot td{font-weight:800;border-top:2px solid #E2E8F0;padding-top:10px}
+        h2{font-size:14px;color:#5B21B6;margin:20px 0 8px}
+        .nota{background:#F8FAFC;border-left:3px solid #7C3AED;border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.55;color:#334155}
+        .nota p+p{margin-top:6px}
         .foot{margin-top:26px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #eee;padding-top:12px}
       </style></head><body>
       <div class="head">
@@ -3056,21 +3075,29 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
         <div>
           <h1>Seeds English School</h1>
           <p>Jesús de Otoro, Intibucá, Honduras</p>
-          <p style="margin-top:8px;font-size:16px;font-weight:700;color:#1E293B">Reporte de gastos — Graduación${sucNombre?` · ${esc(sucNombre)}`:""}</p>
+          <p style="margin-top:8px;font-size:16px;font-weight:700;color:#1E293B">Reporte del evento de graduación${sucNombre?` · ${esc(sucNombre)}`:""}</p>
           <p>Generado el ${hoy}</p>
         </div>
       </div>
       <div class="tot">
         <div class="box" style="background:#EDE9FE;color:#5B21B6"><div class="l">Total cobrado de graduación</div><div class="v">${L(dispEvento)}</div></div>
-        <div class="box" style="background:#FEF2F2;color:#991B1B"><div class="l">Saldo gastado</div><div class="v">${L(gastadoEvento)}</div></div>
-        <div class="box" style="background:${restanteEvento>=0?"#ECFDF5":"#FEF2F2"};color:${restanteEvento>=0?"#065F46":"#991B1B"}"><div class="l">Saldo restante</div><div class="v">${L(restanteEvento)}</div></div>
+        <div class="box" style="background:#FEF2F2;color:#991B1B"><div class="l">Total gastado en el evento</div><div class="v">${L(gastadoEvento)}</div></div>
+        <div class="box" style="background:${restanteEvento>=0?"#ECFDF5":"#FEF2F2"};color:${restanteEvento>=0?"#065F46":"#991B1B"}"><div class="l">${restanteEvento>=0?"Ganancia real del evento":"Pérdida del evento"}</div><div class="v">${L(Math.abs(restanteEvento))}</div></div>
       </div>
+      <h2>Resumen por mes</h2>
       <table>
-        <thead><tr><th>Fecha</th><th>En qué se gastó</th><th>Dónde / cómo se compró</th><th class="r">Monto</th></tr></thead>
-        <tbody>${filas||`<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:18px">Aún no hay gastos registrados</td></tr>`}</tbody>
-        <tfoot><tr><td colspan="3">Total gastado</td><td class="r">${L(gastadoEvento)}</td></tr></tfoot>
+        <thead><tr><th>Mes</th><th class="r">Cobrado de graduación</th><th class="r">Gastos del evento</th><th class="r">Resultado del mes</th></tr></thead>
+        <tbody>${filasMes}</tbody>
+        <tfoot><tr><td>Total del evento</td><td class="r">${L(dispEvento)}</td><td class="r">(${L(gastadoEvento)})</td><td class="r">${restanteEvento>=0?L(restanteEvento):`(${L(Math.abs(restanteEvento))})`}</td></tr></tfoot>
       </table>
-      ${restanteEvento<0?`<p style="font-size:11px;color:#DC2626;margin-top:10px">* Los gastos superan lo cobrado de graduación por ${L(Math.abs(restanteEvento))}.</p>`:""}
+      <h2>Explicación</h2>
+      <div class="nota">${explicacion}</div>
+      <h2>Detalle de gastos del evento</h2>
+      <table>
+        <thead><tr><th>Fecha de pago</th><th>Mes del evento</th><th>En qué se gastó</th><th>Dónde / cómo se compró</th><th class="r">Monto</th></tr></thead>
+        <tbody>${filas||`<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:18px">Aún no hay gastos registrados</td></tr>`}</tbody>
+        <tfoot><tr><td colspan="4">Total gastado</td><td class="r">${L(gastadoEvento)}</td></tr></tfoot>
+      </table>
       <div class="foot">Seeds English School — Área Administrativa</div>
       </body></html>`;
     const w=window.open("","_blank");
