@@ -578,7 +578,7 @@ export default function App() {
   }, []);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[], otros_ingresos:[], gastos_graduacion:[] });
+  const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[], otros_ingresos:[], gastos_graduacion:[], deudas:[] });
   const [sucursalActiva, setSucursalActiva] = useState(null); // id de la sucursal seleccionada
   const [toast, setToast] = useState(null);
   // Rol del usuario: "cargando" | "admin" | "docente" | "sin_acceso"
@@ -610,7 +610,9 @@ export default function App() {
       try{ otros_ingresos=await db.all("otros_ingresos"); }catch(x){ otros_ingresos=[]; }
       let gastos_graduacion=[];
       try{ gastos_graduacion=await db.all("gastos_graduacion"); }catch(x){ gastos_graduacion=[]; }
-      setData({sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material,conceptos_graduacion,cobros_graduacion,otros_ingresos,gastos_graduacion});
+      let deudas=[];
+      try{ deudas=await db.all("deudas"); }catch(x){ deudas=[]; }
+      setData({sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material,conceptos_graduacion,cobros_graduacion,otros_ingresos,gastos_graduacion,deudas});
       // Elegir sucursal activa: la guardada, o la primera disponible
       setSucursalActiva(prev=>{
         if(prev && sucursales.some(s=>s.id===prev)) return prev;
@@ -677,6 +679,7 @@ export default function App() {
     gastos: data.gastos.filter(g=>g.sucursal_id===sucursalActiva || (esPrimeraSuc && !g.sucursal_id)),
     otros_ingresos: (data.otros_ingresos||[]).filter(i=>i.sucursal_id===sucursalActiva || (esPrimeraSuc && !i.sucursal_id)),
     gastos_graduacion: (data.gastos_graduacion||[]).filter(g=>g.sucursal_id===sucursalActiva || (esPrimeraSuc && !g.sucursal_id)),
+    deudas: (data.deudas||[]).filter(g=>g.sucursal_id===sucursalActiva || (esPrimeraSuc && !g.sucursal_id)),
     // padres y maestros quedan completos (se comparten entre sucursales)
   };
   const propsSuc = { data: dataSuc, loadData, showToast, sucursalActiva };
@@ -2280,8 +2283,27 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
             {rentasPend.map(x=>fila(`(−) Renta de ${x.mes} por pagar`,`(${Lc(x.monto)})`,{c:"#DC2626"}))}
             {fila(quedaHoy>=0?"= Queda libre":"= Faltante",Ln(quedaHoy),{b:true,c:quedaHoy>=0?"#059669":"#DC2626"})}
           </div>
-          <div style={{fontSize:11.5,color:"#475569",background:"#F8FAFC",borderRadius:6,padding:"8px 10px",marginTop:10}}>{quedaHoy>=0?`Después de la renta pendiente quedan ${Lc(quedaHoy)} libres.`:`No hay ganancia: lo que queda en caja ya es para la renta y faltan ${Lc(Math.abs(quedaHoy))}.`}{deudasAnio>0?` Este año se han pagado ${Lc(deudasAnio)} en deudas de antes.`:""}</div>
+          <div style={{fontSize:11.5,color:"#475569",background:"#F8FAFC",borderRadius:6,padding:"8px 10px",marginTop:10}}>{quedaHoy>=0?`Después de la renta pendiente quedan ${Lc(quedaHoy)} libres.`:`No hay ganancia: lo que queda en caja ya es para la renta y faltan ${Lc(Math.abs(quedaHoy))}.`}{deudasAnio>0?` Desde julio se han pagado ${Lc(deudasAnio)} de la deuda que venía de antes.`:""}</div>
         </div>
+        {(data.deudas||[]).length>0&&(()=>{
+          const iniciales=[...data.deudas].sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||"")));
+          const desde=iniciales[0]?.fecha||"";
+          const totDeuda=iniciales.reduce((s,d)=>s+(Number(d.monto)||0),0);
+          const pagos=data.gastos.filter(g=>g.tipo==="deuda"&&String(g.fecha||"")>=desde).sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||"")));
+          const pagado=pagos.reduce((s,g)=>s+(Number(g.monto)||0),0);const falta=totDeuda-pagado;
+          const porMes={};pagos.forEach(g=>{const m=mesDeFecha(g.fecha)||"—";porMes[m]=(porMes[m]||0)+(Number(g.monto)||0);});
+          const pct=totDeuda>0?Math.min(100,Math.round(pagado/totDeuda*100)):0;
+          return(<div style={{...card,borderLeft:"4px solid #B45309",marginBottom:14}}>
+            <div style={{fontSize:15,fontWeight:800,color:"#1E293B",marginBottom:2}}>📕 Deuda que venía de antes</div>
+            <div style={{fontSize:12,color:"#64748B",marginBottom:10}}>Aparte de la planilla y los gastos de cada mes. Se va pagando con los gastos tipo "Pago de deuda".</div>
+            <div style={{fontSize:13,maxWidth:520,display:"grid",gap:3}}>
+              {iniciales.map(d=>fila(`${d.descripcion||"Deuda"}`,Lc(d.monto)))}
+              {MESES.filter(m=>porMes[m]).map(m=>fila(`(−) Pagado en ${m}`,`(${Lc(porMes[m])})`,{c:"#059669"}))}
+              {fila(falta>0?"= Deuda que falta pagar":"= Deuda pagada por completo",Lc(Math.max(0,falta)),{b:true,c:falta>0?"#B45309":"#059669"})}
+            </div>
+            <div style={{height:8,background:"#F1F5F9",borderRadius:6,marginTop:10,maxWidth:520,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:"#059669"}}/></div>
+            <div style={{fontSize:11,color:"#64748B",marginTop:4}}>{pct}% pagado · {Lc(pagado)} de {Lc(totDeuda)}</div>
+          </div>);})()}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:14}}>
         {MESES.slice(0,mesHoy+1).reverse().map(mes=>{
           const c=cajaDelMes(data,mes,ANIO_ACTUAL);const im=MESES.indexOf(mes);
@@ -2394,7 +2416,7 @@ function SistemaPage({data,loadData,showToast,session}){
     if(!confirm("Esto restaurará los datos del respaldo (se combinan con los actuales). ¿Continuar?"))return;
     try{
       const text=await file.text();const backup=JSON.parse(text);
-      for(const table of ["sucursales","secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material","conceptos_graduacion","cobros_graduacion","otros_ingresos","gastos_graduacion"]){
+      for(const table of ["sucursales","secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material","conceptos_graduacion","cobros_graduacion","otros_ingresos","gastos_graduacion","deudas"]){
         if(backup[table]?.length) await db.upsertMany(table,backup[table]);
       }
       await loadData();showToast("✓ Respaldo restaurado");
