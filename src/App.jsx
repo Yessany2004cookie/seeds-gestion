@@ -61,6 +61,10 @@ const gradGananciaReal = (v) => {
   const recibido = gradRecibido(v);
   return (Number(v.ganancia) || 0) * (recibido / pv);
 };
+// Fecha de hoy en hora local (Honduras), no en UTC
+const hoyLocal = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split("T")[0]; };
+// Cuentas por pagar sin pagar (de un mes, o de ese mes y anteriores)
+const cxpPendientes = (data) => (data.cuentas_por_pagar || []).filter(c => !c.pagada);
 // ── Flujo de caja: el dinero que realmente entró y salió, por la FECHA de pago ──
 const enMesFecha = (fecha, mes, anio) => { const [y, m] = String(fecha || "").split("-").map(Number); return y === anio && MESES[(m || 0) - 1] === mes; };
 const hastaFinDe = (fecha, mes, anio) => { const [y, m] = String(fecha || "").split("-").map(Number); if (!y) return false; const mi = MESES.indexOf(mes) + 1; return y < anio || (y === anio && m <= mi); };
@@ -578,7 +582,7 @@ export default function App() {
   }, []);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[], otros_ingresos:[], gastos_graduacion:[], deudas:[] });
+  const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[], otros_ingresos:[], gastos_graduacion:[], deudas:[], cuentas_por_pagar:[] });
   const [sucursalActiva, setSucursalActiva] = useState(null); // id de la sucursal seleccionada
   const [toast, setToast] = useState(null);
   // Rol del usuario: "cargando" | "admin" | "docente" | "sin_acceso"
@@ -612,7 +616,9 @@ export default function App() {
       try{ gastos_graduacion=await db.all("gastos_graduacion"); }catch(x){ gastos_graduacion=[]; }
       let deudas=[];
       try{ deudas=await db.all("deudas"); }catch(x){ deudas=[]; }
-      setData({sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material,conceptos_graduacion,cobros_graduacion,otros_ingresos,gastos_graduacion,deudas});
+      let cuentas_por_pagar=[];
+      try{ cuentas_por_pagar=await db.all("cuentas_por_pagar"); }catch(x){ cuentas_por_pagar=[]; }
+      setData({sucursales,maestros,secciones,padres,alumnos,facturas,gastos,materiales,ventas_material,conceptos_graduacion,cobros_graduacion,otros_ingresos,gastos_graduacion,deudas,cuentas_por_pagar});
       // Elegir sucursal activa: la guardada, o la primera disponible
       setSucursalActiva(prev=>{
         if(prev && sucursales.some(s=>s.id===prev)) return prev;
@@ -680,6 +686,7 @@ export default function App() {
     otros_ingresos: (data.otros_ingresos||[]).filter(i=>i.sucursal_id===sucursalActiva || (esPrimeraSuc && !i.sucursal_id)),
     gastos_graduacion: (data.gastos_graduacion||[]).filter(g=>g.sucursal_id===sucursalActiva || (esPrimeraSuc && !g.sucursal_id)),
     deudas: (data.deudas||[]).filter(g=>g.sucursal_id===sucursalActiva || (esPrimeraSuc && !g.sucursal_id)),
+    cuentas_por_pagar: (data.cuentas_por_pagar||[]).filter(g=>g.sucursal_id===sucursalActiva || (esPrimeraSuc && !g.sucursal_id)),
     // padres y maestros quedan completos (se comparten entre sucursales)
   };
   const propsSuc = { data: dataSuc, loadData, showToast, sucursalActiva };
@@ -2158,6 +2165,25 @@ function RecordatoriosPage({data,showToast}){
 function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const[tab,setTab]=useState("resumen");const[modal,setModal]=useState(null);
   const[imgPreview,setImgPreview]=useState(null);
+  const[cxpForm,setCxpForm]=useState(null); // nueva cuenta por pagar
+  const pagarCxp=async(c)=>{
+    if(!confirm(`¿Registrar como pagado: ${c.descripcion} — L ${Number(c.monto).toLocaleString()}?`))return;
+    try{
+      const gid=uid();const hoy=hoyLocal();
+      await db.insert("gastos",{id:gid,tipo:c.tipo||"otro",maestro_id:c.maestro_id||null,descripcion:c.descripcion,monto:Number(c.monto),fecha:hoy,mes_correspondiente:c.mes_correspondiente,mes_deduccion:c.mes_correspondiente,sucursal_id:c.sucursal_id||sucursalActiva});
+      await db.update("cuentas_por_pagar",c.id,{pagada:true,fecha_pago:hoy,gasto_id:gid});
+      await loadData();showToast(`✓ Pagado: ${c.descripcion} (se resta de ${c.mes_correspondiente})`);
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+  const guardarCxp=async()=>{
+    if(!cxpForm.descripcion.trim()){showToast("¿Qué se debe?","error");return;}
+    if(!(parseFloat(cxpForm.monto)>0)){showToast("Ingresa el monto","error");return;}
+    try{
+      await db.insert("cuentas_por_pagar",{id:uid(),tipo:cxpForm.tipo,maestro_id:cxpForm.tipo==="salario"&&cxpForm.maestro_id?cxpForm.maestro_id:null,descripcion:cxpForm.descripcion.trim(),monto:parseFloat(cxpForm.monto),mes_correspondiente:cxpForm.mes,anio_correspondiente:ANIO_ACTUAL,pagada:false,sucursal_id:sucursalActiva});
+      await loadData();setCxpForm(null);showToast("✓ Cuenta por pagar agregada");
+    }catch(e){showToast("Error: "+e.message,"error");}
+  };
+  const eliminarCxp=async(c)=>{if(!confirm(`¿Quitar "${c.descripcion}" de las cuentas por pagar?`))return;try{await db.remove("cuentas_por_pagar",c.id);await loadData();showToast("Quitada","error");}catch(e){showToast("Error: "+e.message,"error");}};
   const[form,setForm]=useState({tipo:"salario",maestro_id:"",descripcion:"",monto:"",fecha:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()],mes_deduccion:MESES[new Date().getMonth()],ach:false});
   const mesActual=MESES[new Date().getMonth()];
   const achMonto=achDeSucursal(data.sucursales,sucursalActiva);
@@ -2246,6 +2272,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const ultimaRentaF=[...rentasReg].sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||"")))[0];
   const mesHoy=new Date().getMonth();
   const rentaPendMes=(mes)=>{const i=MESES.indexOf(mes);if(i>=mesHoy||!ultimaRentaF)return 0;if(ingresoTotalMes(mes)<=0)return 0;
+    if((data.cuentas_por_pagar||[]).some(c=>c.tipo==="renta"&&c.mes_correspondiente===mes))return 0;
     const pagada=rentasReg.some(g=>g.mes_correspondiente===mes&&(anioAsignado(g.fecha,g.mes_correspondiente,g.anio_correspondiente)??ANIO_ACTUAL)===ANIO_ACTUAL);
     return pagada?0:Number(ultimaRentaF.monto)||0;};
   // Conciliación: ganancia de los meses → pagos de deudas → caja → lo que falta pagar → disponible real
@@ -2274,16 +2301,25 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
       const fila=(t,v,o={})=><div key={t} style={{display:"flex",justifyContent:"space-between",gap:8,opacity:o.dim?.45:1,fontWeight:o.b?800:400,color:o.c||"inherit",borderTop:o.b?"1px solid #E2E8F0":"none",paddingTop:o.b?3:0}}><span style={{color:o.c||(o.b?"#1E293B":"#64748B")}}>{t}</span><span style={{whiteSpace:"nowrap"}}>{v}</span></div>;
       const ORD_E=["Mensualidades","Mora cobrada","Materiales vendidos","Graduación","Ingresos extra"];
       const ORD_S=["Salarios","Renta","Otros gastos","Pagos de deudas anteriores","Costo de materiales","Gastos de graduación"];
-      const quedaHoy=cajaHoy-totRentasPend;
+      const cxpP=cxpPendientes(data).sort((a,b)=>MESES.indexOf(a.mes_correspondiente)-MESES.indexOf(b.mes_correspondiente));
+      const totCxp=cxpP.reduce((s,c)=>s+(Number(c.monto)||0),0);
+      const quedaHoy=cajaHoy-totRentasPend-totCxp;
       return(<div>
         <div style={{...card,borderLeft:`4px solid ${quedaHoy>=0?"#059669":"#DC2626"}`,marginBottom:14}}>
           <div style={{fontSize:15,fontWeight:800,color:"#1E293B",marginBottom:8}}>💵 Lo que realmente queda hoy</div>
           <div style={{fontSize:13,maxWidth:520,display:"grid",gap:3}}>
             {fila("Dinero en caja hoy",Lc(cajaHoy))}
             {rentasPend.map(x=>fila(`(−) Renta de ${x.mes} por pagar`,`(${Lc(x.monto)})`,{c:"#DC2626"}))}
+            {cxpP.map(c=><div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,color:"#DC2626"}}>
+              <span>(−) {c.descripcion} <span style={{color:"#94A3B8",fontSize:11}}>· {c.mes_correspondiente}</span></span>
+              <span style={{display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>({Lc(c.monto)})
+                <button onClick={()=>pagarCxp(c)} title="Registrar como pagado" style={{background:"#059669",color:"#fff",border:"none",borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Pagar</button>
+                <button onClick={()=>eliminarCxp(c)} title="Quitar" style={{background:"none",border:"none",cursor:"pointer",padding:0}}><Trash2 size={12} color="#94A3B8"/></button>
+              </span></div>)}
             {fila(quedaHoy>=0?"= Queda libre":"= Faltante",Ln(quedaHoy),{b:true,c:quedaHoy>=0?"#059669":"#DC2626"})}
           </div>
-          <div style={{fontSize:11.5,color:"#475569",background:"#F8FAFC",borderRadius:6,padding:"8px 10px",marginTop:10}}>{quedaHoy>=0?`Después de la renta pendiente quedan ${Lc(quedaHoy)} libres.`:`No hay ganancia: lo que queda en caja ya es para la renta y faltan ${Lc(Math.abs(quedaHoy))}.`}{deudasAnio>0?` Desde julio se han pagado ${Lc(deudasAnio)} de la deuda que venía de antes.`:""}</div>
+          <button onClick={()=>setCxpForm({descripcion:"",monto:"",tipo:"otro",maestro_id:"",mes:MESES[Math.max(0,mesHoy-1)]})} style={{...btnO,fontSize:12,padding:"5px 10px",marginTop:8}}><Plus size={13}/>Agregar cuenta por pagar</button>
+          <div style={{fontSize:11.5,color:"#475569",background:"#F8FAFC",borderRadius:6,padding:"8px 10px",marginTop:10}}>{quedaHoy>=0?`Después de pagar lo pendiente quedan ${Lc(quedaHoy)} libres.`:`Lo que hay en caja no alcanza para todo lo que se debe: faltan ${Lc(Math.abs(quedaHoy))}.`}{deudasAnio>0?` Desde julio se han pagado ${Lc(deudasAnio)} de la deuda que venía de antes.`:""}</div>
         </div>
         {(data.deudas||[]).length>0&&(()=>{
           const iniciales=[...data.deudas].sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||"")));
@@ -2315,7 +2351,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
           const grp={};debidos.forEach(g=>{const k=`${NOM[g.tipo]||"Otros gastos"} de ${mesGasto(g)}`;grp[k]=(grp[k]||0)+(Number(g.monto)||0);});
           // Ya pagados después (solo informativo, NO es deuda) y lo que de verdad falta pagar hoy
           const pagadosDespues=Object.entries(grp).map(([k,v])=>({t:k,monto:v}));const totPD=pagadosDespues.reduce((s,x)=>s+x.monto,0);
-          const pend=pendHasta(mes).map(x=>({t:`Renta de ${x.mes}`,monto:x.monto}));
+          const pend=[...pendHasta(mes).map(x=>({t:`Renta de ${x.mes}`,monto:x.monto})),...cxpPendientes(data).filter(c=>MESES.indexOf(c.mes_correspondiente)<=im).map(c=>({t:`${c.descripcion}${c.mes_correspondiente!==mes?` (${c.mes_correspondiente})`:""}`,monto:Number(c.monto)||0}))];
           const totPend=pend.reduce((s,x)=>s+x.monto,0);const queda=c.saldo;const libre=c.saldo-totPend;
           const inicio=c.saldo-c.neto;
           return(<div key={mes} style={{...card,borderLeft:`4px solid ${totPend>0?"#EA580C":"#059669"}`}}>
@@ -2345,6 +2381,17 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
         })}
         </div>
       </div>);})()}
+
+    {cxpForm&&<Modal title="🧾 Agregar cuenta por pagar" onClose={()=>setCxpForm(null)} onSave={guardarCxp}>
+      <div style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:8,padding:10,fontSize:12,color:"#9A3412",marginBottom:12}}>Algo que ya se debe pero todavía no se ha pagado. No sale de caja hasta que toques "Pagar"; ahí se registra como gasto del mes al que corresponde.</div>
+      <div style={{marginBottom:12}}><label style={label}>Tipo</label><select value={cxpForm.tipo} onChange={e=>setCxpForm({...cxpForm,tipo:e.target.value})} style={{...input,cursor:"pointer"}}><option value="otro">Gasto (luz, agua, internet…)</option><option value="renta">Renta</option><option value="salario">Salario</option></select></div>
+      {cxpForm.tipo==="salario"&&<div style={{marginBottom:12}}><label style={label}>Maestro</label><select value={cxpForm.maestro_id} onChange={e=>{const m=data.maestros.find(x=>x.id===e.target.value);setCxpForm({...cxpForm,maestro_id:e.target.value,descripcion:m?`Salario ${m.nombre}`:cxpForm.descripcion});}} style={{...input,cursor:"pointer"}}><option value="">Seleccionar</option>{data.maestros.map(m=><option key={m.id} value={m.id}>{m.nombre}</option>)}</select></div>}
+      <Field label="¿Qué se debe? *" value={cxpForm.descripcion} onChange={v=>setCxpForm({...cxpForm,descripcion:v})} placeholder="Ej: Luz de octubre"/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <Field label="Monto (L) *" value={cxpForm.monto} onChange={v=>setCxpForm({...cxpForm,monto:v})} type="number"/>
+        <div style={{marginBottom:12}}><label style={label}>Mes al que corresponde</label><select value={cxpForm.mes} onChange={e=>setCxpForm({...cxpForm,mes:e.target.value})} style={{...input,cursor:"pointer"}}>{MESES.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
+      </div>
+    </Modal>}
 
     {tab==="maestros"&&<div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
@@ -2425,7 +2472,7 @@ function SistemaPage({data,loadData,showToast,session}){
     if(!confirm("Esto restaurará los datos del respaldo (se combinan con los actuales). ¿Continuar?"))return;
     try{
       const text=await file.text();const backup=JSON.parse(text);
-      for(const table of ["sucursales","secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material","conceptos_graduacion","cobros_graduacion","otros_ingresos","gastos_graduacion","deudas"]){
+      for(const table of ["sucursales","secciones","maestros","padres","alumnos","facturas","gastos","materiales","ventas_material","conceptos_graduacion","cobros_graduacion","otros_ingresos","gastos_graduacion","deudas","cuentas_por_pagar"]){
         if(backup[table]?.length) await db.upsertMany(table,backup[table]);
       }
       await loadData();showToast("✓ Respaldo restaurado");
@@ -3696,8 +3743,10 @@ function ReportesPage({data,showToast}){
   const rentaPagadaMes=rentas.some(g=>g.mes_correspondiente===mesSel&&(anioAsignado(g.fecha,g.mes_correspondiente,g.anio_correspondiente)??anioSel)===anioSel);
   const ultimaRenta=[...rentas].sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||"")))[0];
   const mesYaLlego=anioSel<ANIO_ACTUAL||(anioSel===ANIO_ACTUAL&&MESES.indexOf(mesSel)<=new Date().getMonth());
-  const rentaPendiente=(!rentaPagadaMes&&ultimaRenta&&mesYaLlego)?Number(ultimaRenta.monto)||0:0;
-  const porPagar=[...(rentaPendiente>0?[{k:"renta",label:`Renta de ${mesSel}`,sub:`No está registrada como pagada · monto de la última renta (${ultimaRenta.descripcion||"Renta"})`,monto:rentaPendiente}]:[])];
+  const cxpMesSel=(data.cuentas_por_pagar||[]).filter(c=>!c.pagada&&c.mes_correspondiente===mesSel&&(Number(c.anio_correspondiente)||anioSel)===anioSel);
+  const hayCxpRenta=(data.cuentas_por_pagar||[]).some(c=>c.tipo==="renta"&&c.mes_correspondiente===mesSel&&(Number(c.anio_correspondiente)||anioSel)===anioSel);
+  const rentaPendiente=(!rentaPagadaMes&&!hayCxpRenta&&ultimaRenta&&mesYaLlego)?Number(ultimaRenta.monto)||0:0;
+  const porPagar=[...cxpMesSel.map(c=>({k:c.tipo==="salario"?"salarios":c.tipo==="renta"?"renta":"otros",label:c.descripcion,sub:"Cuenta por pagar · todavía no se ha pagado",monto:Number(c.monto)||0})),...(rentaPendiente>0?[{k:"renta",label:`Renta de ${mesSel}`,sub:`No está registrada como pagada · monto de la última renta (${ultimaRenta.descripcion||"Renta"})`,monto:rentaPendiente}]:[])];
   const totPorPagar=porPagar.reduce((s,x)=>s+x.monto,0);
   // Por cobrar: mensualidades, materiales y graduación de este mes que siguen pendientes
   const mensPend=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&(f.estado==="pendiente"||f.estado==="parcial")&&f.mes_correspondiente===mesSel&&anioCobro(f)===anioSel);
