@@ -2313,10 +2313,12 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
           const NOM={salario:"Salarios",renta:"Renta",comision:"Comisión ACH"};
           const debidos=data.gastos.filter(g=>g.tipo!=="deuda"&&g.fecha&&MESES.indexOf(mesGasto(g))>=0&&MESES.indexOf(mesGasto(g))<=im&&(anioAsignado(g.fecha,mesGasto(g),g.anio_correspondiente)??ANIO_ACTUAL)===ANIO_ACTUAL&&!hastaFinDe(g.fecha,mes,ANIO_ACTUAL));
           const grp={};debidos.forEach(g=>{const k=`${NOM[g.tipo]||"Otros gastos"} de ${mesGasto(g)}`;grp[k]=(grp[k]||0)+(Number(g.monto)||0);});
-          const pend=[...Object.entries(grp).map(([k,v])=>({t:`(−) ${k}`,sub:"se pagó después",monto:v})),...pendHasta(mes).map(x=>({t:`(−) Renta de ${x.mes}`,sub:"todavía sin pagar",monto:x.monto}))];
-          const totPend=pend.reduce((s,x)=>s+x.monto,0);const queda=c.saldo-totPend;
+          // Ya pagados después (solo informativo, NO es deuda) y lo que de verdad falta pagar hoy
+          const pagadosDespues=Object.entries(grp).map(([k,v])=>({t:k,monto:v}));const totPD=pagadosDespues.reduce((s,x)=>s+x.monto,0);
+          const pend=pendHasta(mes).map(x=>({t:`Renta de ${x.mes}`,monto:x.monto}));
+          const totPend=pend.reduce((s,x)=>s+x.monto,0);const queda=c.saldo;const libre=c.saldo-totPend;
           const inicio=c.saldo-c.neto;
-          return(<div key={mes} style={{...card,borderLeft:`4px solid ${queda>=0?"#059669":"#DC2626"}`}}>
+          return(<div key={mes} style={{...card,borderLeft:`4px solid ${totPend>0?"#EA580C":"#059669"}`}}>
             <div style={{fontSize:14,fontWeight:700,color:"#1E293B",marginBottom:8}}>{mes}</div>
             <div style={{display:"grid",gap:3,fontSize:12}}>
               {fila("Había en caja al iniciar",Ln(inicio))}
@@ -2327,13 +2329,18 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
               {ORD_S.map(k=>fila(k,Lc(c.sal[k]||0),{dim:!(c.sal[k]>0)}))}
               {c.atrasados>0&&<div style={{fontSize:10.5,color:"#B45309"}}>Incluye {Lc(c.atrasados)} de gastos de otros meses pagados ahora.</div>}
               {fila("Total que salió",`(${Lc(c.salidas)})`,{b:true,c:"#DC2626"})}
-              {pend.length>0&&<div style={{fontSize:11,fontWeight:700,color:"#B45309",textTransform:"uppercase",letterSpacing:.4,marginTop:4}}>Debía al cierre del mes</div>}
-              {pend.map(x=>fila(`${x.t} · ${x.sub}`,`(${Lc(x.monto)})`,{c:"#B45309"}))}
             </div>
-            <div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:queda>=0?"#ECFDF5":"#FEF2F2",fontSize:12,color:queda>=0?"#059669":"#DC2626",textAlign:"right"}}>
-              <div style={{fontSize:11,opacity:.8}}>{Ln(inicio)} + {Lc(c.entradas)} − {Lc(c.salidas)}{totPend?` − ${Lc(totPend)}`:""}</div>
-              <div style={{fontWeight:800,fontSize:14}}>{queda>=0?"Queda en caja al cierre":"Faltante al cierre"}: {Lc(Math.abs(queda))}</div>
+            <div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:"#F8FAFC",border:"1px solid #E2E8F0",fontSize:12,color:"#1E293B",textAlign:"right"}}>
+              <div style={{fontSize:11,color:"#64748B"}}>{Ln(inicio)} + {Lc(c.entradas)} − {Lc(c.salidas)}</div>
+              <div style={{fontWeight:800,fontSize:14}}>Quedó en caja al cierre: {Ln(queda)}</div>
             </div>
+            {totPD>0&&<div style={{marginTop:6,fontSize:11,color:"#475569",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:6,padding:"6px 8px"}}>
+              ✓ De ese dinero, después se pagaron gastos que eran de este mes: {pagadosDespues.map(x=>`${x.t} (${Lc(x.monto)})`).join(", ")}. Ya están pagados, no es deuda.
+            </div>}
+            {totPend>0?<div style={{marginTop:6,padding:"6px 10px",borderRadius:6,background:"#FFF7ED",border:"1px solid #FED7AA",fontSize:12,color:"#9A3412"}}>
+              {pend.map(x=>fila(`Por pagar: ${x.t}`,`(${Lc(x.monto)})`,{c:"#9A3412"}))}
+              {fila(libre>=0?"Libre después de pagarlo":"Falta para pagarlo",Lc(Math.abs(libre)),{b:true,c:libre>=0?"#059669":"#DC2626"})}
+            </div>:<div style={{marginTop:6,fontSize:11,color:"#059669",fontWeight:700,textAlign:"right"}}>✓ Sin deudas pendientes de este mes</div>}
           </div>);
         })}
         </div>
