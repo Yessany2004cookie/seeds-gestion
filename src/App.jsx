@@ -2180,7 +2180,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
       }else if(d>0){
         await db.insert("otros_ingresos",{id:uid(),descripcion:`Ajuste de caja: entrada sin registrar (cierre de ${cierre.mes})`,monto:d,categoria:"Otro",fecha,fecha_pago:fecha,mes_ingreso:cierre.mes,anio_correspondiente:ANIO_ACTUAL,alumno_id:null,sucursal_id:sucursalActiva,notas:"Registrado al cerrar el mes para cuadrar con el dinero real"});
       }
-      await loadData();setCierre(null);
+      await loadData();const mesCerrado=cierre.mes;setCierre(null);setPdfCierreMes(mesCerrado);
       showToast(d===0?`✓ ${cierre.mes} cerrado: la caja ya cuadraba`:`✓ ${cierre.mes} cerrado: caja ajustada a L ${parseFloat(cierre.real).toLocaleString()}`);
     }catch(e){showToast("Error: "+e.message,"error");}
   };
@@ -2302,6 +2302,112 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const rentasPend=mesesConActividad.map(m=>({mes:m,monto:rentaPendMes(m)})).filter(x=>x.monto>0);
   const totRentasPend=rentasPend.reduce((s,x)=>s+x.monto,0);
   const disponible=cajaHoy-totRentasPend;
+  // ── PDF del cierre de mes (formal, para compartir) ──
+  const[pdfListo,setPdfListo]=useState(null);const[generandoPdf,setGenerandoPdf]=useState(false);const[pdfCierreMes,setPdfCierreMes]=useState(null);
+  const documentoCierre=(mes)=>{
+    const L=(n)=>`L ${(Math.round((Number(n)||0)*100)/100).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    const Ln=(n)=>n<0?`(${L(Math.abs(n))})`:L(n);
+    const esc=(t)=>String(t??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const fC=(f)=>f?String(f).split("-").reverse().join("/"):"—";
+    const im=MESES.indexOf(mes);const c=cajaDelMes(data,mes,ANIO_ACTUAL);const inicio=c.saldo-c.neto;
+    const ORD_E=["Mensualidades","Mora cobrada","Materiales vendidos","Graduación","Ingresos extra"];
+    const ORD_S=["Salarios","Renta","Otros gastos","Pagos de deudas anteriores","Costo de materiales","Gastos de graduación"];
+    const filasE=ORD_E.filter(k=>c.ent[k]>0).map(k=>`<tr><td class="i">${k}</td><td class="r">${L(c.ent[k])}</td></tr>`).join("")||`<tr><td class="i muted" colspan="2">Sin entradas</td></tr>`;
+    const filasS=ORD_S.filter(k=>c.sal[k]>0).map(k=>`<tr><td class="i">${k}</td><td class="r">(${L(c.sal[k])})</td></tr>`).join("")||`<tr><td class="i muted" colspan="2">Sin salidas</td></tr>`;
+    const pend=[...rentasPend.filter(x=>MESES.indexOf(x.mes)<=im).map(x=>({d:`Renta del local`,m:x.mes,v:x.monto})),...cxpPendientes(data).filter(x=>MESES.indexOf(x.mes_correspondiente)<=im).map(x=>({d:x.descripcion,m:x.mes_correspondiente,v:Number(x.monto)||0}))];
+    const totPend=pend.reduce((s,x)=>s+x.v,0);const final=c.saldo-totPend;
+    const TL={salario:"Salario",renta:"Renta",otro:"Gasto",comision:"Comisión",deuda:"Pago de deuda"};
+    const det=[...data.gastos.filter(g=>enMesFecha(g.fecha,mes,ANIO_ACTUAL)).map(g=>({f:g.fecha,d:g.descripcion,t:TL[g.tipo]||"Gasto",m:mesGasto(g),v:Number(g.monto)||0})),
+      ...(data.gastos_graduacion||[]).filter(g=>enMesFecha(g.fecha,mes,ANIO_ACTUAL)).map(g=>({f:g.fecha,d:g.descripcion,t:"Graduación",m:mesGasto(g),v:Number(g.monto)||0}))]
+      .sort((a,b)=>String(a.f).localeCompare(String(b.f)));
+    const filasDet=det.map(x=>`<tr><td>${fC(x.f)}</td><td>${esc(x.d||"—")}${x.m&&x.m!==mes?` <span class="muted">(de ${esc(x.m)})</span>`:""}</td><td>${x.t}</td><td class="r">${L(x.v)}</td></tr>`).join("");
+    const ultimo=new Date(ANIO_ACTUAL,im+1,0).getDate();
+    const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
+    const sucNombre=data.sucursales?.find(x=>x.id===sucursalActiva)?.nombre||"";
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cierre de ${mes} ${ANIO_ACTUAL}</title><style>
+      @page { size: letter portrait; margin: 14mm; }
+      *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      body{color:#000;font-size:12.5px}
+      .head{display:flex;align-items:center;gap:18px;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:16px}
+      .head h1{font-size:22px;letter-spacing:.3px}
+      .head p{font-size:12px;color:#444;margin-top:2px}
+      .head .t{font-size:15px;font-weight:700;color:#000;margin-top:8px;letter-spacing:.8px}
+      .kpis{display:flex;gap:10px;margin-bottom:18px}
+      .k{flex:1;border:1px solid #000;border-radius:3px;padding:10px 12px}
+      .k .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:#444}
+      .k .v{font-size:18px;font-weight:700;margin-top:3px}
+      h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.8px;margin:18px 0 6px;padding-bottom:3px;border-bottom:1px solid #000}
+      table{width:100%;border-collapse:collapse}
+      td,th{padding:5px 8px;vertical-align:top}
+      th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #000}
+      tbody td{border-bottom:1px solid #E5E5E5}
+      .r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+      .i{padding-left:22px}
+      .sub td{font-weight:700;border-top:1px solid #000;border-bottom:none}
+      .tot td{font-weight:700;font-size:14px;border-top:2px solid #000;border-bottom:4px double #000;padding-top:8px;padding-bottom:8px}
+      .muted{color:#666;font-size:11px}
+      .verde{color:#15803D}.rojo{color:#B91C1C}
+      .nota{margin-top:10px;font-size:11.5px;line-height:1.5;color:#222;border-left:3px solid #000;padding:6px 10px}
+      .firmas{display:flex;gap:60px;margin-top:46px}
+      .firmas div{flex:1;border-top:1px solid #000;padding-top:6px;text-align:center;font-size:11px;color:#333}
+      .foot{margin-top:18px;text-align:center;font-size:10px;color:#666}
+    </style></head><body>
+      <div class="head">
+        <div style="width:96px;height:96px;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="${LOGO_SEEDS}" alt="Seeds" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
+        <div>
+          <h1>Seeds English School</h1>
+          <p>Jesús de Otoro, Intibucá, Honduras${sucNombre?` · ${esc(sucNombre)}`:""}</p>
+          <div class="t">CIERRE DE MES — ${mes.toUpperCase()} ${ANIO_ACTUAL}</div>
+          <p>Del 1 al ${ultimo} de ${mes} de ${ANIO_ACTUAL} · Cifras en Lempiras · Generado el ${hoy}</p>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="k"><div class="l">Dinero en caja al cierre</div><div class="v">${Ln(c.saldo)}</div></div>
+        <div class="k"><div class="l">Cuentas por pagar</div><div class="v rojo">${totPend?`(${L(totPend)})`:L(0)}</div></div>
+        <div class="k"><div class="l">${final>=0?"Queda libre":"Falta"}</div><div class="v ${final>=0?"verde":"rojo"}">${L(Math.abs(final))}</div></div>
+      </div>
+
+      <h2>1. Movimiento de caja</h2>
+      <table><tbody>
+        <tr><td>Saldo al iniciar el mes</td><td class="r">${Ln(inicio)}</td></tr>
+        <tr><td style="font-weight:700">Entradas</td><td></td></tr>
+        ${filasE}
+        <tr class="sub"><td>Total entradas</td><td class="r verde">${L(c.entradas)}</td></tr>
+        <tr><td style="font-weight:700;padding-top:10px">Salidas</td><td></td></tr>
+        ${filasS}
+        <tr class="sub"><td>Total salidas</td><td class="r rojo">(${L(c.salidas)})</td></tr>
+        <tr class="tot"><td>Saldo en caja al cierre</td><td class="r">${Ln(c.saldo)}</td></tr>
+      </tbody></table>
+      ${c.atrasados>0?`<div class="nota">Las salidas incluyen ${L(c.atrasados)} de gastos de meses anteriores pagados en ${mes}.</div>`:""}
+
+      <h2>2. Cuentas por pagar al cierre</h2>
+      <table><thead><tr><th>Concepto</th><th>Corresponde a</th><th class="r">Monto</th></tr></thead><tbody>
+        ${pend.map(x=>`<tr><td>${esc(x.d)}</td><td>${esc(x.m)}</td><td class="r rojo">(${L(x.v)})</td></tr>`).join("")||`<tr><td colspan="3" class="muted">No quedan cuentas por pagar.</td></tr>`}
+        ${pend.length?`<tr class="sub"><td colspan="2">Total por pagar</td><td class="r rojo">(${L(totPend)})</td></tr>`:""}
+      </tbody></table>
+
+      <h2>3. Resultado del cierre</h2>
+      <table><tbody>
+        <tr><td>Dinero en caja al cierre</td><td class="r">${Ln(c.saldo)}</td></tr>
+        <tr><td>(−) Cuentas por pagar</td><td class="r rojo">(${L(totPend)})</td></tr>
+        <tr class="tot"><td>${final>=0?"Queda libre":"Falta para cubrir lo pendiente"}</td><td class="r ${final>=0?"verde":"rojo"}">${L(Math.abs(final))}</td></tr>
+      </tbody></table>
+      <div class="nota">${final>=0?`Después de pagar lo pendiente quedan ${L(final)} disponibles.`:`El dinero en caja no alcanza para cubrir lo que se debe; faltan ${L(Math.abs(final))}, que se cubrirán con los ingresos del mes siguiente.`}</div>
+
+      ${det.length?`<h2>4. Detalle de pagos realizados en ${mes}</h2>
+      <table><thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th class="r">Monto</th></tr></thead><tbody>${filasDet}
+        <tr class="sub"><td colspan="3">Total pagado</td><td class="r">${L(det.reduce((s,x)=>s+x.v,0))}</td></tr></tbody></table>
+      <div class="muted" style="margin-top:4px">El total de salidas de caja incluye además el costo de materiales vendidos.</div>`:""}
+
+      <div class="firmas"><div>Elaborado por</div><div>Revisado / Aprobado</div></div>
+      <div class="foot">Seeds English School — Área Administrativa</div>
+    </body></html>`;
+  };
+  const pdfCierre=async(mes)=>{if(generandoPdf)return;setGenerandoPdf(true);showToast("Generando PDF del cierre…");
+    try{setPdfListo(await htmlAPdf(documentoCierre(mes),`Cierre de ${mes} ${ANIO_ACTUAL} - Seeds English School`));}catch(e){showToast("No se pudo generar el PDF: "+e.message,"error");}finally{setGenerandoPdf(false);}};
+  // Después de guardar un cierre, se genera su PDF con los datos ya actualizados
+  useEffect(()=>{if(pdfCierreMes){const m=pdfCierreMes;setPdfCierreMes(null);pdfCierre(m);}},[data,pdfCierreMes]);
+
   const tBtn=(a)=>({padding:"10px 18px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #F97316":"3px solid transparent",background:"transparent",color:a?"#F97316":"#64748B"});
 
   return(<div>
@@ -2376,7 +2482,10 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
           const totPend=pend.reduce((s,x)=>s+x.monto,0);const queda=c.saldo;const libre=c.saldo-totPend;
           const inicio=c.saldo-c.neto;
           return(<div key={mes} style={{...card,borderLeft:`4px solid ${totPend>0?"#EA580C":"#059669"}`}}>
-            <div style={{fontSize:14,fontWeight:700,color:"#1E293B",marginBottom:8}}>{mes}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <div style={{fontSize:14,fontWeight:700,color:"#1E293B"}}>{mes}</div>
+              {(c.entradas>0||c.salidas>0)&&<button onClick={()=>pdfCierre(mes)} disabled={generandoPdf} title="PDF del cierre para compartir" style={{...btnO,fontSize:11,padding:"3px 9px"}}><FileText size={12}/>PDF</button>}
+            </div>
             <div style={{display:"grid",gap:3,fontSize:12}}>
               {fila("Había en caja al iniciar",Ln(inicio))}
               <div style={{fontSize:11,fontWeight:700,color:"#059669",textTransform:"uppercase",letterSpacing:.4,marginTop:4}}>Entró en el mes</div>
@@ -2448,9 +2557,10 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
           {linea("(−) Lo que se debe",`(${Lc(totCx)})`,"#DC2626")}
           <div style={{borderTop:"1px solid #E2E8F0",marginTop:4,paddingTop:4}}>{(()=>{const f=(hay?real:app)-totCx;return linea(<strong>{f>=0?"Queda libre":"Falta"}</strong>,<strong>{Lc(Math.abs(f))}</strong>,f>=0?"#059669":"#DC2626");})()}</div>
         </div>
-        <div style={{fontSize:11,color:"#64748B",marginTop:8}}>Al tocar Guardar se registra el ajuste (si hay diferencia) con fecha del último día del mes. Las cuentas por pagar quedan en la lista hasta que toques "Pagar".</div>
+        <div style={{fontSize:11,color:"#64748B",marginTop:8}}>Al guardar se genera el PDF del cierre para compartir por WhatsApp. Se registra el ajuste (si hay diferencia) con fecha del último día del mes. Las cuentas por pagar quedan en la lista hasta que toques "Pagar".</div>
       </Modal>);})()}
 
+    <PdfListoModal pdf={pdfListo} onClose={()=>{if(pdfListo)setTimeout(()=>URL.revokeObjectURL(pdfListo.url),60000);setPdfListo(null);}}/>
     {cxpForm&&<Modal title="🧾 Agregar cuenta por pagar" onClose={()=>setCxpForm(null)} onSave={guardarCxp}>
       <div style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:8,padding:10,fontSize:12,color:"#9A3412",marginBottom:12}}>Algo que ya se debe pero todavía no se ha pagado. No sale de caja hasta que toques "Pagar"; ahí se registra como gasto del mes al que corresponde.</div>
       <div style={{marginBottom:12}}><label style={label}>Tipo</label><select value={cxpForm.tipo} onChange={e=>setCxpForm({...cxpForm,tipo:e.target.value})} style={{...input,cursor:"pointer"}}><option value="otro">Gasto (luz, agua, internet…)</option><option value="renta">Renta</option><option value="salario">Salario</option></select></div>
@@ -3115,6 +3225,8 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
   const[imgPreview,setImgPreview]=useState(null);
   const[filtroSec,setFiltroSec]=useState("");
   const[compForm,setCompForm]=useState(null);
+  const[pdfListo,setPdfListo]=useState(null);const[generandoPdf,setGenerandoPdf]=useState(false);
+  const abrirPdf=async(html,nombre)=>{if(generandoPdf)return;setGenerandoPdf(true);showToast("Generando PDF…");try{setPdfListo(await htmlAPdf(html,nombre));}catch(e){showToast("No se pudo generar el PDF: "+e.message,"error");}finally{setGenerandoPdf(false);}};
   const[gastoForm,setGastoForm]=useState(null); // gasto del evento de graduación
   // form individual: sección, alumno, conceptos seleccionados, mes, vencimiento
   const[form,setForm]=useState({seccion_id:"",alumno_id:"",conceptos:[],mes_correspondiente:MESES[new Date().getMonth()],dia_vencimiento:"28",tipo_pago:"efectivo",notas:"",pagar_ya:false});
@@ -3336,10 +3448,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       </table>
       <div class="foot">Seeds English School — Área Administrativa</div>
       </body></html>`;
-    const w=window.open("","_blank");
-    if(!w){showToast("Permite las ventanas emergentes para el PDF","error");return;}
-    w.document.write(html); w.document.close();
-    setTimeout(()=>{w.focus();w.print();},400);
+    abrirPdf(html,"Reporte de gastos del evento de graduación");
   };
   const tBtn=(a)=>({padding:"10px 20px",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",borderBottom:a?"3px solid #7C3AED":"3px solid transparent",background:"transparent",color:a?"#7C3AED":"#64748B"});
 
@@ -3444,10 +3553,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 
       <div class="foot">Seeds English School — Área Administrativa · Los ingresos se registran en el mes en que se cobran y los gastos en el mes del evento al que corresponden.</div>
       </body></html>`;
-    const w=window.open("","_blank");
-    if(!w){showToast("Permite las ventanas emergentes para el informe","error");return;}
-    w.document.write(html); w.document.close();
-    setTimeout(()=>{w.focus();w.print();},500);
+    abrirPdf(html,`Informe de graduación ${ANIO_ACTUAL}`);
   };
 
   // Selector de conceptos (checkboxes) reutilizable
@@ -3472,7 +3578,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
         {data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
       </select>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <button onClick={informeGraduacionPDF} style={btnO}><FileText size={15}/>Informe de graduación</button>
+        <button onClick={informeGraduacionPDF} disabled={generandoPdf} style={{...btnO,opacity:generandoPdf?.6:1}}><FileText size={15}/>{generandoPdf?"Generando PDF…":"Informe de graduación (PDF)"}</button>
         <button onClick={abrirBulk} style={btn("#7C3AED")}><Users size={15}/>Cobrar a una sección</button>
         <button onClick={abrir} style={btn("#7C3AED")}><Plus size={15}/>Registrar graduación</button>
       </div>
@@ -3559,6 +3665,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       </div>
     </div>}
 
+    <PdfListoModal pdf={pdfListo} onClose={()=>{if(pdfListo)setTimeout(()=>URL.revokeObjectURL(pdfListo.url),60000);setPdfListo(null);}}/>
     {/* Modal registrar gasto del evento */}
     {gastoForm&&<Modal title="💸 Registrar gasto del evento" onClose={()=>setGastoForm(null)} onSave={guardarGasto}>
       <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:10,fontSize:12,color:"#6D28D9",marginBottom:14}}>
@@ -4136,6 +4243,50 @@ function ReportesPage({data,showToast}){
         <button onClick={cerrarPdf} style={{marginTop:14,background:"none",border:"none",color:"#555555",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cerrar</button>
       </div>
     </div>}
+  </div>);
+}
+
+// ── PDF para compartir (WhatsApp, correo…) ──
+// Convierte un documento HTML completo en un archivo PDF (Blob) sin abrir la ventana de impresión.
+async function htmlAPdf(html, nombre){
+  const css=(html.match(/<style>([\s\S]*?)<\/style>/)||[])[1]||"";
+  const cuerpo=(html.match(/<body>([\s\S]*)<\/body>/)||[])[1]||"";
+  const cssLocal=css.replace(/@page[^}]*\}/,"").replace(/\*\{/g,".pdfroot,.pdfroot *{").replace(/(^|\s)body\{/,"$1.pdfroot{");
+  const contenido=`<div class="pdfroot" style="width:100%;background:#fff"><style>${cssLocal}</style>${cuerpo}</div>`;
+  const html2pdf=(await import("html2pdf.js")).default;
+  const out=await html2pdf().set({
+    margin:[10,10,12,10], filename:`${nombre}.pdf`, image:{type:"jpeg",quality:0.96},
+    html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff",scrollY:0},
+    jsPDF:{unit:"mm",format:"letter",orientation:"portrait"},
+    pagebreak:{mode:["css","legacy"],avoid:["tr",".sec",".k",".box",".head",".kpis",".tot",".firmas",".nota"]},
+  }).from(contenido,"string").outputPdf("blob");
+  const blob=out instanceof Blob?out:new Blob([out],{type:"application/pdf"});
+  return {url:URL.createObjectURL(new Blob([blob],{type:"application/pdf"})),nombre:`${nombre}.pdf`,blob:new Blob([blob],{type:"application/pdf"})};
+}
+// Ventana "Tu PDF está listo": Guardar, Abrir y Enviar por WhatsApp
+function PdfListoModal({pdf,onClose}){
+  if(!pdf)return null;
+  const archivo=typeof File!=="undefined"?new File([pdf.blob],pdf.nombre,{type:"application/pdf"}):null;
+  const puedeCompartir=typeof navigator!=="undefined"&&navigator.canShare&&archivo&&navigator.canShare({files:[archivo]});
+  const enviarWhatsApp=async()=>{
+    if(puedeCompartir){try{await navigator.share({files:[archivo],title:pdf.nombre,text:pdf.nombre});return;}catch(e){if(e&&e.name==="AbortError")return;}}
+    // Sin compartir nativo: se guarda el PDF y se abre WhatsApp para adjuntarlo
+    const a=document.createElement("a");a.href=pdf.url;a.download=pdf.nombre;document.body.appendChild(a);a.click();a.remove();
+    window.open(`https://wa.me/?text=${encodeURIComponent(`${pdf.nombre} (adjunto el PDF)`)}`,"_blank");
+  };
+  return(<div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(15,23,42,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:24,width:"100%",maxWidth:400,textAlign:"center",boxShadow:"0 20px 50px rgba(0,0,0,.25)"}}>
+      <div style={{fontSize:40,lineHeight:1}}>📄</div>
+      <h3 style={{fontSize:17,fontWeight:800,color:"#1E293B",margin:"10px 0 4px"}}>Tu PDF está listo</h3>
+      <p style={{fontSize:12,color:"#64748B",margin:"0 0 18px",wordBreak:"break-word"}}>{pdf.nombre}</p>
+      <button onClick={enviarWhatsApp} style={{...btn("#15803D"),width:"100%",justifyContent:"center",padding:"12px 18px",fontSize:14}}><Send size={16}/>Enviar por WhatsApp</button>
+      {!puedeCompartir&&<div style={{fontSize:11,color:"#64748B",marginTop:6}}>Se guarda el PDF y se abre WhatsApp: adjúntalo con el clip 📎.</div>}
+      <div style={{display:"flex",gap:8,marginTop:10}}>
+        <a href={pdf.url} download={pdf.nombre} style={{...btnO,flex:1,justifyContent:"center",textDecoration:"none"}}><Download size={14}/>Guardar</a>
+        <a href={pdf.url} target="_blank" rel="noopener" style={{...btnO,flex:1,justifyContent:"center",textDecoration:"none"}}><Eye size={14}/>Abrir</a>
+      </div>
+      <button onClick={onClose} style={{marginTop:14,background:"none",border:"none",color:"#64748B",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cerrar</button>
+    </div>
   </div>);
 }
 
