@@ -2290,7 +2290,8 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
           const desde=iniciales[0]?.fecha||"";
           const totDeuda=iniciales.reduce((s,d)=>s+(Number(d.monto)||0),0);
           const pagos=data.gastos.filter(g=>g.tipo==="deuda"&&String(g.fecha||"")>=desde).sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||"")));
-          const pagado=pagos.reduce((s,g)=>s+(Number(g.monto)||0),0);const falta=totDeuda-pagado;
+          const enGastos=iniciales.reduce((s,d)=>s+(Number(d.pagado_en_gastos)||0),0);
+          const pagado=pagos.reduce((s,g)=>s+(Number(g.monto)||0),0)+enGastos;const falta=Math.round((totDeuda-pagado)*100)/100;
           const porMes={};pagos.forEach(g=>{const m=mesDeFecha(g.fecha)||"—";porMes[m]=(porMes[m]||0)+(Number(g.monto)||0);});
           const pct=totDeuda>0?Math.min(100,Math.round(pagado/totDeuda*100)):0;
           return(<div style={{...card,borderLeft:"4px solid #B45309",marginBottom:14}}>
@@ -2298,8 +2299,9 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
             <div style={{fontSize:12,color:"#64748B",marginBottom:10}}>Aparte de la planilla y los gastos de cada mes. Se va pagando con los gastos tipo "Pago de deuda".</div>
             <div style={{fontSize:13,maxWidth:520,display:"grid",gap:3}}>
               {iniciales.map(d=>fila(`${d.descripcion||"Deuda"}`,Lc(d.monto)))}
-              {MESES.filter(m=>porMes[m]).map(m=>fila(`(−) Pagado en ${m}`,`(${Lc(porMes[m])})`,{c:"#059669"}))}
-              {fila(falta>0?"= Deuda que falta pagar":"= Deuda pagada por completo",Lc(Math.max(0,falta)),{b:true,c:falta>0?"#B45309":"#059669"})}
+              {MESES.filter(m=>porMes[m]).map(m=>fila(`(−) Pagado en ${m} (Pago de deuda)`,`(${Lc(porMes[m])})`,{c:"#059669"}))}
+              {enGastos>0&&fila("(−) Pagado dentro de rentas, salarios y otros gastos ya registrados",`(${Lc(enGastos)})`,{c:"#059669"})}
+              {fila(falta>0?"= Deuda que falta pagar":"= Deuda pagada por completo ✓",Lc(Math.max(0,falta)),{b:true,c:falta>0?"#B45309":"#059669"})}
             </div>
             <div style={{height:8,background:"#F1F5F9",borderRadius:6,marginTop:10,maxWidth:520,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:"#059669"}}/></div>
             <div style={{fontSize:11,color:"#64748B",marginTop:4}}>{pct}% pagado · {Lc(pagado)} de {Lc(totDeuda)}</div>
