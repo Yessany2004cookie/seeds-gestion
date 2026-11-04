@@ -2324,6 +2324,30 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
     const ultimo=new Date(ANIO_ACTUAL,im+1,0).getDate();
     const hoy=new Date().toLocaleDateString("es-HN",{year:"numeric",month:"long",day:"numeric"});
     const sucNombre=data.sucursales?.find(x=>x.id===sucursalActiva)?.nombre||"";
+    // Fondo de graduación como préstamo interno: lo cobrado antes que la escuela usó, y lo que repuso este mes
+    const iniMes=`${ANIO_ACTUAL}-${String(im+1).padStart(2,"0")}-01`;
+    const gCob=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&v.fecha_pago);
+    const gGas=(data.gastos_graduacion||[]).filter(g=>g.fecha);
+    const cobAntes=gCob.filter(v=>String(v.fecha_pago)<iniMes).reduce((s,v)=>s+gradRecibido(v),0);
+    const gasAntes=gGas.filter(g=>String(g.fecha)<iniMes).reduce((s,g)=>s+(Number(g.monto)||0),0);
+    const cobMes=gCob.filter(v=>enMesFecha(v.fecha_pago,mes,ANIO_ACTUAL)).reduce((s,v)=>s+gradRecibido(v),0);
+    const gasMes=gGas.filter(g=>enMesFecha(g.fecha,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
+    const prestado=Math.max(0,cobAntes-gasAntes);           // fondo del evento que la escuela usó antes de este mes
+    const repuesto=Math.min(prestado,Math.max(0,gasMes-cobMes)); // gastos del evento pagados con dinero de la escuela este mes
+    const mesesCob=MESES.filter((m,i)=>i<im&&gCob.some(v=>enMesFecha(v.fecha_pago,m,ANIO_ACTUAL)));
+    const lista=(a)=>a.length<=1?a.join(""):a.slice(0,-1).join(", ")+" y "+a[a.length-1];
+    const gCobTot=gCob.reduce((s,v)=>s+gradRecibido(v),0), gGasTot=gGas.reduce((s,g)=>s+(Number(g.monto)||0),0);
+    const gPend=(data.cobros_graduacion||[]).filter(v=>v.estado==="pendiente"||v.estado==="abonado").reduce((s,v)=>s+((Number(v.precio_venta)||0)-gradRecibido(v)),0);
+    const notaGrad=(gasMes>0&&repuesto>0)?`<h2>Nota: fondo de graduación (préstamo interno)</h2>
+      <table><tbody>
+        <tr><td>Cobrado de graduación en ${esc(lista(mesesCob)||"meses anteriores")} y usado por la escuela para cubrir gastos</td><td class="r">${L(prestado)}</td></tr>
+        <tr><td>Gastos del evento pagados en ${mes}</td><td class="r">${L(gasMes)}</td></tr>
+        <tr><td class="i">Pagado con lo cobrado de graduación en ${mes}</td><td class="r">${L(Math.min(cobMes,gasMes))}</td></tr>
+        <tr><td class="i">Pagado con dinero de la escuela (reposición del préstamo interno)</td><td class="r rojo">${L(repuesto)}</td></tr>
+        <tr class="sub"><td>Préstamo interno repuesto en ${mes}</td><td class="r">${L(repuesto)}</td></tr>
+        <tr><td>Fondo de graduación usado por la escuela que no tuvo que reponerse (ganancia del evento)</td><td class="r verde">${L(prestado-repuesto)}</td></tr>
+      </tbody></table>
+      <div class="nota">En ${esc(lista(mesesCob)||"meses anteriores")} la escuela utilizó ${L(prestado)} cobrados de graduación para cubrir sus gastos de operación, como préstamo interno del fondo del evento. En ${mes}, al pagar los gastos del evento (${L(gasMes)}), lo cobrado de graduación en el mes (${L(cobMes)}) no alcanzó y la escuela repuso ${L(repuesto)} con sus propios ingresos (mensualidades). Por eso las salidas de ${mes} son mayores: incluyen la devolución de ese préstamo interno, no un gasto adicional de la escuela. El evento cobró en total ${L(gCobTot)} y gastó ${L(gGasTot)}, con una ganancia de ${L(gCobTot-gGasTot)}${gPend>0?`; quedan ${L(gPend)} por cobrar`:""}.</div>`:"";
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cierre de ${mes} ${ANIO_ACTUAL}</title><style>
       @page { size: letter portrait; margin: 14mm; }
       *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -2393,6 +2417,8 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
         <tr class="tot"><td>${final>=0?"Queda libre":"Falta para cubrir lo pendiente"}</td><td class="r ${final>=0?"verde":"rojo"}">${L(Math.abs(final))}</td></tr>
       </tbody></table>
       <div class="nota">${final>=0?`Después de pagar lo pendiente quedan ${L(final)} disponibles.`:`El dinero en caja no alcanza para cubrir lo que se debe; faltan ${L(Math.abs(final))}, que se cubrirán con los ingresos del mes siguiente.`}</div>
+
+      ${notaGrad}
 
       ${det.length?`<h2>4. Detalle de pagos realizados en ${mes}</h2>
       <table><thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th class="r">Monto</th></tr></thead><tbody>${filasDet}
