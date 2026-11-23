@@ -39,6 +39,13 @@ function saldosSugeridos(data) {
     const u = `${f.alumno_id}|${k}`; if (vistos.has(u)) return; vistos.add(u);
     if (!pagadoAntes.has(f.id)) cxc += Number(f.monto_total) || 0;
   });
+  // Pagos adelantados: mensualidades de noviembre en adelante pagadas antes del 31/10 (se restan)
+  const cobroPorId = Object.fromEntries((data.facturas || []).filter((f) => (f.tipo_factura || "cobro") === "cobro").map((f) => [f.id, f]));
+  const adelantos = new Set();
+  (data.facturas || []).filter((f) => f.tipo_factura === "comprobante" && f.estado !== "anulada" && f.fecha_pago && f.fecha_pago <= corte).forEach((f) => {
+    const c = cobroPorId[f.cobro_id]; if (!c || c.estado === "anulada" || adelantos.has(c.id)) return;
+    if (clave(anioF(c), mesN(c.mes_correspondiente)) >= clave(2026, 11)) { adelantos.add(c.id); cxc -= Number(c.monto_total) || 0; }
+  });
   let cxp = 0, sal = 0;
   (data.cuentas_por_pagar || []).forEach((c) => {
     const k = clave(Number(c.anio_correspondiente) || 2026, mesN(c.mes_correspondiente)); if (k > clave(2026, 10)) return;
@@ -317,7 +324,7 @@ function Apertura({ data, asientos, recargar, showToast, periodos }) {
     <p style={{ fontSize: 12, color: GRIS, margin: "0 0 14px" }}>Es la foto de lo que la escuela tenía y debía al terminar octubre. Los valores sugeridos salen de tus registros; corrígelos si sabes el dato real.</p>
     <div style={{ display: "grid", gridTemplateColumns: window.innerWidth > 700 ? "1fr 1fr" : "1fr", gap: 12 }}>
       {campo("disp", "Efectivo y bancos (dinero real contado)", "Obligatorio: lo que había en caja y en el banco.")}
-      {campo("cxc", "Lo que debían los padres (julio a octubre)", `Sugerido ${L(sug.cxc)}: mensualidades de julio a octubre sin pagar al 31/10, sin repetidos.`)}
+      {campo("cxc", "Lo que debían los padres (julio a octubre)", `Sugerido ${L(sug.cxc)}: mensualidades de julio a octubre sin pagar al 31/10, sin repetidos, menos pagos adelantados de noviembre en adelante.`)}
       {campo("cxp", "Proveedores y servicios por pagar", `Sugerido ${L(sug.cxp)}: cuentas por pagar de octubre o antes.`)}
       {campo("sal", "Salarios por pagar", `Sugerido ${L(sug.sal)}.`)}
       {campo("prest", "Préstamo de la propietaria (lo que se le debe)", "Lo que aún falta devolverte.")}
