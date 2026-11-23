@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, btn, btnO, label, badge } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
+import { AlertasFinanzasPage } from "./alertasFinanzas";
+import { ContabilidadPage } from "./contabilidad";
 import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
@@ -661,7 +663,8 @@ export default function App() {
     {id:"graduacion",label:"Graduación",icon:Award},
     {id:"historial",label:"Historial",icon:Calendar},{id:"recordatorios",label:"Recordatorios",icon:Bell},
     {id:"ingresos",label:"Ingresos extra",icon:TrendingUp},
-    {id:"finanzas",label:"Finanzas",icon:DollarSign},{id:"reportes",label:"Reportes",icon:FileText},
+    {id:"alertas",label:"Alertas financieras",icon:AlertCircle},
+    {id:"finanzas",label:"Finanzas",icon:DollarSign},{id:"contabilidad",label:"Contabilidad",icon:BookOpen},{id:"reportes",label:"Reportes",icon:FileText},
     {id:"docentes",label:"Gestión curricular",icon:ClipboardList},
     {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema",icon:LogIn},
   ];
@@ -703,7 +706,9 @@ export default function App() {
     historial:<HistorialPage {...propsSuc}/>,
     recordatorios:<RecordatoriosPage {...propsSuc}/>,
     ingresos:<IngresosPage {...propsSuc}/>,
+    alertas:<AlertasFinanzasPage data={dataSuc}/>,
     finanzas:<FinanzasPage {...propsSuc}/>,
+    contabilidad:<ContabilidadPage data={data} showToast={showToast}/>,
     reportes:<ReportesPage {...propsSuc}/>,
     docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
     config:<ConfiguracionPage {...props}/>,
