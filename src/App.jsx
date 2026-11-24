@@ -4352,7 +4352,7 @@ function ReportesPage({data,showToast}){
   </div>`;
   const SEN_CSS=`
     .sen{--t:#1F2937;--s:#5B6576;--b:#DCE1E8;--sup:#FFFFFF;--sup2:#F5F7FA;--ent:#2A5E45;--sal:#D9641E;--mal:#8E3131;--az:#1B2A4A;font-family:'Source Serif 4',Georgia,serif;color:var(--t)}
-    html[data-fondo="oscuro"] .sen:not(.pdf){--t:#E3E8F0;--s:#9AA6B8;--b:#2A3852;--sup:#172238;--sup2:#1D2A44;--ent:#7FC9A3;--sal:#F0A46A;--mal:#EE9A9A;--az:#E3E8F0}
+    html[data-fondo="oscuro"] .sen:not(.pdf){--t:#E9EDEF;--s:#8696A0;--b:#2A3942;--sup:#111B21;--sup2:#202C33;--ent:#7FC9A3;--sal:#F0A46A;--mal:#EE9A9A;--az:#E9EDEF}
     .sen h2,.sen h3,.sen strong{font-family:Lora,Georgia,serif}
     .sen .titular{border-left:4px solid var(--sal);padding:4px 0 4px 14px;margin-bottom:16px}
     .sen .titular h2{font-size:21px;font-weight:600;margin:0;color:var(--az);line-height:1.35}
@@ -4499,11 +4499,11 @@ function ReportesPage({data,showToast}){
     .pestanas{display:flex;gap:2px;flex-wrap:wrap;border-bottom:2px solid #1B2A4A;margin-bottom:12px}
     .pestanas button{padding:7px 14px;border:1px solid #CDD3DC;border-bottom:none;border-radius:4px 4px 0 0;background:#F3F5F8;color:#3F4A5A;font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
     .pestanas button[aria-selected="true"]{background:#1B2A4A;color:#fff;border-color:#1B2A4A}
-    html[data-fondo="oscuro"] .hojaW .edo,html[data-fondo="oscuro"] .hojaW .edo td,html[data-fondo="oscuro"] .hojaW .edo th{border-color:#2F3E5C !important}
-    html[data-fondo="oscuro"] .hojaW .edo th,html[data-fondo="oscuro"] .hojaW .edo .rn,html[data-fondo="oscuro"] .hojaW .edo .sec td{background:#1D2A44 !important}
-    html[data-fondo="oscuro"] .hojaW .edo .rn{color:#8E9AB0 !important}
+    html[data-fondo="oscuro"] .hojaW .edo,html[data-fondo="oscuro"] .hojaW .edo td,html[data-fondo="oscuro"] .hojaW .edo th{border-color:#2A3942 !important}
+    html[data-fondo="oscuro"] .hojaW .edo th,html[data-fondo="oscuro"] .hojaW .edo .rn,html[data-fondo="oscuro"] .hojaW .edo .sec td{background:#202C33 !important}
+    html[data-fondo="oscuro"] .hojaW .edo .rn{color:#8696A0 !important}
     html[data-fondo="oscuro"] .pestanas{border-color:#D9641E}
-    html[data-fondo="oscuro"] .pestanas button{background:#1D2A44;color:#C9D2E0;border-color:#2F3E5C}
+    html[data-fondo="oscuro"] .pestanas button{background:#202C33;color:#D1D7DB;border-color:#2A3942}
     html[data-fondo="oscuro"] .pestanas button[aria-selected="true"]{background:#D9641E;color:#fff;border-color:#D9641E}`;
 
   // ── Descargar Excel: una hoja por cada parte del reporte ──
