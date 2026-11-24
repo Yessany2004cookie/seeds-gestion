@@ -4,6 +4,8 @@ import { card, input, btn, btnO, label, badge, tono, AZUL as AZUL_MARCA, NARANJA
 import { LOGO_SEEDS } from "./logo";
 import { SELLO_SEEDS, FIRMA_ADMIN } from "./sello";
 import { AlertasFinanzasPage } from "./alertasFinanzas";
+import { FinResumenExcel, FinMaestrosExcel, FinGastosExcel, IngresosExcel } from "./finanzasExcel";
+import { useVista, SelectorVista, EstilosVistas } from "./vistas";
 import { ContabilidadPage } from "./contabilidad";
 import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
@@ -785,7 +787,8 @@ export default function App() {
     {id:"contab_g",label:"Contabilidad",icon:BookOpen,modulo:"contabilidad",items:[
       {id:"c_resultados",label:"Estado de resultados",icon:TrendingUp},{id:"c_balance",label:"Balance general",icon:BookOpen},
       {id:"c_flujo",label:"Flujo de efectivo",icon:DollarSign},{id:"c_diario",label:"Libro diario",icon:FileText},
-      {id:"c_mayor",label:"Libro mayor",icon:FileText},{id:"c_cierre",label:"Cierre de mes",icon:Check},
+      {id:"c_mayor",label:"Libro mayor",icon:FileText},{id:"c_balanza",label:"Balanza de comprobación",icon:Check},
+      {id:"c_antiguedad",label:"Antigüedad de saldos",icon:Calendar},{id:"c_ajustes",label:"Asientos de ajuste",icon:Edit},{id:"c_cierre",label:"Cierre de mes",icon:Check},
       {id:"c_apertura",label:"Apertura",icon:Edit},{id:"c_catalogo",label:"Catálogo de cuentas",icon:ClipboardList}]},
     {id:"sistema_g",label:"Configuración",icon:Edit,items:[
       {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema y respaldos",icon:LogIn}]},
@@ -840,6 +843,9 @@ export default function App() {
     c_flujo:<ContabilidadPage key="flujo" data={data} showToast={showToast} tabFijo="flujo"/>,
     c_diario:<ContabilidadPage key="diario" data={data} showToast={showToast} tabFijo="diario"/>,
     c_mayor:<ContabilidadPage key="mayor" data={data} showToast={showToast} tabFijo="mayor"/>,
+    c_balanza:<ContabilidadPage key="balanza" data={data} showToast={showToast} tabFijo="balanza"/>,
+    c_antiguedad:<ContabilidadPage key="antiguedad" data={data} showToast={showToast} tabFijo="antiguedad"/>,
+    c_ajustes:<ContabilidadPage key="ajustes" data={data} showToast={showToast} tabFijo="ajustes"/>,
     c_cierre:<ContabilidadPage key="cierre" data={data} showToast={showToast} tabFijo="cierre"/>,
     c_apertura:<ContabilidadPage key="apertura" data={data} showToast={showToast} tabFijo="apertura"/>,
     c_catalogo:<ContabilidadPage key="catalogo" data={data} showToast={showToast} tabFijo="catalogo"/>,
@@ -2353,6 +2359,7 @@ function RecordatoriosPage({data,showToast}){
 // ── FINANZAS ──
 function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const[tab,setTab]=useState("resumen");const[modal,setModal]=useState(null);
+  const[vista,setVista]=useVista();
   const[imgPreview,setImgPreview]=useState(null);
   const[cxpForm,setCxpForm]=useState(null); // nueva cuenta por pagar
   const[cierre,setCierre]=useState(null); // {mes, real, tipoSalida}
@@ -2491,6 +2498,20 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const rentasPend=mesesConActividad.map(m=>({mes:m,monto:rentaPendMes(m)})).filter(x=>x.monto>0);
   const totRentasPend=rentasPend.reduce((s,x)=>s+x.monto,0);
   const disponible=cajaHoy-totRentasPend;
+  // Datos para la vista Excel (mismas cifras que la vista sencilla)
+  const excelFin=vista!=="excel"?null:(()=>{
+    const cxpP=cxpPendientes(data).sort((a,b)=>MESES.indexOf(a.mes_correspondiente)-MESES.indexOf(b.mes_correspondiente));
+    const totCxp=cxpP.reduce((s,c)=>s+(Number(c.monto)||0),0);
+    let deuda=null;
+    if((data.deudas||[]).length>0){const iniciales=[...data.deudas].sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||"")));const desde=iniciales[0]?.fecha||"";
+      const total=iniciales.reduce((s,d)=>s+(Number(d.monto)||0),0);const pagos=data.gastos.filter(g=>g.tipo==="deuda"&&String(g.fecha||"")>=desde);
+      const enGastos=iniciales.reduce((s,d)=>s+(Number(d.pagado_en_gastos)||0),0);const pm={};pagos.forEach(g=>{const m=mesDeFecha(g.fecha)||"—";pm[m]=(pm[m]||0)+(Number(g.monto)||0);});
+      const pagado=pagos.reduce((s,g)=>s+(Number(g.monto)||0),0)+enGastos;deuda={iniciales,total,enGastos,porMes:MESES.filter(m=>pm[m]).map(m=>[m,pm[m]]),falta:Math.round((total-pagado)*100)/100};}
+    const meses=MESES.slice(0,mesHoy+1).reverse().map(mes=>{const c=cajaDelMes(data,mes,ANIO_ACTUAL);const im=MESES.indexOf(mes);
+      const pendiente=rentasPend.filter(x=>MESES.indexOf(x.mes)<=im).reduce((s,x)=>s+x.monto,0)+cxpP.filter(x=>MESES.indexOf(x.mes_correspondiente)<=im).reduce((s,x)=>s+(Number(x.monto)||0),0);
+      return{mes,inicio:c.saldo-c.neto,entradas:c.entradas,salidas:c.salidas,saldo:c.saldo,pendiente,libre:c.saldo-pendiente};}).filter(m=>m.entradas||m.salidas||m.saldo);
+    return{cxpP,quedaHoy:cajaHoy-totRentasPend-totCxp,deuda,meses};
+  })();
   // ── PDF del cierre de mes (formal, para compartir) ──
   const[pdfListo,setPdfListo]=useState(null);const[generandoPdf,setGenerandoPdf]=useState(false);const[pdfCierreMes,setPdfCierreMes]=useState(null);
   const documentoCierre=(mes)=>{
@@ -2630,9 +2651,13 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
       <button onClick={()=>setTab("resumen")} style={tBtn(tab==="resumen")}>📊 Resumen</button>
       <button onClick={()=>setTab("maestros")} style={tBtn(tab==="maestros")}>👩‍🏫 Pagos a maestros</button>
       <button onClick={()=>setTab("gastos")} style={tBtn(tab==="gastos")}>📋 Todos los gastos</button>
+      <span style={{flex:1}}/><div style={{alignSelf:"center",padding:"4px 0"}}><SelectorVista vista={vista} setVista={setVista}/></div>
     </div>
+    <EstilosVistas/>
+    {tab==="resumen"&&vista==="excel"&&<FinResumenExcel cajaHoy={cajaHoy} rentasPend={rentasPend} cxp={excelFin.cxpP} quedaHoy={excelFin.quedaHoy} deuda={excelFin.deuda} meses={excelFin.meses}/>}
+    {tab==="maestros"&&vista==="excel"&&<FinMaestrosExcel maestros={data.maestros} gastos={data.gastos} meses={MESES.slice(0,mesHoy+1)}/>}
 
-    {tab==="resumen"&&(()=>{
+    {tab==="resumen"&&vista!=="excel"&&(()=>{
       const Lc=(n)=>`L ${(Math.round((Number(n)||0)*100)/100).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
       const Ln=(n)=>n<0?`(${Lc(Math.abs(n))})`:Lc(n);
       // Rentas pendientes acumuladas hasta un mes (meses ya pasados sin renta registrada)
@@ -2787,7 +2812,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
       </div>
     </Modal>}
 
-    {tab==="maestros"&&<div>
+    {tab==="maestros"&&vista!=="excel"&&<div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
         <p style={{fontSize:13,color:"#64748B",margin:0}}>Pagos: {data.gastos.filter(g=>g.tipo==="salario").length}</p>
         <button onClick={()=>openGasto("salario")} style={btn("#059669")}><Plus size={15}/>Pagar maestro</button>
@@ -2821,7 +2846,8 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
           <button onClick={()=>openGasto("deuda")} style={btn("#B45309")}><Plus size={15}/>Pago de deuda</button>
         </div>
       </div>
-      <div style={card}>{data.gastos.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay gastos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Tipo","Descripción","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{[...data.gastos].reverse().map(g=>{const tc={salario:"#059669",renta:"#7C3AED",otro:"#64748B",comision:"#0891B2",deuda:"#B45309"};const tl={salario:"Salario",renta:"Renta",otro:"Otro",comision:"ACH",deuda:"Pago de deuda"};return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px"}}>{g.fecha}</td><td style={{padding:"6px 8px"}}><span style={badge(tc[g.tipo]||"#64748B")}>{tl[g.tipo]||g.tipo}</span></td><td style={{padding:"6px 8px"}}>{g.descripcion}</td><td style={{padding:"6px 8px"}}>{mesGasto(g)||g.mes_correspondiente}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td><td style={{padding:"6px 8px"}}><button onClick={()=>eliminarGasto(g.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td></tr>);})}</tbody></table></div>)}</div>
+      {vista==="excel"&&<FinGastosExcel gastos={data.gastos} nombreMaestro={(id)=>data.maestros.find(m=>m.id===id)?.nombre||""}/>}
+      {vista!=="excel"&&<div style={card}>{data.gastos.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay gastos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Tipo","Descripción","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{[...data.gastos].reverse().map(g=>{const tc={salario:"#059669",renta:"#7C3AED",otro:"#64748B",comision:"#0891B2",deuda:"#B45309"};const tl={salario:"Salario",renta:"Renta",otro:"Otro",comision:"ACH",deuda:"Pago de deuda"};return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px"}}>{g.fecha}</td><td style={{padding:"6px 8px"}}><span style={badge(tc[g.tipo]||"#64748B")}>{tl[g.tipo]||g.tipo}</span></td><td style={{padding:"6px 8px"}}>{g.descripcion}</td><td style={{padding:"6px 8px"}}>{mesGasto(g)||g.mes_correspondiente}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td><td style={{padding:"6px 8px"}}><button onClick={()=>eliminarGasto(g.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td></tr>);})}</tbody></table></div>)}</div>}
     </div>}
 
     {modal==="gasto"&&<Modal title={form.tipo==="salario"?"💰 Pagar maestro":form.tipo==="renta"?"🏠 Registrar renta":form.tipo==="deuda"?"💳 Pago de deuda anterior":"📋 Registrar gasto"} onClose={()=>setModal(null)} onSave={saveGasto}>
@@ -4735,6 +4761,7 @@ function IngresosPage({data,loadData,showToast,sucursalActiva}){
   const mesActual=MESES[new Date().getMonth()];
   const[modal,setModal]=useState(false);
   const[fMes,setFMes]=useState("");
+  const[vista,setVista]=useVista();
   const CATEGORIAS=["Donación","Evento","Inscripción","Servicio extra","Venta","Reembolso","Otro"];
   const nuevoForm=()=>({descripcion:"",monto:"",categoria:"Donación",fecha:new Date().toISOString().split("T")[0],mes_ingreso:mesActual,alumno_id:"",notas:""});
   const[form,setForm]=useState(nuevoForm());
@@ -4777,9 +4804,11 @@ function IngresosPage({data,loadData,showToast,sucursalActiva}){
         <span style={{fontSize:11,color:"#64748B"}}>Total{fMes?` ${fMes}`:""}: </span>
         <span style={{fontSize:18,fontWeight:800,color:"#059669"}}>L {total.toLocaleString()}</span>
       </div>
+      <span style={{flex:1}}/><EstilosVistas/><SelectorVista vista={vista} setVista={setVista}/>
     </div>
 
-    <div style={card}>
+    {vista==="excel"&&<IngresosExcel lista={lista} nombreAlumno={(id)=>data.alumnos.find(a=>a.id===id)?.nombre||""}/>}
+    {vista!=="excel"&&<div style={card}>
       {lista.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay ingresos extra{fMes?` en ${fMes}`:""}. Agrega el primero con "Nuevo ingreso".</p>:(
         <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Categoría","Descripción","Alumno/Padre","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
@@ -4794,7 +4823,7 @@ function IngresosPage({data,loadData,showToast,sucursalActiva}){
           </tr>);})}</tbody>
         </table></div>
       )}
-    </div>
+    </div>}
 
     {modal&&<Modal title="💵 Nuevo ingreso extra" onClose={()=>setModal(false)} onSave={guardar}>
       <Field label="Descripción *" value={form.descripcion} onChange={v=>setForm({...form,descripcion:v})} placeholder="Ej: Donación evento navideño"/>

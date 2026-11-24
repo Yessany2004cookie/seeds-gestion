@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, label, badge, btn, btnO } from "./estilo";
 import { BookOpen, Lock, Unlock, RefreshCw, Info, CheckCircle, AlertTriangle, Download } from "lucide-react";
+import { Balanza, Ajustes, Antiguedad, calcularBalanza, calcularAntiguedad } from "./contabilidadExtra";
 import { useVista, SelectorVista, EstilosVistas, Titular, Kpis, Comparar, Desglose, Movimientos, Hoja, Lc, VERDE as VERDE_S, ROJO as ROJO_S, NARANJA, AZUL as AZUL_M } from "./vistas";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -20,7 +21,7 @@ const th = { textAlign: "left", padding: "7px 8px", fontSize: 11, color: GRIS, t
 const td = { padding: "6px 8px", borderBottom: "1px solid #F1F5F9", fontSize: 12.5, verticalAlign: "top" };
 const fechaC = (f) => String(f || "").split("-").reverse().join("/");
 // Pantallas que tienen vista sencilla y vista Excel
-const CON_VISTAS = ["resultados", "balance", "flujo", "diario", "mayor", "cierre"];
+const CON_VISTAS = ["resultados", "balance", "flujo", "diario", "mayor", "cierre", "balanza", "ajustes", "antiguedad"];
 
 // Lista de meses desde el arranque hasta el mes actual
 const mesesDisponibles = () => {
@@ -218,7 +219,46 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
         [], sec("Salidas de dinero"), ...flujo.sal.flatMap((c) => [it(c.k, c.v), ...c.items.map((i) => [{ value: `${i.f || ""}  ${i.d || ""}`, indent: 2, textColor: "#5B6576" }, n(i.v, { textColor: "#5B6576" })])]), tot("Total salidas", totSal),
         [], tot("Efectivo y bancos al cierre", dispFinal)];
       const cols = [{ width: 58 }, { width: 18 }];
-      const blob = await writeExcelFile([{ data: hRes, sheet: "Estado de resultados", columns: cols }, { data: hBal, sheet: "Balance general", columns: cols }, { data: hFlu, sheet: "Flujo de efectivo", columns: cols }], { fontFamily: "Calibri", fontSize: 11 }).toBlob();
+      // Balanza de comprobación
+      const bz = calcularBalanza(cuentas, asientos, sel.anio, sel.mes);
+      const cabN = (ts) => ts.map((t, i) => ({ value: t, fontWeight: "bold", backgroundColor: "#1B2A4A", textColor: "#FFFFFF", align: i > 1 ? "right" : "left", wrap: true }));
+      const nv = (v) => (Math.abs(v) > 0.004 ? n(v) : null);
+      const gris = (v) => ({ value: v, fontWeight: "bold", backgroundColor: "#E8ECF2" });
+      const totF = (v) => n(v, { fontWeight: "bold", topBorderStyle: "thin" });
+      const hBz = [...enc(`Balanza de comprobación — ${mesTxt}`), cabN(["Código", "Cuenta", "Saldo inicial deudor", "Saldo inicial acreedor", "Debe del mes", "Haber del mes", "Saldo final deudor", "Saldo final acreedor"]),
+        ...bz.filas.map((x) => [{ value: x.c.codigo }, { value: x.c.nombre }, nv(Math.max(0, x.ini)), nv(Math.max(0, -x.ini)), nv(x.debe), nv(x.haber), nv(Math.max(0, x.fin)), nv(Math.max(0, -x.fin))]),
+        [{ value: "" }, { value: "Sumas iguales", fontWeight: "bold", topBorderStyle: "thin" }, ...[bz.t.iniD, bz.t.iniH, bz.t.debe, bz.t.haber, bz.t.finD, bz.t.finH].map(totF)]];
+      // Libro diario del mes
+      const hDi = [...enc(`Libro diario — ${mesTxt}`), cabN(["Fecha", "Concepto / cuenta", "Código", "Debe", "Haber"]),
+        ...delMes.flatMap((a) => [[gris(fechaC(a.fecha)), gris(a.descripcion + (a.clase !== "auto" ? ` (${a.clase})` : "")), gris(null), gris(null), gris(null)],
+          ...(a.contab_lineas || []).map((l) => [{ value: "" }, { value: nombreCta(l.cuenta), indent: 1 }, { value: l.cuenta }, nv(Number(l.debe)), nv(Number(l.haber))])]),
+        [{ value: "" }, { value: "Sumas iguales", fontWeight: "bold", topBorderStyle: "thin" }, { value: "" }, totF(sumaDebe), totF(sumaHaber)]];
+      // Libro mayor: una sección por cuenta con movimientos hasta el mes
+      const hMa = [...enc(`Libro mayor hasta ${mesTxt}`), cabN(["Fecha", "Concepto", "Debe", "Haber", "Saldo"])];
+      cuentas.forEach((c) => {
+        const sg = ["activo", "gasto"].includes(c.tipo) ? 1 : -1; let sd = 0;
+        const movs = hasta.flatMap((a) => (a.contab_lineas || []).filter((l) => l.cuenta === c.codigo).map((l) => ({ a, l })));
+        if (!movs.length) return;
+        hMa.push([gris(`${c.codigo} ${c.nombre}`), gris(null), gris(null), gris(null), gris(null)]);
+        movs.forEach(({ a, l }) => { sd += sg * (Number(l.debe) - Number(l.haber)); hMa.push([{ value: fechaC(a.fecha) }, { value: a.descripcion }, nv(Number(l.debe)), nv(Number(l.haber)), n(sd)]); });
+        hMa.push([{ value: "" }, { value: "Saldo final", fontWeight: "bold" }, null, null, n(sd, { fontWeight: "bold" })], []);
+      });
+      // Antigüedad de saldos
+      const hoyS = new Date().toISOString().slice(0, 10), finS = `${sel.anio}-${String(sel.mes).padStart(2, "0")}-${String(new Date(sel.anio, sel.mes, 0).getDate()).padStart(2, "0")}`;
+      const corteS = finS < hoyS ? finS : hoyS;
+      const ant = calcularAntiguedad(data, corteS);
+      const hAn = [...enc(`Antigüedad de saldos al ${fechaC(corteS)}`), cabN(["Alumno / cuenta", "Meses", "0–30 días", "31–60 días", "61–90 días", "Más de 90 días", "Total"]),
+        [gris("Lo que deben los padres")],
+        ...ant.cxc.map((x) => [{ value: x.nombre }, { value: x.meses.length, type: Number }, ...x.tr.map(nv), n(x.total)]),
+        [{ value: "Total", fontWeight: "bold", topBorderStyle: "thin" }, { value: "" }, ...ant.tramosCxc.map(totF), totF(ant.totCxc)],
+        [], [gris("Lo que debe la escuela")],
+        ...ant.cxp.map((x) => [{ value: x.nombre }, { value: x.mes }, ...[0, 1, 2, 3].map((i) => (x.t === i ? n(x.monto) : null)), n(x.monto)]),
+        [{ value: "Total", fontWeight: "bold", topBorderStyle: "thin" }, { value: "" }, ...ant.tramosCxp.map(totF), totF(ant.totCxp)]];
+      const blob = await writeExcelFile([{ data: hRes, sheet: "Estado de resultados", columns: cols }, { data: hBal, sheet: "Balance general", columns: cols }, { data: hFlu, sheet: "Flujo de efectivo", columns: cols },
+        { data: hBz, sheet: "Balanza de comprobación", columns: [{ width: 10 }, { width: 40 }, ...Array(6).fill({ width: 16 })] },
+        { data: hDi, sheet: "Libro diario", columns: [{ width: 12 }, { width: 58 }, { width: 10 }, { width: 16 }, { width: 16 }] },
+        { data: hMa, sheet: "Libro mayor", columns: [{ width: 12 }, { width: 58 }, { width: 16 }, { width: 16 }, { width: 16 }] },
+        { data: hAn, sheet: "Antigüedad de saldos", columns: [{ width: 40 }, { width: 14 }, ...Array(5).fill({ width: 16 })] }], { fontFamily: "Calibri", fontSize: 11 }).toBlob();
       if (xls) URL.revokeObjectURL(xls.url);
       setXls({ url: URL.createObjectURL(blob), nombre: `Contabilidad ${mesTxt}.xlsx` });
     } catch (e) { showToast && showToast("No se pudo crear el Excel: " + e.message, "error"); }
@@ -233,7 +273,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
     {tab === "resultados" && <div style={{ ...card, display: "flex", gap: 10, alignItems: "flex-start", background: "rgba(239,246,255,.75)" }}>
       <Info size={18} color={AZUL} style={{ flexShrink: 0, marginTop: 2 }} />
       <div style={{ fontSize: 12.5, color: "#1E3A8A", lineHeight: 1.5 }}>
-        <b>Contabilidad</b> registra lo que pasó, en partida doble, y se llena sola con los cobros, pagos y gastos que ya registras. No se edita a mano.
+        <b>Contabilidad</b> registra lo que pasó, en partida doble, y se llena sola con los cobros, pagos y gastos que ya registras. Las correcciones se hacen con asientos de ajuste, nunca borrando lo automático.
         Empieza el 1 de noviembre de 2026; julio a octubre quedan como historial. Un mes cerrado ya no cambia.
       </div>
     </div>}
@@ -247,13 +287,13 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       {!cerrado && <button onClick={() => generar(true)} disabled={trabajando} style={{ ...btnO, opacity: trabajando ? 0.6 : 1 }}><RefreshCw size={14} />{trabajando ? "Actualizando…" : "Actualizar asientos"}</button>}
       {!hayApertura && <span style={{ ...badge(ROJO) }}>Falta el asiento de apertura</span>}
       {CON_VISTAS.includes(tab) && <><span style={{ flex: 1 }} /><SelectorVista vista={vista} setVista={setVista} /></>}
-      {!cargando && ["resultados", "balance", "flujo"].includes(tab) && <button onClick={descargarExcel} style={btnO}><Download size={14} />Descargar Excel</button>}
+      {!cargando && CON_VISTAS.includes(tab) && <button onClick={descargarExcel} style={btnO}><Download size={14} />Descargar Excel</button>}
       {xls && <a href={xls.url} download={xls.nombre} onClick={() => setTimeout(() => setXls(null), 500)} style={{ ...btn("#15803D"), textDecoration: "none" }}><Download size={14} />Guardar {xls.nombre}</a>}
     </div>
 
     {!tabFijo && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
       <Pest id="resultados" txt="Estado de resultados" /><Pest id="balance" txt="Balance general" /><Pest id="flujo" txt="Flujo de efectivo" />
-      <Pest id="diario" txt="Libro diario" /><Pest id="mayor" txt="Libro mayor" /><Pest id="cierre" txt="Cierre de mes" /><Pest id="apertura" txt="Apertura" /><Pest id="catalogo" txt="Catálogo" />
+      <Pest id="diario" txt="Libro diario" /><Pest id="mayor" txt="Libro mayor" /><Pest id="balanza" txt="Balanza de comprobación" /><Pest id="antiguedad" txt="Antigüedad de saldos" /><Pest id="ajustes" txt="Asientos de ajuste" /><Pest id="cierre" txt="Cierre de mes" /><Pest id="apertura" txt="Apertura" /><Pest id="catalogo" txt="Catálogo" />
     </div>}
 
     {cargando ? <div style={card}><p style={{ fontSize: 13, color: GRIS }}>Cargando…</p></div> : <>
@@ -380,6 +420,9 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
         ]} pie="Debe = lo que entra o aumenta en esa cuenta. Haber = lo que sale o disminuye. Las dos sumas siempre deben ser iguales." />}
       </div>}
 
+      {tab === "balanza" && <Balanza cuentas={cuentas} asientos={asientos} sel={sel} vista={vista} />}
+      {tab === "antiguedad" && <Antiguedad data={data} sel={sel} vista={vista} />}
+      {tab === "ajustes" && <Ajustes cuentas={cuentas} asientos={asientos} sel={sel} cerrado={cerrado} nombreCta={nombreCta} recargar={cargar} showToast={showToast} vista={vista} />}
       {tab === "mayor" && <Mayor cuentas={cuentas} asientos={hasta} nombreCta={nombreCta} tipoCta={tipoCta} sel={sel} vista={vista} />}
       {tab === "cierre" && <Cierre sel={sel} periodo={periodo} saldoDisp={saldos["1.1.01"] || 0} hayApertura={hayApertura} recargar={cargar} showToast={showToast} resultado={resultado} vista={vista} />}
       {tab === "apertura" && <Apertura data={data} asientos={asientos} recargar={cargar} showToast={showToast} periodos={periodos} />}
@@ -521,7 +564,7 @@ function Apertura({ data, asientos, recargar, showToast, periodos }) {
       {campo("cxc", "Lo que debían los padres (julio a octubre)", `Sugerido ${L(sug.cxc)}: mensualidades de julio a octubre sin pagar al 31/10, sin repetidos, menos pagos adelantados de noviembre en adelante.`)}
       {campo("cxp", "Proveedores y servicios por pagar", `Sugerido ${L(sug.cxp)}: cuentas por pagar de octubre o antes.`)}
       {campo("sal", "Salarios por pagar", `Sugerido ${L(sug.sal)}.`)}
-      {campo("prest", "Préstamo de la propietaria (lo que se le debe)", "Lo que aún falta devolverte.")}
+      {campo("prest", "Lo que se le debe a la propietaria (sueldos atrasados o préstamo)", "Al pagártelo, regístralo en Gastos como «Pago de deuda» con tu nombre en la descripción: baja esta deuda y no cuenta como gasto.")}
       {campo("deuda", "Otras deudas anteriores", "Si queda algo de la deuda de antes de julio.")}
       {campo("fondo", "Fondo de graduación sin gastar", `Sugerido ${L(sug.fondo)}: cobrado menos gastado. Pon 0 si el evento ya pasó y el sobrante es de la escuela.`)}
     </div>
