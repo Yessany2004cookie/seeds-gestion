@@ -116,3 +116,10 @@ html[data-fondo="oscuro"] .af {
 .af td.af-corto { max-width: 240px; }
 .af td.af-corto, .af td.af-corto > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .af .af-aviso { padding: 9px 14px; font-size: 12px; align-items: center; }
+
+/* Vista previa del PDF */
+.af-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(10, 12, 14, .6); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.af-modal-caja { width: min(1100px, 100%); height: min(92vh, 900px); background: var(--af-sup); border: 1px solid var(--af-borde); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 12px 40px rgba(0, 0, 0, .35); }
+.af-modal-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--af-borde); font-size: 13px; }
+.af-modal-pdf { flex: 1; width: 100%; border: 0; background: #525659; }
+@media (max-width: 600px) { .af-modal { padding: 0; } .af-modal-caja { height: 100vh; border-radius: 0; } }

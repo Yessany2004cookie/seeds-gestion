@@ -8,7 +8,7 @@
 import { useState, useMemo } from "react";
 import { input, label, btn, btnO } from "./estilo";
 import { useMarca } from "./marca";
-import { Phone, Info, FileSpreadsheet, FileText, Download } from "lucide-react";
+import { Phone, Info, FileSpreadsheet, FileText, Download, Eye, X } from "lucide-react";
 import "./alertasFinanzas.css";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -214,9 +214,11 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
 
   const [generando, setGenerando] = useState("");
   const [archivo, setArchivo] = useState(null);
+  const [verPdf, setVerPdf] = useState(false);
   const listo = (blob, ext, tipo) => {
     if (archivo) URL.revokeObjectURL(archivo.url);
     setArchivo({ url: URL.createObjectURL(blob), nombre: `Alertas de finanzas ${hoy.toISOString().slice(0, 10)}.${ext}`, tipo });
+    if (tipo === "PDF") setVerPdf(true); // el PDF se abre primero en vista previa
   };
   const descargarExcel = async () => {
     if (generando) return; setGenerando("excel");
@@ -274,6 +276,7 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
       <div className="af-acciones">
         <button type="button" onClick={descargarPDF} disabled={!!generando} style={{ ...btnO, opacity: generando ? 0.7 : 1, cursor: generando ? "wait" : "pointer" }}><FileText size={15} />{generando === "pdf" ? "Preparando PDF…" : "PDF"}</button>
         <button type="button" onClick={descargarExcel} disabled={!!generando} style={{ ...btnO, opacity: generando ? 0.7 : 1, cursor: generando ? "wait" : "pointer" }}><FileSpreadsheet size={15} />{generando === "excel" ? "Preparando Excel…" : "Excel"}</button>
+        {archivo?.tipo === "PDF" && <button type="button" onClick={() => setVerPdf(true)} style={btnO}><Eye size={15} />Vista previa</button>}
         {archivo && <a href={archivo.url} download={archivo.nombre} onClick={() => setTimeout(() => setArchivo(null), 500)} style={{ ...btn("#15803D"), textDecoration: "none" }}><Download size={14} />Guardar {archivo.tipo}</a>}
       </div>
     </div>
@@ -384,5 +387,18 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
         <div className="af-ayuda" style={{ marginTop: 6 }}>Hay que anular las copias. Estas alertas no se cuentan dos veces en «Quién debe».</div>
       </div>}
     </section>}
+
+    {verPdf && archivo?.tipo === "PDF" && <div className="af-modal" role="dialog" aria-label="Vista previa del PDF" onClick={(e) => e.target === e.currentTarget && setVerPdf(false)}>
+      <div className="af-modal-caja">
+        <div className="af-modal-cab">
+          <b>Vista previa · {archivo.nombre}</b>
+          <div className="af-acciones">
+            <a href={archivo.url} download={archivo.nombre} onClick={() => setTimeout(() => { setVerPdf(false); setArchivo(null); }, 500)} style={{ ...btn("#15803D"), textDecoration: "none" }}><Download size={14} />Guardar PDF</a>
+            <button type="button" onClick={() => setVerPdf(false)} style={btnO} aria-label="Cerrar"><X size={15} />Cerrar</button>
+          </div>
+        </div>
+        <iframe title="Vista previa del PDF" src={archivo.url + "#view=FitH"} className="af-modal-pdf" />
+      </div>
+    </div>}
   </div>);
 }
