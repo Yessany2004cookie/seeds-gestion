@@ -26,17 +26,18 @@ const CSS = `
 .vn-sel button{padding:7px 14px;border:none;background:#FFFFFF;color:#344054;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .vn-sel button+button{border-left:1px solid #CDD3DC}
 .vn-sel button[aria-selected="true"]{background:#1B2A4A;color:#fff}
+.vn-tit,.vn-kpis,.vn-caja,.vn-dos{font-family:var(--letra-informe)}
 .vn-tit{border-left:4px solid #D9641E;padding:2px 0 2px 14px;margin:0 0 16px}
-.vn-tit h4{font-family:Lora,Georgia,serif;font-size:19px;font-weight:600;color:#1B2A4A;margin:0;line-height:1.35}
+.vn-tit h4{font-family:var(--letra-informe);font-size:19px;font-weight:600;color:#1B2A4A;margin:0;line-height:1.35}
 .vn-tit p{font-size:13px;color:#5B6576;margin:4px 0 0;line-height:1.5}
 .vn-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:0 0 14px}
 .vn-kpi{border:1px solid #DCE1E8;border-radius:6px;padding:12px 14px;background:#FFFFFF}
 .vn-kpi.dest{background:#F5F7FA}
 .vn-kpi .t{font-size:12px;color:#5B6576}
-.vn-kpi .v{font-family:Lora,Georgia,serif;font-size:24px;font-weight:600;margin:2px 0;font-variant-numeric:tabular-nums;white-space:nowrap}
+.vn-kpi .v{font-family:var(--letra-cifra);letter-spacing:-.4px;font-size:24px;font-weight:600;margin:2px 0;font-variant-numeric:tabular-nums;white-space:nowrap}
 .vn-kpi .s{font-size:11.5px;color:#5B6576;line-height:1.4}
 .vn-caja{border:1px solid #DCE1E8;border-radius:6px;padding:14px 16px;background:#FFFFFF;margin:0 0 14px}
-.vn-caja h5{font-family:Lora,Georgia,serif;font-size:15px;font-weight:600;color:#1B2A4A;margin:0 0 10px}
+.vn-caja h5{font-family:var(--letra-informe);font-size:15px;font-weight:600;color:#1B2A4A;margin:0 0 10px}
 .vn-dos{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:0 0 14px}
 .vn-dos .vn-caja{margin:0}
 .vn-comp{display:grid;grid-template-columns:auto 1fr auto;gap:8px 14px;align-items:center;font-size:13px}
@@ -46,7 +47,7 @@ const CSS = `
 .vn-it:first-of-type{border-top:none;padding-top:0}
 .vn-it .f{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
 .vn-it .n{font-weight:600;font-size:13.5px;color:#1F2937}
-.vn-it .m{font-weight:700;font-size:13.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.vn-it .m{font-family:var(--letra-cifra);font-weight:700;font-size:13.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .vn-it .d{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:#5B6576;margin:1px 0 5px}
 .vn-it.click{cursor:pointer}
 .vn-sub{margin:6px 0 2px 10px;padding-left:10px;border-left:2px solid #DCE1E8}
@@ -54,14 +55,14 @@ const CSS = `
 .vn-mov{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid #EEF1F5}
 .vn-mov:first-child{border-top:none}
 .vn-mov .fe{font-size:11px;color:#5B6576;min-width:44px;text-align:center;border:1px solid #DCE1E8;border-radius:4px;padding:3px 4px;line-height:1.2}
-.vn-mov .fe b{display:block;font-size:16px;color:#1B2A4A;font-family:Lora,Georgia,serif}
+.vn-mov .fe b{display:block;font-size:16px;color:#1B2A4A;font-family:var(--letra-cifra)}
 .vn-mov .tx{flex:1;min-width:0;font-size:13px;color:#1F2937;line-height:1.45}
 .vn-mov .tx small{display:block;color:#5B6576;font-size:11.5px}
-.vn-mov .mo{font-weight:700;font-size:13.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.vn-mov .mo{font-family:var(--letra-cifra);font-weight:700;font-size:13.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .vn-vacio{font-size:13px;color:#5B6576;padding:6px 0}
 /* Vista Excel */
 .vx-w{overflow-x:auto;border:1px solid #C9D1DC;border-radius:2px;background:#FFFFFF}
-.vx{border-collapse:collapse;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
+.vx{font-family:var(--letra-informe);border-collapse:collapse;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
 .vx td,.vx th{border:1px solid #DCE1E8;padding:5px 8px;vertical-align:top}
 .vx .le th{background:#EEF1F5;color:#7A8597;font-weight:500;font-size:10.5px;text-align:center;padding:3px 4px;font-family:Calibri,Arial,sans-serif}
 .vx .rn{background:#EEF1F5;color:#7A8597;font-size:10.5px;text-align:center;width:34px;min-width:34px;padding:5px 2px;font-family:Calibri,Arial,sans-serif}
@@ -75,7 +76,7 @@ const CSS = `
 .vx .tot td{font-weight:700;border-top:1.5px solid #8A95A6}
 .vx .gran td{font-weight:800;font-size:13.5px;border-top:2px solid #1B2A4A;background:#FAFBFC}
 .vx .gran td.rn,.vx .tot td.rn{font-weight:500;font-size:10.5px;background:#EEF1F5}
-.vx .num{text-align:right;white-space:nowrap}
+.vx .num{text-align:right;white-space:nowrap;font-family:var(--letra-cifra)}
 .vx tr.click{cursor:pointer}
 .vx tr.click:hover td:not(.rn){background:#FFF8F2}
 .vx-pie{font-size:11px;color:#5B6576;margin-top:6px}

@@ -48,8 +48,8 @@ function limpiarHtml(html) {
 const textoPlano = (html) => { if (!esHtml(html)) return String(html || ""); const d = new DOMParser().parseFromString(html, "text/html"); return (d.body.innerText || d.body.textContent || "").trim(); };
 
 const FUENTES = [
-  { l: "Clásica", v: "Georgia, 'Times New Roman', serif" },
-  { l: "Moderna", v: "'Segoe UI', Arial, sans-serif" },
+  { l: "Clásica", v: "Inter, 'Segoe UI', Arial, sans-serif" },
+  { l: "Moderna", v: "Manrope, 'Segoe UI', Arial, sans-serif" },
   { l: "A mano", v: "Caveat, 'Segoe Print', cursive" },
   { l: "Escolar", v: "'Comic Sans MS', 'Comic Neue', cursive" },
   { l: "Máquina", v: "'Courier New', Courier, monospace" },
@@ -250,7 +250,7 @@ export const ESTILOS_LIBRO = `
 .bt-cara-dorso { transform: rotateY(180deg) }
 .bt-sombra { position: absolute; inset: 0; pointer-events: none }
 .bt-renglones { background-color: #FFFEF9; background-image: linear-gradient(to right, transparent 46px, #F4A9A8 46px, #F4A9A8 48px, transparent 48px), repeating-linear-gradient(to bottom, transparent 0, transparent 31px, #D6E4F0 31px, #D6E4F0 32px); background-attachment: local }
-.bt-texto { font-family: Georgia, 'Times New Roman', serif; font-size: 16px; line-height: 32px; color: #1E293B; padding: 4px 18px 16px 60px; white-space: pre-wrap; word-break: break-word }
+.bt-texto { font-family: Inter, 'Segoe UI', Arial, sans-serif; font-size: 16px; line-height: 32px; color: #1E293B; padding: 4px 18px 16px 60px; white-space: pre-wrap; word-break: break-word }
 .bt-texto::placeholder { color: #94A3B8; font-style: italic }
 .bt-texto[contenteditable]:empty:before { content: attr(data-placeholder); color: #94A3B8; font-style: italic; pointer-events: none }
 .bt-texto ul, .bt-texto ol { padding-left: 24px; margin: 0 }
@@ -286,7 +286,7 @@ function documentoBitacora(paginas, maestroNombre, secciones) {
   const rango = paginas.length ? `${fechaTitulo(paginas[0].fecha)} — ${fechaTitulo(paginas[paginas.length - 1].fecha)}` : "";
   const css = `
     *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .bt-doc{font-family:'Segoe UI',system-ui,sans-serif;color:#1E293B;background:#fff}
+    .bt-doc{font-family:Inter,'Segoe UI',Arial,sans-serif;color:#1E293B;background:#fff}
     .bt-portada{height:250mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:3px solid #EA580C;border-radius:14px;padding:30px}
     .bt-portada img{width:160px;height:160px;object-fit:contain}
     .bt-portada h1{font-family:'Caveat','Segoe Print',cursive;font-size:56px;color:#9A3412;margin-top:18px}
@@ -299,7 +299,7 @@ function documentoBitacora(paginas, maestroNombre, secciones) {
     .bt-cab .n{font-size:11px;color:#94A3B8}
     .bt-tit{font-family:'Caveat','Segoe Print',cursive;font-size:30px;font-weight:700;color:#9A3412;margin-bottom:6px}
     .bt-cont ul,.bt-cont ol{padding-left:24px}
-    .bt-cont{font-family:Georgia,'Times New Roman',serif;font-size:14px;line-height:28px;white-space:pre-wrap;word-break:break-word;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,#E2E8F0 27px,#E2E8F0 28px);min-height:200mm}
+    .bt-cont{font-family:Inter,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:28px;white-space:pre-wrap;word-break:break-word;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,#E2E8F0 27px,#E2E8F0 28px);min-height:200mm}
     .bt-pie{font-size:10px;color:#94A3B8;text-align:center;margin-top:10px}`;
   const cuerpo = `
     <div class="bt-portada">
@@ -403,12 +403,12 @@ export function PortadaCuero({ titulo = "Bitácora de clases", nombre, anio, abr
         <div className="bt-liga" />
         <div className="bt-costura" />
         <div style={{ position: "absolute", inset: "34px 40px 34px 64px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", textAlign: "center" }}>
-          <div className="bt-quemado" style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: "clamp(12px, 3.4vw, 15px)", letterSpacing: "clamp(2px, .8vw, 4px)", fontWeight: 700, textTransform: "uppercase", marginTop: 6 }}>{titulo}</div>
+          <div className="bt-quemado" style={{ fontFamily: "Manrope, 'Segoe UI', Arial, sans-serif", fontSize: "clamp(12px, 3.4vw, 15px)", letterSpacing: "clamp(2px, .8vw, 4px)", fontWeight: 700, textTransform: "uppercase", marginTop: 6 }}>{titulo}</div>
           <div className="bt-sello"><img src={LOGO_SEEDS} alt="Seeds" /></div>
           <div>
             <div className="bt-quemado" style={{ fontFamily: "Caveat, 'Segoe Print', cursive", fontSize: "clamp(26px, 7.4vw, 48px)", fontWeight: 700, lineHeight: 1.05 }}>{nombre}</div>
             <div className="bt-quemado" style={{ width: 120, height: 2, margin: "10px auto 8px", background: "#2A1206", opacity: 0.75 }} />
-            <div className="bt-quemado" style={{ fontFamily: "Georgia, serif", fontSize: "clamp(10px, 2.8vw, 12px)", letterSpacing: "clamp(1px, .6vw, 3px)", textTransform: "uppercase", fontWeight: 700 }}>Seeds English School · {anio}</div>
+            <div className="bt-quemado" style={{ fontFamily: "Manrope, 'Segoe UI', Arial, sans-serif", fontSize: "clamp(10px, 2.8vw, 12px)", letterSpacing: "clamp(1px, .6vw, 3px)", textTransform: "uppercase", fontWeight: 700 }}>Seeds English School · {anio}</div>
           </div>
         </div>
       </div>
@@ -537,7 +537,7 @@ export function Bitacora({ maestro, secciones, editable, avisar, esAdmin }) {
     const { css, cuerpo } = documentoBitacora(guardadas, maestro.nombre, secciones);
     const w = window.open("", "_blank");
     if (!w) { avisar("Permite las ventanas emergentes para imprimir, o usa “Descargar PDF”", "error"); return; }
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bitácora ${esc(maestro.nombre)}</title><link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap" rel="stylesheet"><style>@page{size:letter;margin:12mm}${css}</style></head><body class="bt-doc">${cuerpo}</body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bitácora ${esc(maestro.nombre)}</title><link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Inter:wght@400;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet"><style>@page{size:letter;margin:12mm}${css}</style></head><body class="bt-doc">${cuerpo}</body></html>`);
     w.document.close();
     setTimeout(() => { w.focus(); w.print(); }, 700);
   };

@@ -23,12 +23,12 @@ const CSS = `
 .pa table td,.pa table tr{border-color:#E4E8EE !important;color:inherit}
 .pa table tbody tr:hover>td{background:inherit}
 .pa h2{color:#1B2A4A !important}
-.pa{width:100%;background:#fff;color:#1F2937;font-family:"Source Serif 4",Georgia,"Times New Roman",serif;font-size:11px;line-height:1.4}
+.pa{width:100%;background:#fff;color:#1F2937;font-family:"IBM Plex Sans",Arial,sans-serif;font-size:11px;line-height:1.4}
 .pa *{box-sizing:border-box}
 .cab{display:flex;align-items:center;gap:16px;padding-bottom:12px;border-bottom:2px solid #D9641E}
 .cab img{width:62px;height:62px;object-fit:contain}
 .cab .t{flex:1}
-.cab .n{font-family:Lora,Georgia,serif;font-size:19px;font-weight:700;color:#1B2A4A}
+.cab .n{font-family:"IBM Plex Sans",Arial,sans-serif;font-size:19px;font-weight:700;color:#1B2A4A}
 .cab .s{font-size:11px;color:#5B6576;margin-top:1px}
 .cab .d{font-size:16px;font-weight:700;color:#1B2A4A;margin-top:6px}
 .cab .p{text-align:right;font-size:10px;color:#5B6576;line-height:1.6}
@@ -36,19 +36,19 @@ const CSS = `
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0 4px}
 .k{border:1px solid #DCE1E8;border-left:3px solid var(--c);border-radius:4px;padding:9px 12px}
 .k .kt{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#5B6576;font-weight:600}
-.k .kv{font-size:19px;font-weight:700;color:var(--c);margin-top:3px}
+.k .kv{font-family:"IBM Plex Mono",Consolas,monospace;font-size:19px;font-weight:700;color:var(--c);margin-top:3px}
 .k .ks{font-size:9.5px;color:#5B6576}
 .sec{margin-top:18px}
 .salto{page-break-before:always;break-before:page;margin-top:0}
 .sec-cab{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:7px}
-.pa .sec-cab h2{font-family:Lora,Georgia,serif;font-size:14px;margin:0;color:#1B2A4A}
+.pa .sec-cab h2{font-family:"IBM Plex Sans",Arial,sans-serif;font-size:14px;margin:0;color:#1B2A4A}
 .sec-cab .r{font-size:10px;color:#5B6576}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 th{background:#1B2A4A;color:#fff;font-weight:600;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;padding:6px 7px;text-align:left;white-space:nowrap}
 td{padding:4px 7px;border-bottom:1px solid #E4E8EE;vertical-align:top}
 tbody tr:nth-child(even) td{background:#F6F7F9}
 tfoot td{font-weight:700;background:#E8ECF2;border-top:1px solid #1B2A4A;border-bottom:1px solid #1B2A4A}
-.der{text-align:right}.cen{text-align:center}.nw{white-space:nowrap}.b{font-weight:700}
+.der{text-align:right;font-family:"IBM Plex Mono",Consolas,monospace}.cen{text-align:center}.nw{white-space:nowrap}.b{font-weight:700}
 .g{color:#5B6576;font-size:9.5px}
 .rojo{color:#8E3131}.ambar{color:#8F5E1A}.verde{color:#2A5E45}
 .est{display:inline-block;padding:1px 7px;border-radius:9px;font-size:9px;font-weight:700;white-space:nowrap}

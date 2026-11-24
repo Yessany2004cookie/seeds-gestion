@@ -17,6 +17,7 @@ import { btn, btnO } from "./estilo";
 import { useMarca } from "./marca";
 import { logoParaExcel } from "./alertasFinanzas";
 import "./alertasFinanzas.css";
+import { fuentesExcel, EXCEL_TEXTO, cargarFuentesInforme } from "./tipografia";
 
 const AZUL = "#1B2A4A", NARANJA = "#D9641E", GRIS = "#5B6576", BANDA = "#F4F6F9", LINEA = "#D5DAE1", TOTAL = "#E8ECF2";
 const FMT_L = '"L "#,##0.00;[Red]-"L "#,##0.00';
@@ -84,24 +85,24 @@ export async function crearExcelFormal(writeExcelFile, extraHoja, reporte, marca
       images: logo ? [{ ...logo, dpi: 96, anchor: { row: 1, column: 1 }, offsetX: 4, offsetY: 4, title: marca.nombre }] : undefined,
     };
   });
-  return writeExcelFile(libro, { fontFamily: "Calibri", fontSize: 10, features: [extraHoja] });
+  return writeExcelFile(fuentesExcel(libro), { fontFamily: EXCEL_TEXTO, fontSize: 10, features: [extraHoja] });
 }
 
 // ── PDF (HTML que html2pdf convierte) ──
 const CSS = `
-.pf{width:100%;background:#fff;color:#1F2937;font-family:"Source Serif 4",Georgia,"Times New Roman",serif;font-size:10.5px;line-height:1.4}
+.pf{width:100%;background:#fff;color:#1F2937;font-family:"IBM Plex Sans",Arial,sans-serif;font-size:10.5px;line-height:1.4}
 .pf *{box-sizing:border-box}
 .pf .cab{display:flex;align-items:center;gap:16px;padding-bottom:11px;border-bottom:2px solid ${NARANJA}}
 .pf .cab img{width:60px;height:60px;object-fit:contain}
 .pf .cab .t{flex:1}
-.pf .cab .n{font-family:Lora,Georgia,serif;font-size:18px;font-weight:700;color:${AZUL}}
+.pf .cab .n{font-family:"IBM Plex Sans",Arial,sans-serif;font-size:18px;font-weight:700;color:${AZUL}}
 .pf .cab .s{font-size:10.5px;color:${GRIS};margin-top:1px}
 .pf .cab .d{font-size:15px;font-weight:700;color:${AZUL};margin-top:5px}
 .pf .cab .p{text-align:right;font-size:9.5px;color:${GRIS};line-height:1.6}
 .pf .cab .p b{color:#1F2937}
 .pf .sec{margin-top:16px}
 .pf .salto{page-break-before:always;break-before:page;margin-top:0}
-.pf h2{font-family:Lora,Georgia,serif;font-size:13px;margin:0 0 6px;color:${AZUL}}
+.pf h2{font-family:"IBM Plex Sans",Arial,sans-serif;font-size:13px;margin:0 0 6px;color:${AZUL}}
 .pf table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .pf th{background:${AZUL};color:#fff;font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:.3px;padding:6px 7px;text-align:left}
 .pf th.der{text-align:right}
@@ -114,7 +115,7 @@ const CSS = `
 .pf tr.tot td{font-weight:700;border-top:1px solid ${AZUL}}
 .pf tr.gran td{font-weight:800;background:${TOTAL};border-top:1px solid ${AZUL};border-bottom:3px double ${AZUL}}
 .pf tr.vacia td{border:0;height:8px}
-.pf .der{text-align:right;white-space:nowrap}
+.pf .der{text-align:right;white-space:nowrap;font-family:"IBM Plex Mono",Consolas,monospace}
 .pf .nota{font-size:9px;color:${GRIS};margin-top:5px;line-height:1.5}
 .pf .firmas{display:flex;gap:40px;margin-top:38px}
 .pf .firmas div{flex:1;border-top:1px solid #1F2937;padding-top:4px;font-size:9.5px;text-align:center;color:${GRIS}}
@@ -163,6 +164,7 @@ export function BarraDescargas({ reporte, showToast, sede, compacto }) {
       const r = obtener();
       const horizontal = r.hojas.some((h) => h.columnas.length > 4);
       const { default: html2pdf } = await import("html2pdf.js");
+      await cargarFuentesInforme();
       const doc = await html2pdf().set({
         margin: [10, 10, 12, 10], image: { type: "jpeg", quality: 0.97 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", scrollY: 0 },
