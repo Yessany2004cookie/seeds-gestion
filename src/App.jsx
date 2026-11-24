@@ -4592,10 +4592,10 @@ function ReportesPage({data,showToast}){
     {/* Vista sencilla o contable */}
     <div style={{...card,padding:"10px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
       <div role="tablist" style={{display:"inline-flex",border:"1px solid #CDD3DC",borderRadius:4,overflow:"hidden"}}>
-        {[["sencilla","Vista sencilla"],["contable","Vista contable"]].map(([k,t])=><button key={k} role="tab" className="vista-tab" aria-selected={vista===k} onClick={()=>cambiarVista(k)} style={{padding:"7px 14px",border:"none",borderRight:k==="sencilla"?"1px solid #CDD3DC":"none",background:vista===k?AZUL_MARCA:"#FFFFFF",color:vista===k?"#fff":"#344054",fontSize:13,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>{t}</button>)}
+        {[["sencilla","Vista sencilla"],["contable","Vista Excel"]].map(([k,t])=><button key={k} role="tab" className="vista-tab" aria-selected={vista===k} onClick={()=>cambiarVista(k)} style={{padding:"7px 14px",border:"none",borderRight:k==="sencilla"?"1px solid #CDD3DC":"none",background:vista===k?AZUL_MARCA:"#FFFFFF",color:vista===k?"#fff":"#344054",fontSize:13,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>{t}</button>)}
       </div>
       <style>{`html[data-fondo="oscuro"] .vista-tab[aria-selected="true"]{background:#D9641E!important;color:#fff!important}`}</style>
-      <span style={{fontSize:12,color:"#5B6576"}}>{vista==="sencilla"?"Explicado en palabras sencillas, sin términos contables.":"Formato profesional de estado de resultados, para contador o banco."}</span>
+      <span style={{fontSize:12,color:"#5B6576"}}>{vista==="sencilla"?"Explicado en palabras sencillas, sin términos contables.":"Como hoja de Excel: celdas, filas y columnas. Para contador o banco."}</span>
     </div>
 
     {vista==="sencilla"&&<div style={{...card,padding:"20px 22px"}}><style>{SEN_CSS}</style><div dangerouslySetInnerHTML={{__html:sencilloHTML(false)}}/></div>}
