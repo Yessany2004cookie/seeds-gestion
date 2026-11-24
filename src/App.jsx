@@ -3,8 +3,8 @@ import { supabase } from "./supabaseClient";
 import { card, input, btn, btnO, label, badge, tono, AZUL as AZUL_MARCA, NARANJA as NARANJA_MARCA } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
 import { SELLO_SEEDS, FIRMA_ADMIN } from "./sello";
-import { AlertasFinanzasPage } from "./alertasFinanzas";
-import { FinResumenExcel, FinMaestrosExcel, FinGastosExcel, IngresosExcel } from "./finanzasExcel";
+import { AlertasFinanzasPage, logoParaExcel } from "./alertasFinanzas";
+import { FinResumenExcel, FinMaestrosExcel, FinGastosExcel, IngresosExcel, DescargasFinanzas, hojasResumen, hojasMaestros, hojasGastos, hojasIngresos } from "./finanzasExcel";
 import { useVista, SelectorVista, EstilosVistas } from "./vistas";
 import { ContabilidadPage } from "./contabilidad";
 import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
@@ -2499,7 +2499,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const totRentasPend=rentasPend.reduce((s,x)=>s+x.monto,0);
   const disponible=cajaHoy-totRentasPend;
   // Datos para la vista Excel (mismas cifras que la vista sencilla)
-  const excelFin=vista!=="excel"?null:(()=>{
+  const excelFin=(()=>{
     const cxpP=cxpPendientes(data).sort((a,b)=>MESES.indexOf(a.mes_correspondiente)-MESES.indexOf(b.mes_correspondiente));
     const totCxp=cxpP.reduce((s,c)=>s+(Number(c.monto)||0),0);
     let deuda=null;
@@ -2651,7 +2651,9 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
       <button onClick={()=>setTab("resumen")} style={tBtn(tab==="resumen")}>📊 Resumen</button>
       <button onClick={()=>setTab("maestros")} style={tBtn(tab==="maestros")}>👩‍🏫 Pagos a maestros</button>
       <button onClick={()=>setTab("gastos")} style={tBtn(tab==="gastos")}>📋 Todos los gastos</button>
-      <span style={{flex:1}}/><div style={{alignSelf:"center",padding:"4px 0"}}><SelectorVista vista={vista} setVista={setVista}/></div>
+      <span style={{flex:1}}/><div style={{alignSelf:"center",padding:"4px 0",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <DescargasFinanzas showToast={showToast} titulo={tab==="resumen"?"Gastos, deudas y caja":tab==="maestros"?"Pagos a maestros":"Gastos"} hojas={()=>tab==="resumen"?hojasResumen({cajaHoy,rentasPend,cxp:excelFin.cxpP,quedaHoy:excelFin.quedaHoy,deuda:excelFin.deuda,meses:excelFin.meses}):tab==="maestros"?hojasMaestros({maestros:data.maestros,gastos:data.gastos,meses:MESES.slice(0,mesHoy+1)}):hojasGastos({gastos:data.gastos,nombreMaestro:(id)=>data.maestros.find(m=>m.id===id)?.nombre||""})}/>
+        <SelectorVista vista={vista} setVista={setVista}/></div>
     </div>
     <EstilosVistas/>
     {tab==="resumen"&&vista==="excel"&&<FinResumenExcel cajaHoy={cajaHoy} rentasPend={rentasPend} cxp={excelFin.cxpP} quedaHoy={excelFin.quedaHoy} deuda={excelFin.deuda} meses={excelFin.meses}/>}
@@ -4075,6 +4077,7 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 
 // ── REPORTES (resumen económico mensual completo) ──
 function ReportesPage({data,showToast}){
+  const marcaRep=useMarca();
   const[mesSel,setMesSel]=useState(MESES[new Date().getMonth()]);
   const[anioSel,setAnioSel]=useState(ANIO_ACTUAL);
   // Qué rubros se desglosan (se recuerda en este navegador)
@@ -4609,7 +4612,9 @@ function ReportesPage({data,showToast}){
     if(generandoXls)return;setGenerandoXls(true);
     try{
       const writeExcelFile=(await import("write-excel-file/browser")).default;
-      const encabezado=(t)=>[[{value:"Seeds English School",fontWeight:"bold",fontSize:14,textColor:"#1B2A4A"}],[{value:`${t} — ${mesSel} ${anioSel}`,fontWeight:"bold",fontSize:12}],[{value:`Cifras en Lempiras · Generado el ${hoyTxt}`,textColor:"#5B6576"}],[]];
+      // Encabezado formal: fila con el logo, nombre de la institución, título y fecha
+      const logoXls=await logoParaExcel(marcaRep.logoSrc);
+      const encabezado=(t)=>[...(logoXls?[[{value:null,height:48}]]:[]),[{value:marcaRep.nombreO("Seeds English School"),fontWeight:"bold",fontSize:14,textColor:"#1B2A4A"}],[{value:`${t} — ${mesSel} ${anioSel}`,fontWeight:"bold",fontSize:12}],[{value:`Cifras en Lempiras · Generado el ${hoyTxt}`,textColor:"#5B6576"}],[]];
       const cols=[{width:46},{width:16},{width:16},{width:10},{width:60}];
       const resumen=[...encabezado("Resumen del mes"),
         [{value:"Concepto",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF"},{value:"Monto",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:"right"},{value:"%",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:"right"},null,{value:"Qué es",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF"}],
@@ -4620,8 +4625,9 @@ function ReportesPage({data,showToast}){
         [{value:resultado>=0?"Lo que quedó (ganancia)":"Lo que faltó (pérdida)",fontWeight:"bold",topBorderStyle:"thin",textColor:resultado>=0?"#2A5E45":"#8E3131"},{value:resultado,type:Number,format:FMT_L,fontWeight:"bold",topBorderStyle:"thin",textColor:resultado>=0?"#2A5E45":"#8E3131"},{value:ingresoTotal?resultado/ingresoTotal:0,type:Number,format:"0.0%",topBorderStyle:"thin"},null,null],
         [],[{value:"Falta pagar de este mes"},{value:totPorPagar,type:Number,format:FMT_L}],[{value:"Le deben a la escuela de este mes"},{value:totPorCobrar,type:Number,format:FMT_L}],[{value:"Dinero en caja al cierre"},{value:cajaRep.saldo,type:Number,format:FMT_L}],
       ];
-      const libro=[{data:resumen,sheet:"Resumen",columns:cols},
-        ...hojas.filter(h=>!h.sinExcel).map(h=>({data:[...encabezado(h.t),...hojaAFilas(h.html)],sheet:h.t.slice(0,31),columns:cols}))];
+      const img=logoXls?[{...logoXls,dpi:96,anchor:{row:1,column:1},offsetX:4,offsetY:2,title:"Logo"}]:undefined;
+      const libro=[{data:resumen,sheet:"Resumen",columns:cols,images:img,showGridLines:false},
+        ...hojas.filter(h=>!h.sinExcel).map(h=>({data:[...encabezado(h.t),...hojaAFilas(h.html)],sheet:h.t.slice(0,31),columns:cols,images:img,showGridLines:false}))];
       const blob=await writeExcelFile(libro,{fontFamily:"Calibri",fontSize:11}).toBlob();
       const nombre=`Reportes ${mesSel} ${anioSel}.xlsx`;
       if(pdfListo)URL.revokeObjectURL(pdfListo.url);
@@ -4804,7 +4810,9 @@ function IngresosPage({data,loadData,showToast,sucursalActiva}){
         <span style={{fontSize:11,color:"#64748B"}}>Total{fMes?` ${fMes}`:""}: </span>
         <span style={{fontSize:18,fontWeight:800,color:"#059669"}}>L {total.toLocaleString()}</span>
       </div>
-      <span style={{flex:1}}/><EstilosVistas/><SelectorVista vista={vista} setVista={setVista}/>
+      <span style={{flex:1}}/><EstilosVistas/>
+      <DescargasFinanzas showToast={showToast} titulo={`Ingresos extra${fMes?" "+fMes:""}`} hojas={()=>hojasIngresos({lista,nombreAlumno:(id)=>data.alumnos.find(a=>a.id===id)?.nombre||""})}/>
+      <SelectorVista vista={vista} setVista={setVista}/>
     </div>
 
     {vista==="excel"&&<IngresosExcel lista={lista} nombreAlumno={(id)=>data.alumnos.find(a=>a.id===id)?.nombre||""}/>}

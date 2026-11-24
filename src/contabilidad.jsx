@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, label, badge, btn, btnO } from "./estilo";
 import { BookOpen, Lock, Unlock, RefreshCw, Info, CheckCircle, AlertTriangle, Download } from "lucide-react";
+import { BarraDescargas } from "./documentoFormal";
 import { Balanza, Ajustes, Antiguedad, calcularBalanza, calcularAntiguedad } from "./contabilidadExtra";
 import { useVista, SelectorVista, EstilosVistas, Titular, Kpis, Comparar, Desglose, Movimientos, Hoja, Lc, VERDE as VERDE_S, ROJO as ROJO_S, NARANJA, AZUL as AZUL_M } from "./vistas";
 
@@ -264,6 +265,52 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
     } catch (e) { showToast && showToast("No se pudo crear el Excel: " + e.message, "error"); }
   };
 
+  // Hojas de la Vista Excel (las mismas van al Excel y al PDF formales)
+  const hRes = { nombre: "Estado de resultados", titulo: `Estado de resultados — ${mesTxt}`, columnas: [{ t: "Concepto" }, { t: "Monto", num: true, ancho: 140 }, { t: "% ingresos", pct: true, ancho: 90 }], filas: [
+          { tipo: "sec", c: ["I. Ingresos"] },
+          ...ingresos.map((x) => ({ c: [nombreIng(x.c), x.v, pctIng(x.v)] })),
+          { tipo: "tot", c: ["Total ingresos", totIng, totIng ? 100 : null], color: VERDE_S },
+          { tipo: "sec", c: ["II. Gastos y costos"] },
+          ...gastos.map((x) => ({ c: [x.c.nombre, x.v, pctIng(x.v)] })),
+          { tipo: "tot", c: ["Total gastos", totGas, pctIng(totGas)], color: ROJO_S },
+          { tipo: "gran", c: [resultado >= 0 ? "Ganancia del mes (si todos pagan)" : "Pérdida del mes", resultado, pctIng(resultado)], color: resultado >= 0 ? VERDE_S : ROJO_S },
+          ...(cob.facturado > 0 ? [{ tipo: "vacia" }, { tipo: "sec", c: [`Mensualidades de ${mesTxt}: cobrado vs. pagado`] },
+            { c: [`Facturado (cobros enviados a ${cob.alumnos} alumnos)`, cob.facturado] },
+            { c: [`Pagado (confirmado, ${cob.alumnosPagados} alumnos)`, cob.pagado] },
+            { tipo: "tot", c: ["Pendiente de pago", cob.pendiente], color: cob.pendiente > 0 ? ROJO_S : VERDE_S }] : []),
+        ], pie: "Cifras en Lempiras." };
+  const hBalance = { nombre: "Balance general", titulo: `Balance general al ${new Date(sel.anio, sel.mes, 0).getDate()} de ${mesTxt}`, columnas: [{ t: "Cuenta" }, { t: "Código", ancho: 80 }, { t: "Monto", num: true, ancho: 140 }], filas: [
+          { tipo: "sec", c: ["Activos (lo que tengo)"] },
+          ...activos.map((x) => ({ c: [x.c.nombre, x.c.codigo, x.v] })),
+          { tipo: "tot", c: ["Total activos", "", totA] },
+          { tipo: "sec", c: ["Pasivos (lo que debo)"] },
+          ...pasivos.map((x) => ({ c: [x.c.nombre, x.c.codigo, x.v] })),
+          { tipo: "tot", c: ["Total pasivos", "", totP] },
+          { tipo: "sec", c: ["Patrimonio"] },
+          ...patrimonio.map((x) => ({ c: [x.c.nombre, x.c.codigo, x.v] })),
+          { c: ["Resultados desde noviembre 2026", "", resAcum] },
+          { tipo: "tot", c: ["Total patrimonio", "", totPat] },
+          { tipo: "gran", c: ["Pasivos + patrimonio", "", totP + totPat] },
+          { tipo: "vacia" },
+          { c: ["Dinero libre (caja y banco − proveedores y salarios por pagar)", "", dineroLibre], color: dineroLibre >= 0 ? VERDE_S : ROJO_S },
+        ] };
+  const hFlujo = { nombre: "Flujo de efectivo", titulo: `Flujo de efectivo — ${mesTxt}`, columnas: [{ t: "Concepto" }, { t: "Fecha", ancho: 90 }, { t: "Monto", num: true, ancho: 140 }], filas: [
+          { c: ["Efectivo y bancos al iniciar el mes", "", dispIniFlujo] },
+          { tipo: "sec", c: ["Entradas de dinero"] },
+          ...flujo.ent.flatMap((c) => [{ c: [c.k, "", c.v] }, ...c.items.map((i) => ({ tipo: "det", c: [i.d, fechaC(i.f), i.v] }))]),
+          { tipo: "tot", c: ["Total entradas", "", totEnt], color: VERDE_S },
+          { tipo: "sec", c: ["Salidas de dinero"] },
+          ...flujo.sal.flatMap((c) => [{ c: [c.k, "", c.v] }, ...c.items.map((i) => ({ tipo: "det", c: [i.d, fechaC(i.f), i.v] }))]),
+          { tipo: "tot", c: ["Total salidas", "", totSal], color: ROJO_S },
+          { tipo: "gran", c: ["Efectivo y bancos al cierre", "", dispFinal] },
+        ] };
+  const hDiario = { nombre: "Libro diario", titulo: `Libro diario — ${mesTxt}`, columnas: [{ t: "Fecha", ancho: 82 }, { t: "Concepto / cuenta" }, { t: "Código", ancho: 72 }, { t: "Debe", num: true, ancho: 120 }, { t: "Haber", num: true, ancho: 120 }], filas: [
+          ...delMes.flatMap((a) => [{ tipo: "sec", c: [fechaC(a.fecha), a.descripcion + (a.clase !== "auto" ? ` (${a.clase})` : "")] },
+            ...(a.contab_lineas || []).map((l) => ({ tipo: "it", c: ["", nombreCta(l.cuenta), l.cuenta, Number(l.debe) || "", Number(l.haber) || ""] }))]),
+          { tipo: "gran", c: ["", "Sumas iguales", "", sumaDebe, sumaHaber], color: Math.abs(sumaDebe - sumaHaber) < 0.01 ? undefined : ROJO_S },
+        ], pie: "Debe = lo que entra o aumenta en esa cuenta. Haber = lo que sale o disminuye. Las dos sumas siempre deben ser iguales.", sangria: false };
+  const reporteTab = { resultados: hRes, balance: hBalance, flujo: hFlujo, diario: hDiario }[tab];
+  const reporteDe = (h) => h && { titulo: h.nombre, periodo: mesTxt, modulo: "Contabilidad", hojas: [h], firmas: true };
   const Pest = ({ id, txt }) => <button onClick={() => setTab(id)} style={{ ...btnO, background: tab === id ? "#1E293B" : btnO.background, color: tab === id ? "#fff" : btnO.color, fontWeight: 700 }}>{txt}</button>;
 
   if (sinModulo) return <div style={card}><h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Falta activar la contabilidad</h3><p style={{ fontSize: 13, color: GRIS }}>Hay que correr <code>supabase/contabilidad.sql</code> en Supabase (SQL Editor). Solo crea tablas nuevas; no cambia nada de lo que ya existe.</p></div>;
@@ -287,7 +334,8 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       {!cerrado && <button onClick={() => generar(true)} disabled={trabajando} style={{ ...btnO, opacity: trabajando ? 0.6 : 1 }}><RefreshCw size={14} />{trabajando ? "Actualizando…" : "Actualizar asientos"}</button>}
       {!hayApertura && <span style={{ ...badge(ROJO) }}>Falta el asiento de apertura</span>}
       {CON_VISTAS.includes(tab) && <><span style={{ flex: 1 }} /><SelectorVista vista={vista} setVista={setVista} /></>}
-      {!cargando && CON_VISTAS.includes(tab) && <button onClick={descargarExcel} style={btnO}><Download size={14} />Descargar Excel</button>}
+      {!cargando && reporteTab && <BarraDescargas reporte={() => reporteDe(reporteTab)} showToast={showToast} />}
+      {!cargando && CON_VISTAS.includes(tab) && <button onClick={descargarExcel} style={btnO} title="Un solo Excel con estados, balanza, libros y antigüedad"><Download size={14} />Libro completo del mes</button>}
       {xls && <a href={xls.url} download={xls.nombre} onClick={() => setTimeout(() => setXls(null), 500)} style={{ ...btn("#15803D"), textDecoration: "none" }}><Download size={14} />Guardar {xls.nombre}</a>}
     </div>
 
@@ -320,19 +368,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
             <Desglose titulo="¿De dónde vino?" color={VERDE_S} items={ingresos.map((x) => ({ t: nombreIng(x.c), v: x.v, d: x.c.codigo === "4.1.01" && cob.facturado > 0 ? `Pagado ${Lc(cob.pagado)} · Pendiente ${Lc(cob.pendiente)}` : x.c.descripcion }))} vacio="No hay ingresos este mes." />
             <Desglose titulo="¿En qué se gastó?" color={NARANJA} items={gastos.map((x) => ({ t: x.c.nombre, v: x.v, d: x.c.descripcion }))} vacio="No hay gastos este mes." />
           </div>
-        </> : <Hoja columnas={[{ t: "Concepto" }, { t: "Monto", num: true, ancho: 140 }, { t: "% ingresos", pct: true, ancho: 90 }]} filas={[
-          { tipo: "sec", c: ["I. Ingresos"] },
-          ...ingresos.map((x) => ({ c: [nombreIng(x.c), x.v, pctIng(x.v)] })),
-          { tipo: "tot", c: ["Total ingresos", totIng, totIng ? 100 : null], color: VERDE_S },
-          { tipo: "sec", c: ["II. Gastos y costos"] },
-          ...gastos.map((x) => ({ c: [x.c.nombre, x.v, pctIng(x.v)] })),
-          { tipo: "tot", c: ["Total gastos", totGas, pctIng(totGas)], color: ROJO_S },
-          { tipo: "gran", c: [resultado >= 0 ? "Ganancia del mes (si todos pagan)" : "Pérdida del mes", resultado, pctIng(resultado)], color: resultado >= 0 ? VERDE_S : ROJO_S },
-          ...(cob.facturado > 0 ? [{ tipo: "vacia" }, { tipo: "sec", c: [`Mensualidades de ${mesTxt}: cobrado vs. pagado`] },
-            { c: [`Facturado (cobros enviados a ${cob.alumnos} alumnos)`, cob.facturado] },
-            { c: [`Pagado (confirmado, ${cob.alumnosPagados} alumnos)`, cob.pagado] },
-            { tipo: "tot", c: ["Pendiente de pago", cob.pendiente], color: cob.pendiente > 0 ? ROJO_S : VERDE_S }] : []),
-        ]} pie="Cifras en Lempiras. «Descargar Excel» baja esta misma hoja junto con el balance y el flujo." />}
+        </> : <Hoja {...hRes} />}
         {!data.cuentas_por_pagar?.some((c) => c.tipo === "renta" && MESES.indexOf(c.mes_correspondiente) + 1 === sel.mes && (Number(c.anio_correspondiente) || sel.anio) === sel.anio) && !gastos.some((x) => x.c.codigo === "5.2.02") &&
           <div style={{ marginTop: 12, fontSize: 12, color: "#92400E", background: "#FEF3C7", padding: "8px 10px", borderRadius: 4, display: "flex", gap: 6 }}><AlertTriangle size={14} style={{ flexShrink: 0 }} />La renta de {MESES[sel.mes - 1]} todavía no está registrada. Regístrala en Finanzas → Cuentas por pagar con mes {MESES[sel.mes - 1]} (aunque se pague el mes siguiente), para que este resultado sea real.</div>}
       </div>}
@@ -353,21 +389,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
             <Desglose titulo="¿Qué tiene?" color={AZUL_M} items={activos.map((x) => ({ t: x.c.nombre, v: x.v, d: x.c.descripcion }))} vacio="Nada registrado." />
             <Desglose titulo="¿Qué debe?" color={NARANJA} items={pasivos.map((x) => ({ t: x.c.nombre, v: x.v, d: x.c.descripcion }))} vacio="No debe nada. 🎉" />
           </div>
-        </> : <Hoja columnas={[{ t: "Cuenta" }, { t: "Código", ancho: 80 }, { t: "Monto", num: true, ancho: 140 }]} filas={[
-          { tipo: "sec", c: ["Activos (lo que tengo)"] },
-          ...activos.map((x) => ({ c: [x.c.nombre, x.c.codigo, x.v] })),
-          { tipo: "tot", c: ["Total activos", "", totA] },
-          { tipo: "sec", c: ["Pasivos (lo que debo)"] },
-          ...pasivos.map((x) => ({ c: [x.c.nombre, x.c.codigo, x.v] })),
-          { tipo: "tot", c: ["Total pasivos", "", totP] },
-          { tipo: "sec", c: ["Patrimonio"] },
-          ...patrimonio.map((x) => ({ c: [x.c.nombre, x.c.codigo, x.v] })),
-          { c: ["Resultados desde noviembre 2026", "", resAcum] },
-          { tipo: "tot", c: ["Total patrimonio", "", totPat] },
-          { tipo: "gran", c: ["Pasivos + patrimonio", "", totP + totPat] },
-          { tipo: "vacia" },
-          { c: ["Dinero libre (caja y banco − proveedores y salarios por pagar)", "", dineroLibre], color: dineroLibre >= 0 ? VERDE_S : ROJO_S },
-        ]} />}
+        </> : <Hoja {...hBalance} />}
         <div style={{ marginTop: 12, fontSize: 12, display: "flex", gap: 6, alignItems: "center", color: Math.abs(totA - totP - totPat) < 0.01 ? VERDE : ROJO }}>
           {Math.abs(totA - totP - totPat) < 0.01 ? <><CheckCircle size={14} />Cuadra: lo que tiene = lo que debe + lo que es de la escuela.</> : <><AlertTriangle size={14} />No cuadra por {L(totA - totP - totPat)}.</>}
         </div>
@@ -389,16 +411,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
             <Desglose titulo="¿De dónde entró?" color={VERDE_S} abierto={abiertoFlujo} toggle={(k) => setAbiertoFlujo((p) => ({ ...p, [k]: !p[k] }))} items={flujo.ent.map((c) => ({ t: c.k, v: c.v, d: `${c.items.length} ${c.items.length === 1 ? "movimiento" : "movimientos"} · toca para ver`, sub: c.items.map((i) => ({ t: `${fechaC(i.f)} · ${i.d}`, v: i.v })) }))} vacio="No entró dinero este mes." />
             <Desglose titulo="¿En qué salió?" color={NARANJA} abierto={abiertoFlujo} toggle={(k) => setAbiertoFlujo((p) => ({ ...p, [k]: !p[k] }))} items={flujo.sal.map((c) => ({ t: c.k, v: c.v, d: `${c.items.length} ${c.items.length === 1 ? "movimiento" : "movimientos"} · toca para ver`, sub: c.items.map((i) => ({ t: `${fechaC(i.f)} · ${i.d}`, v: i.v })) }))} vacio="No salió dinero este mes." />
           </div>
-        </> : <Hoja columnas={[{ t: "Concepto" }, { t: "Fecha", ancho: 90 }, { t: "Monto", num: true, ancho: 140 }]} filas={[
-          { c: ["Efectivo y bancos al iniciar el mes", "", dispIniFlujo] },
-          { tipo: "sec", c: ["Entradas de dinero"] },
-          ...flujo.ent.flatMap((c) => [{ c: [c.k, "", c.v] }, ...c.items.map((i) => ({ tipo: "det", c: [i.d, fechaC(i.f), i.v] }))]),
-          { tipo: "tot", c: ["Total entradas", "", totEnt], color: VERDE_S },
-          { tipo: "sec", c: ["Salidas de dinero"] },
-          ...flujo.sal.flatMap((c) => [{ c: [c.k, "", c.v] }, ...c.items.map((i) => ({ tipo: "det", c: [i.d, fechaC(i.f), i.v] }))]),
-          { tipo: "tot", c: ["Total salidas", "", totSal], color: ROJO_S },
-          { tipo: "gran", c: ["Efectivo y bancos al cierre", "", dispFinal] },
-        ]} />}
+        </> : <Hoja {...hFlujo} />}
         <p style={{ fontSize: 11.5, color: GRIS, marginTop: 10, lineHeight: 1.5 }}>Los pagos de salarios, renta o deudas de meses anteriores aparecen aquí como salidas de este mes, aunque no bajan la ganancia del mes (ya se contaron en el mes que corresponden).</p>
       </div>}
 
@@ -413,11 +426,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
             { t: "Sin mover dinero", v: String(diarioS.filter((m) => m.tipo === "otro").length), color: GRIS, s: "Apertura, cobros enviados, deudas registradas…" },
           ]} />
           <div className="vn-caja"><Movimientos items={diarioS} vacio="No hay anotaciones este mes." /></div>
-        </> : <Hoja minWidth={640} sangria={false} columnas={[{ t: "Fecha", ancho: 82 }, { t: "Concepto / cuenta" }, { t: "Código", ancho: 72 }, { t: "Debe", num: true, ancho: 120 }, { t: "Haber", num: true, ancho: 120 }]} filas={[
-          ...delMes.flatMap((a) => [{ tipo: "sec", c: [fechaC(a.fecha), a.descripcion + (a.clase !== "auto" ? ` (${a.clase})` : "")] },
-            ...(a.contab_lineas || []).map((l) => ({ tipo: "it", c: ["", nombreCta(l.cuenta), l.cuenta, Number(l.debe) || "", Number(l.haber) || ""] }))]),
-          { tipo: "gran", c: ["", "Sumas iguales", "", sumaDebe, sumaHaber], color: Math.abs(sumaDebe - sumaHaber) < 0.01 ? undefined : ROJO_S },
-        ]} pie="Debe = lo que entra o aumenta en esa cuenta. Haber = lo que sale o disminuye. Las dos sumas siempre deben ser iguales." />}
+        </> : <Hoja minWidth={640} sangria={false} {...hDiario} />}
       </div>}
 
       {tab === "balanza" && <Balanza cuentas={cuentas} asientos={asientos} sel={sel} vista={vista} />}
@@ -445,9 +454,15 @@ function Mayor({ cuentas, asientos, nombreCta, tipoCta, sel, vista }) {
   const sube = filas.filter((f) => f.v > 0).reduce((t, f) => t + f.v, 0), baja = filas.filter((f) => f.v < 0).reduce((t, f) => t + f.v, 0);
   const sumD = filas.reduce((t, f) => t + Number(f.l.debe), 0), sumH = filas.reduce((t, f) => t + Number(f.l.haber), 0);
   const nombre = nombreCta(cta);
+  const hMayor = { nombre: "Libro mayor", titulo: `Libro mayor: ${cta} ${nombre} hasta ${MESES[sel.mes - 1]} ${sel.anio}`, columnas: [{ t: "Fecha", ancho: 82 }, { t: "Concepto" }, { t: "Debe", num: true, ancho: 115 }, { t: "Haber", num: true, ancho: 115 }, { t: "Saldo", num: true, ancho: 120 }], filas: [
+      { tipo: "sec", c: ["", `${cta} ${nombre}`] },
+      ...(filas.length === 0 ? [{ c: ["", `Sin movimientos en ${nombre}`] }] : filas.map((f) => ({ c: [fechaC(f.a.fecha), f.a.descripcion, Number(f.l.debe) || "", Number(f.l.haber) || "", f.saldo] }))),
+      { tipo: "gran", c: ["", "Totales y saldo final", sumD, sumH, saldo] },
+    ], sangria: false };
   return (<div style={card}>
     <div style={{ display: "flex", gap: 12, alignItems: "end", flexWrap: "wrap", marginBottom: 4 }}>
       <h3 style={{ margin: 0, fontSize: 15 }}>Libro mayor hasta {MESES[sel.mes - 1]} {sel.anio}</h3>
+      <span style={{ flex: 1 }} /><BarraDescargas compacto reporte={() => ({ titulo: `Libro mayor ${cta}`, periodo: `${MESES[sel.mes - 1]} ${sel.anio}`, modulo: "Contabilidad", hojas: [hMayor], firmas: true })} />
       <select value={cta} onChange={(e) => setCta(e.target.value)} style={{ ...input, width: "auto", maxWidth: "100%", cursor: "pointer" }}>{cuentas.map((c) => <option key={c.codigo} value={c.codigo}>{c.codigo} {c.nombre}</option>)}</select>
     </div>
     <p style={{ fontSize: 11.5, color: GRIS, margin: "0 0 14px" }}>Todos los movimientos de una sola cuenta y cuánto queda en ella después de cada uno.</p>
@@ -459,11 +474,7 @@ function Mayor({ cuentas, asientos, nombreCta, tipoCta, sel, vista }) {
         { t: "Queda", v: Lc(saldo), color: saldo >= 0 ? AZUL_M : ROJO_S, dest: true, s: "Saldo de la cuenta" },
       ]} />
       <div className="vn-caja"><Movimientos vacio={`Sin movimientos en ${nombre}.`} items={[...filas].reverse().map((f) => ({ k: f.l.id, fecha: f.a.fecha, t: f.a.descripcion, s: `Después quedó ${L(f.saldo)}`, v: f.v, signo: true, color: f.v >= 0 ? VERDE_S : NARANJA }))} /></div>
-    </> : <Hoja minWidth={620} sangria={false} columnas={[{ t: "Fecha", ancho: 82 }, { t: "Concepto" }, { t: "Debe", num: true, ancho: 115 }, { t: "Haber", num: true, ancho: 115 }, { t: "Saldo", num: true, ancho: 120 }]} filas={[
-      { tipo: "sec", c: ["", `${cta} ${nombre}`] },
-      ...(filas.length === 0 ? [{ c: ["", `Sin movimientos en ${nombre}`] }] : filas.map((f) => ({ c: [fechaC(f.a.fecha), f.a.descripcion, Number(f.l.debe) || "", Number(f.l.haber) || "", f.saldo] }))),
-      { tipo: "gran", c: ["", "Totales y saldo final", sumD, sumH, saldo] },
-    ]} />}
+    </> : <Hoja minWidth={620} sangria={false} {...hMayor} />}
   </div>);
 }
 
@@ -490,20 +501,22 @@ function Cierre({ sel, periodo, saldoDisp, hayApertura, recargar, showToast, res
   // Resumen del cierre en las dos vistas
   const real = cerrado ? Number(periodo.dinero_contado) : contado === "" ? null : parseFloat(contado);
   const difR = real === null || isNaN(real) ? null : Math.round((real - saldoDisp) * 100) / 100;
-  const resumen = vista === "sencilla" ? <Kpis items={[
-    { t: "Según la contabilidad", v: Lc(saldoDisp), color: AZUL_M, s: "Caja + banco que debería haber" },
-    { t: "Dinero contado", v: real === null || isNaN(real) ? "—" : Lc(real), color: AZUL_M, s: cerrado ? "Lo que se contó al cerrar" : "Escríbelo abajo" },
-    { t: "Diferencia", v: difR === null ? "—" : Lc(difR), color: difR === null ? GRIS : difR === 0 ? VERDE_S : ROJO_S, dest: true, s: difR === null ? "" : difR === 0 ? "Todo cuadra" : difR > 0 ? "Sobra dinero" : "Falta dinero" },
-    { t: resultado >= 0 ? "Ganancia del mes" : "Pérdida del mes", v: Lc(resultado), color: resultado >= 0 ? VERDE_S : ROJO_S },
-  ]} /> : <div style={{ marginBottom: 14 }}><Hoja minWidth={420} columnas={[{ t: "Concepto" }, { t: "Monto", num: true, ancho: 140 }]} filas={[
+  const hCierre = { nombre: "Cierre de mes", titulo: `Cierre de ${MESES[sel.mes - 1]} ${sel.anio}`, columnas: [{ t: "Concepto" }, { t: "Monto", num: true, ancho: 140 }], filas: [
     { c: ["Dinero según la contabilidad (caja + banco)", saldoDisp] },
     { c: ["Dinero contado", real === null || isNaN(real) ? "" : real] },
     { tipo: "tot", c: ["Diferencia (contado − contabilidad)", difR === null ? "" : difR], color: difR === null ? undefined : difR === 0 ? VERDE_S : ROJO_S },
     { tipo: "vacia" },
     { tipo: "gran", c: [resultado >= 0 ? "Ganancia del mes" : "Pérdida del mes", resultado], color: resultado >= 0 ? VERDE_S : ROJO_S },
-  ]} /></div>;
+  ] };
+  const descCierre = <BarraDescargas compacto reporte={() => ({ titulo: "Cierre de mes", periodo: `${MESES[sel.mes - 1]} ${sel.anio}`, modulo: "Contabilidad", hojas: [{ ...hCierre, pie: periodo?.notas ? `Notas: ${periodo.notas}` : undefined }], firmas: true })} />;
+  const resumen = vista === "sencilla" ? <Kpis items={[
+    { t: "Según la contabilidad", v: Lc(saldoDisp), color: AZUL_M, s: "Caja + banco que debería haber" },
+    { t: "Dinero contado", v: real === null || isNaN(real) ? "—" : Lc(real), color: AZUL_M, s: cerrado ? "Lo que se contó al cerrar" : "Escríbelo abajo" },
+    { t: "Diferencia", v: difR === null ? "—" : Lc(difR), color: difR === null ? GRIS : difR === 0 ? VERDE_S : ROJO_S, dest: true, s: difR === null ? "" : difR === 0 ? "Todo cuadra" : difR > 0 ? "Sobra dinero" : "Falta dinero" },
+    { t: resultado >= 0 ? "Ganancia del mes" : "Pérdida del mes", v: Lc(resultado), color: resultado >= 0 ? VERDE_S : ROJO_S },
+  ]} /> : <div style={{ marginBottom: 14 }}><Hoja minWidth={420} {...hCierre} /></div>;
   if (cerrado) return (<div style={card}>
-    <h3 style={{ margin: "0 0 8px", fontSize: 15, display: "flex", gap: 6, alignItems: "center" }}><Lock size={16} />{MESES[sel.mes - 1]} {sel.anio} está cerrado</h3>
+    <h3 style={{ margin: "0 0 8px", fontSize: 15, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}><Lock size={16} />{MESES[sel.mes - 1]} {sel.anio} está cerrado<span style={{ flex: 1 }} />{descCierre}</h3>
     {resumen}
     <p style={{ fontSize: 13, color: GRIS }}>Cerrado el {new Date(periodo.cerrado_en).toLocaleString("es-HN")} por {periodo.cerrado_por || "—"}. Dinero contado: {L(periodo.dinero_contado)}.{periodo.notas ? ` Notas: ${periodo.notas}` : ""}</p>
     <p style={{ fontSize: 12, color: GRIS }}>Si aparece algo de este mes después del cierre, se registra en el mes abierto. Solo reabre para corregir un error.</p>
@@ -511,7 +524,7 @@ function Cierre({ sel, periodo, saldoDisp, hayApertura, recargar, showToast, res
   </div>);
   const paso = (ok, txt) => <li style={{ fontSize: 13, margin: "6px 0", color: ok ? VERDE : "#334155" }}>{ok ? "✓ " : "○ "}{txt}</li>;
   return (<div style={card}>
-    <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Cierre de {MESES[sel.mes - 1]} {sel.anio}</h3>
+    <h3 style={{ margin: "0 0 10px", fontSize: 15, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>Cierre de {MESES[sel.mes - 1]} {sel.anio}<span style={{ flex: 1 }} />{descCierre}</h3>
     {resumen}
     <ol style={{ paddingLeft: 18, margin: "0 0 14px" }}>
       {paso(hayApertura, "Asiento de apertura registrado (pestaña Apertura).")}

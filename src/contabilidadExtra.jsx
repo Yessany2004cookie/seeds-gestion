@@ -10,6 +10,7 @@ import { useState, useMemo } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, label, btn, btnO } from "./estilo";
 import { Plus, Trash2, CheckCircle, AlertTriangle, BookOpen } from "lucide-react";
+import { BarraDescargas } from "./documentoFormal";
 import { Titular, Kpis, Desglose, Hoja, Lc, L, VERDE, ROJO, NARANJA, AZUL, GRIS } from "./vistas";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -48,8 +49,13 @@ export function Balanza({ cuentas, asientos, sel, vista }) {
   const mesTxt = `${MESES[sel.mes - 1]} ${sel.anio}`;
   const TIPOS = [["activo", "Lo que tiene (activos)", AZUL], ["pasivo", "Lo que debe (pasivos)", NARANJA], ["patrimonio", "De la propietaria (patrimonio)", AZUL], ["ingreso", "Ingresos", VERDE], ["gasto", "Gastos", NARANJA]];
   const signo = (tipo) => (["activo", "gasto"].includes(tipo) ? 1 : -1);
+  const hBz = { nombre: "Balanza de comprobación", titulo: `Balanza de comprobación — ${mesTxt}`, columnas: [{ t: "Código", ancho: 70 }, { t: "Cuenta" }, { t: "Saldo inicial deudor", num: true, ancho: 120 }, { t: "Saldo inicial acreedor", num: true, ancho: 120 }, { t: "Debe del mes", num: true, ancho: 115 }, { t: "Haber del mes", num: true, ancho: 115 }, { t: "Saldo final deudor", num: true, ancho: 120 }, { t: "Saldo final acreedor", num: true, ancho: 120 }], filas: [
+      ...TIPOS.flatMap(([tipo, titulo]) => { const xs = filas.filter((x) => x.c.tipo === tipo); return xs.length === 0 ? [] : [{ tipo: "sec", c: ["", titulo] },
+        ...xs.map((x) => ({ c: [x.c.codigo, x.c.nombre, x.ini > 0.004 ? x.ini : "", x.ini < -0.004 ? -x.ini : "", x.debe || "", x.haber || "", x.fin > 0.004 ? x.fin : "", x.fin < -0.004 ? -x.fin : ""] }))]; }),
+      { tipo: "gran", c: ["", "Sumas iguales", t.iniD, t.iniH, t.debe, t.haber, t.finD, t.finH], color: cuadra ? undefined : ROJO },
+    ], pie: "Deudor = saldo a favor del debe (activos y gastos). Acreedor = saldo a favor del haber (pasivos, patrimonio e ingresos). Las columnas de cada par deben sumar lo mismo.", sangria: false };
   return (<div style={card}>
-    <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Balanza de comprobación — {mesTxt}</h3>
+    <h3 style={{ margin: "0 0 4px", fontSize: 15, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>Balanza de comprobación — {mesTxt}<span style={{ flex: 1 }} /><BarraDescargas compacto reporte={() => ({ titulo: "Balanza de comprobación", periodo: mesTxt, modulo: "Contabilidad", hojas: [hBz], firmas: true })} /></h3>
     <p style={{ fontSize: 11.5, color: GRIS, margin: "0 0 14px" }}>La revisión que hace todo contador antes de cerrar: cada cuenta con su saldo. Si las sumas del debe y del haber son iguales, la contabilidad está bien anotada.</p>
     {vista === "sencilla" ? <>
       <Titular sub={`${filas.length} cuentas con movimiento hasta ${mesTxt}.`}>{cuadra ? <>La contabilidad <span style={{ color: VERDE }}>cuadra</span>: todo lo que entra a una cuenta sale de otra.</> : <>Ojo: la balanza <span style={{ color: ROJO }}>no cuadra</span> por {Lc(t.debe - t.haber)}.</>}</Titular>
@@ -62,11 +68,7 @@ export function Balanza({ cuentas, asientos, sel, vista }) {
         {TIPOS.map(([tipo, titulo, color]) => { const xs = filas.filter((x) => x.c.tipo === tipo); return xs.length === 0 ? null :
           <Desglose key={tipo} titulo={titulo} color={color} items={xs.map((x) => ({ t: `${x.c.codigo} ${x.c.nombre}`, v: signo(tipo) * x.fin, d: tipo === "ingreso" || tipo === "gasto" ? "Acumulado desde noviembre 2026" : "Saldo al final del mes" }))} />; })}
       </div>
-    </> : <Hoja minWidth={820} sangria={false} columnas={[{ t: "Código", ancho: 70 }, { t: "Cuenta" }, { t: "Saldo inicial deudor", num: true, ancho: 120 }, { t: "Saldo inicial acreedor", num: true, ancho: 120 }, { t: "Debe del mes", num: true, ancho: 115 }, { t: "Haber del mes", num: true, ancho: 115 }, { t: "Saldo final deudor", num: true, ancho: 120 }, { t: "Saldo final acreedor", num: true, ancho: 120 }]} filas={[
-      ...TIPOS.flatMap(([tipo, titulo]) => { const xs = filas.filter((x) => x.c.tipo === tipo); return xs.length === 0 ? [] : [{ tipo: "sec", c: ["", titulo] },
-        ...xs.map((x) => ({ c: [x.c.codigo, x.c.nombre, x.ini > 0.004 ? x.ini : "", x.ini < -0.004 ? -x.ini : "", x.debe || "", x.haber || "", x.fin > 0.004 ? x.fin : "", x.fin < -0.004 ? -x.fin : ""] }))]; }),
-      { tipo: "gran", c: ["", "Sumas iguales", t.iniD, t.iniH, t.debe, t.haber, t.finD, t.finH], color: cuadra ? undefined : ROJO },
-    ]} pie="Deudor = saldo a favor del debe (activos y gastos). Acreedor = saldo a favor del haber (pasivos, patrimonio e ingresos). Las columnas de cada par deben sumar lo mismo." />}
+    </> : <Hoja minWidth={820} sangria={false} {...hBz} />}
     <div style={{ marginTop: 12, fontSize: 12, display: "flex", gap: 6, alignItems: "center", color: cuadra ? VERDE : ROJO }}>
       {cuadra ? <><CheckCircle size={14} />Sumas iguales: la balanza cuadra.</> : <><AlertTriangle size={14} />No cuadra: revisa los asientos de ajuste del mes.</>}
     </div>
@@ -129,7 +131,9 @@ export function Ajustes({ cuentas, asientos, sel, cerrado, nombreCta, recargar, 
         pie={cerrado ? undefined : "Toca el título de un ajuste para borrarlo."} />;
 
   return (<div style={card}>
-    <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Asientos de ajuste — {MESES[sel.mes - 1]} {sel.anio}</h3>
+    <h3 style={{ margin: "0 0 4px", fontSize: 15, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>Asientos de ajuste — {MESES[sel.mes - 1]} {sel.anio}<span style={{ flex: 1 }} /><BarraDescargas compacto showToast={showToast} reporte={() => ({ titulo: "Asientos de ajuste", periodo: `${MESES[sel.mes - 1]} ${sel.anio}`, modulo: "Contabilidad", firmas: true, hojas: [{ nombre: "Asientos de ajuste", titulo: "Asientos de ajuste", sangria: false,
+      columnas: [{ t: "Fecha", ancho: 82 }, { t: "Concepto / cuenta" }, { t: "Código", ancho: 72 }, { t: "Debe", num: true, ancho: 115 }, { t: "Haber", num: true, ancho: 115 }],
+      filas: manuales.length === 0 ? [{ c: ["", "Sin ajustes en el mes"] }] : manuales.flatMap((a) => [{ tipo: "sec", c: [fechaC(a.fecha), a.descripcion] }, ...(a.contab_lineas || []).map((l) => ({ c: ["", nombreCta(l.cuenta), l.cuenta, Number(l.debe) || "", Number(l.haber) || ""] }))]) }] })} /></h3>
     <p style={{ fontSize: 11.5, color: GRIS, margin: "0 0 14px" }}>Para corregir o registrar lo que no sale solo de los cobros y gastos: un préstamo de la propietaria, un retiro, un gasto mal clasificado. Siempre en partida doble (lo que sube en una cuenta baja o se compensa en otra). Los asientos automáticos no se tocan.</p>
     {cerrado ? <p style={{ fontSize: 13, color: GRIS }}>Este mes está cerrado: no se pueden agregar ni borrar ajustes. Regístralos en el mes abierto.</p> : <>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
@@ -209,8 +213,18 @@ export function Antiguedad({ data, sel, vista }) {
   const r = useMemo(() => calcularAntiguedad(data, corte), [data, corte]);
   const [abierto, setAbierto] = useState({});
   const colTr = [VERDE, AZUL, NARANJA, ROJO];
+  const hCxc = { nombre: "Cuentas por cobrar", titulo: "Lo que deben los padres (cuentas por cobrar)", columnas: [{ t: "Alumno" }, { t: "Meses", ancho: 60 }, ...TRAMOS.map(([t]) => ({ t, num: true, ancho: 110 })), { t: "Total", num: true, ancho: 115 }], filas: [
+        { tipo: "sec", c: ["Cuentas por cobrar: mensualidades"] },
+        ...(r.cxc.length === 0 ? [{ c: ["Nadie debe"] }] : r.cxc.map((x) => ({ c: [x.nombre, String(x.meses.length), ...x.tr.map((v) => v || ""), x.total], color: x.tr[3] > 0 ? ROJO : undefined }))),
+        { tipo: "gran", c: ["Total que deben los padres", "", ...r.tramosCxc, r.totCxc] },
+      ], sangria: false };
+  const hCxp = { nombre: "Cuentas por pagar", titulo: "Lo que debe la escuela (cuentas por pagar)", columnas: [{ t: "Cuenta por pagar" }, { t: "Mes", ancho: 110 }, ...TRAMOS.map(([t]) => ({ t, num: true, ancho: 110 })), { t: "Total", num: true, ancho: 115 }], filas: [
+        { tipo: "sec", c: ["Cuentas por pagar de la escuela"] },
+        ...(r.cxp.length === 0 ? [{ c: ["No debe nada"] }] : r.cxp.map((x) => ({ c: [x.nombre, x.mes, ...TRAMOS.map((_, i) => (x.t === i ? x.monto : "")), x.monto] }))),
+        { tipo: "gran", c: ["Total que debe la escuela", "", ...r.tramosCxp, r.totCxp] },
+      ], pie: "Los días de las mensualidades se cuentan desde que se envió el cobro; los de las cuentas por pagar, desde el fin del mes al que corresponden.", sangria: false };
   return (<div style={card}>
-    <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Antigüedad de saldos al {fechaC(corte)}</h3>
+    <h3 style={{ margin: "0 0 4px", fontSize: 15, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>Antigüedad de saldos al {fechaC(corte)}<span style={{ flex: 1 }} /><BarraDescargas compacto reporte={() => ({ titulo: "Antigüedad de saldos", periodo: `al ${fechaC(corte)}`, modulo: "Contabilidad", hojas: [hCxc, hCxp] })} /></h3>
     <p style={{ fontSize: 11.5, color: GRIS, margin: "0 0 14px" }}>Cuánto tiempo lleva pendiente cada deuda. Lo que pasa de 90 días es lo más difícil de cobrar y lo primero que hay que revisar. Incluye todos los meses (también antes de noviembre).</p>
     {vista === "sencilla" ? <>
       <Titular sub={`${r.cxc.length} alumnos con mensualidades sin pagar · ${r.cxp.length} cuentas por pagar de la escuela.`}>Los padres deben <span style={{ color: NARANJA }}>{Lc(r.totCxc)}</span> y la escuela debe <span style={{ color: ROJO }}>{Lc(r.totCxp)}</span>.</Titular>
@@ -222,17 +236,9 @@ export function Antiguedad({ data, sel, vista }) {
           items={r.cxp.map((x) => ({ t: x.nombre, v: x.monto, d: `${x.mes} · ${TRAMOS[x.t][0]}` }))} />
       </div>
     </> : <>
-      <Hoja minWidth={760} sangria={false} columnas={[{ t: "Alumno" }, { t: "Meses", ancho: 60 }, ...TRAMOS.map(([t]) => ({ t, num: true, ancho: 110 })), { t: "Total", num: true, ancho: 115 }]} filas={[
-        { tipo: "sec", c: ["Cuentas por cobrar: mensualidades"] },
-        ...(r.cxc.length === 0 ? [{ c: ["Nadie debe"] }] : r.cxc.map((x) => ({ c: [x.nombre, String(x.meses.length), ...x.tr.map((v) => v || ""), x.total], color: x.tr[3] > 0 ? ROJO : undefined }))),
-        { tipo: "gran", c: ["Total que deben los padres", "", ...r.tramosCxc, r.totCxc] },
-      ]} />
+      <Hoja minWidth={760} sangria={false} {...hCxc} />
       <div style={{ height: 14 }} />
-      <Hoja minWidth={760} sangria={false} columnas={[{ t: "Cuenta por pagar" }, { t: "Mes", ancho: 110 }, ...TRAMOS.map(([t]) => ({ t, num: true, ancho: 110 })), { t: "Total", num: true, ancho: 115 }]} filas={[
-        { tipo: "sec", c: ["Cuentas por pagar de la escuela"] },
-        ...(r.cxp.length === 0 ? [{ c: ["No debe nada"] }] : r.cxp.map((x) => ({ c: [x.nombre, x.mes, ...TRAMOS.map((_, i) => (x.t === i ? x.monto : "")), x.monto] }))),
-        { tipo: "gran", c: ["Total que debe la escuela", "", ...r.tramosCxp, r.totCxp] },
-      ]} pie="Los días de las mensualidades se cuentan desde que se envió el cobro; los de las cuentas por pagar, desde el fin del mes al que corresponden." />
+      <Hoja minWidth={760} sangria={false} {...hCxp} />
     </>}
   </div>);
 }
