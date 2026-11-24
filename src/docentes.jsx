@@ -4,12 +4,20 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, btn, btnO, label, badge } from "./estilo";
-import { LOGO_SEEDS } from "./logo";
 import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
 import { FormularioClase, AdminChecklist } from "./formulario";
 import { ParteMensual } from "./parteMensual";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_DOCENTE } from "./recorrido";
 import { useModulos } from "./modulos";
+import { useMarca } from "./marca";
+
+// Pestañas del portal docente (administración puede cambiarles el nombre en Sistema y respaldos)
+export const PESTANAS_DOCENTE = [
+  { id: "inicio", label: "Inicio" }, { id: "grupos", label: "Mis grupos" },
+  { id: "asistencia", label: "Libreta de asistencia", modulo: "asistencia" }, { id: "parte", label: "Parte mensual", modulo: "asistencia" },
+  { id: "bitacora", label: "Bitácora", modulo: "bitacoras" }, { id: "reflections", label: "Reflections", modulo: "reflections" },
+  { id: "reporte", label: "Check list de la clase", modulo: "reflections" }, { id: "solicitudes", label: "Solicitudes", modulo: "solicitudes" },
+];
 import { SelectorFondo } from "./fondo";
 import { Bitacora, AdminBitacoras, PortadaCuero, useVueltaHoja, ESTILOS_LIBRO, ComboMaestros } from "./bitacora";
 import {
@@ -115,6 +123,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
   const [menu, setMenu] = useState(false);
   // Recorrido guiado y novedades del portal docente
   const modulos = useModulos(session);
+  const marca = useMarca();
   const recorrido = useRecorrido(perfil.maestro_id && modulos.listo ? session : null, "docente", (n) => modulos.activo(n.modulo));
   const [datos, setDatos] = useState({ maestro: null, secciones: [], alumnos: [], padres: [] });
   const [cargando, setCargando] = useState(true);
@@ -153,7 +162,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
     { id: "reflections", label: "Reflections", icon: MessageSquare, modulo: "reflections" },
     { id: "reporte", label: "Check list de la clase", icon: ClipboardList, modulo: "reflections" },
     { id: "solicitudes", label: "Solicitudes", icon: Inbox, modulo: "solicitudes" },
-  ].filter((n) => modulos.activo(n.modulo));
+  ].filter((n) => modulos.activo(n.modulo)).map((n) => ({ ...n, label: marca.etiqueta("d:" + n.id, n.label) }));
   // Si la página abierta es de un módulo que se apagó, se muestra Inicio
   const pagina = NAV.some((n) => n.id === page) ? page : "inicio";
   const escritorio = window.innerWidth > 768;
@@ -178,9 +187,9 @@ export function DocenteApp({ session, perfil, onVolver }) {
       {menu && <div onClick={() => setMenu(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.25)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 40 }} />}
       <aside className="vidrio-menu" style={{ position: "fixed", left: menu ? 10 : -280, top: 10, bottom: 10, width: 240, color: "#fff", zIndex: 50, transition: "left 0.25s cubic-bezier(.2,.8,.2,1)", display: "flex", flexDirection: "column", borderRadius: 6, overflow: "hidden", ...(escritorio ? { position: "relative", left: 0, top: 0, bottom: 0, margin: 0, borderRadius: 0 } : {}) }}>
         <div style={{ padding: "20px 16px", borderBottom: "1px solid rgba(255,255,255,.08)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-          <div style={{ background: "#fff", borderRadius: 4, padding: 6 }}><img src={LOGO_SEEDS} alt="Seeds" style={{ width: 88, height: 88, objectFit: "contain" }} /></div>
+          <div style={{ background: "#fff", borderRadius: 4, padding: 6 }}><img src={marca.logoSrc} alt={marca.nombreO("Seeds English")} style={{ width: 88, height: 88, objectFit: "contain" }} /></div>
           <div style={{ textAlign: "center" }}>
-            <div className="titulo-marca" style={{ fontWeight: 700, fontSize: 17, color: "#fff", letterSpacing: .3 }}>Seeds English</div>
+            <div className="titulo-marca" style={{ fontWeight: 700, fontSize: 17, color: "#fff", letterSpacing: .3 }}>{marca.nombreO("Seeds English")}</div>
             <div style={{ fontSize: 10.5, color: "#F0A46A", textTransform: "uppercase", letterSpacing: 1.4, marginTop: 3, fontWeight: 600 }}>Portal docente</div>
           </div>
         </div>
@@ -216,10 +225,11 @@ export function DocenteApp({ session, perfil, onVolver }) {
 }
 
 export function PantallaMensaje({ titulo, texto, onSalir }) {
+  const marca = useMarca();
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F1F5F9", padding: 20 }}>
       <div style={{ ...card, maxWidth: 420, textAlign: "center" }}>
-        <img src={LOGO_SEEDS} alt="Seeds" style={{ width: 90, height: 90, objectFit: "contain" }} />
+        <img src={marca.logoSrc} alt={marca.nombreO("Seeds")} style={{ width: 90, height: 90, objectFit: "contain" }} />
         <h2 style={{ fontSize: 17, color: "#1E293B", margin: "10px 0 6px" }}>{titulo}</h2>
         <p style={{ fontSize: 13, color: "#64748B", margin: "0 0 16px" }}>{texto}</p>
         <button onClick={onSalir} style={btn()}><LogOut size={15} />Cerrar sesión</button>
