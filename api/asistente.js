@@ -6,7 +6,8 @@ import { supabase } from "../src/supabaseClient.js";
 
 export const config = { maxDuration: 60 };
 
-const MODELO = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+// Haiku: el modelo más económico; alcanza bien para preguntas sobre las cifras.
+const MODELO = process.env.ANTHROPIC_MODEL || "claude-haiku-5-5";
 const MAX_MENSAJES = 16;
 const MAX_CARACTERES = 4000;
 
@@ -57,7 +58,7 @@ export default async function handler(req, res) {
       model: MODELO,
       max_tokens: 16000,
       thinking: { type: "adaptive" },
-      output_config: { effort: "medium" },
+      output_config: { effort: "low" },
       system: [
         { type: "text", text: INSTRUCCIONES },
         { type: "text", text: `DATOS DEL SISTEMA (JSON, cifras en lempiras):\n${datos}`, cache_control: { type: "ephemeral" } },
