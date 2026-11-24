@@ -2150,6 +2150,9 @@ function HistorialPage({data,loadData,showToast}){
   // Marcar un mes como PENDIENTE (crea un cobro pendiente para gestionar la deuda)
   const marcarPendiente=async(mes,anio)=>{
     if(!alumno)return;
+    const clave=`${alumno.id}|${mes}|${anio}`;
+    if(PENDIENTES_EN_CURSO.has(clave))return; // doble clic: ya se está guardando
+    PENDIENTES_EN_CURSO.add(clave);
     try{
       const monto=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
       const n=data.facturas.length+1;
@@ -2158,6 +2161,7 @@ function HistorialPage({data,loadData,showToast}){
       await loadData();
       showToast(`${mes} ${anio} marcado como pendiente`);
     }catch(e){showToast("Error: "+e.message,"error");}
+    finally{PENDIENTES_EN_CURSO.delete(clave);}
   };
 
   // Marcar un mes pendiente como "al día" (quita el cobro pendiente de ese mes)
@@ -4862,8 +4866,21 @@ function IngresosPage({data,loadData,showToast,sucursalActiva}){
   </div>);
 }
 
+// Marcas de "se está guardando" para botones sueltos (fuera de una ventana)
+const PENDIENTES_EN_CURSO=new Set();
 function Modal({title,onClose,onSave,children,wide}){
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:wide?640:440,maxHeight:"90vh",overflow:"auto"}}><div style={{padding:"16px 20px",borderBottom:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3 style={{fontSize:15,fontWeight:700,margin:0,color:"#1E293B"}}>{title}</h3><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><X size={18} color="#64748B"/></button></div><div style={{padding:20}}>{children}</div><div style={{padding:"0 20px 16px",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={onClose} style={btnO}>Cancelar</button><button onClick={onSave} style={btn()}>Guardar</button></div></div></div>);
+  // Evita guardar dos veces lo mismo (doble clic): mientras se guarda, el botón queda bloqueado
+  const guardando=useRef(false);
+  const [ocupado,setOcupado]=useState(false);
+  const vivo=useRef(true);
+  useEffect(()=>()=>{vivo.current=false;},[]);
+  const alGuardar=async()=>{
+    if(guardando.current||!onSave)return;
+    guardando.current=true;setOcupado(true);
+    try{await onSave();}
+    finally{guardando.current=false;if(vivo.current)setOcupado(false);}
+  };
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:wide?640:440,maxHeight:"90vh",overflow:"auto"}}><div style={{padding:"16px 20px",borderBottom:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3 style={{fontSize:15,fontWeight:700,margin:0,color:"#1E293B"}}>{title}</h3><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><X size={18} color="#64748B"/></button></div><div style={{padding:20}}>{children}</div><div style={{padding:"0 20px 16px",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={onClose} style={btnO}>Cancelar</button><button onClick={alGuardar} disabled={ocupado} style={{...btn(),opacity:ocupado?0.6:1,cursor:ocupado?"wait":"pointer"}}>{ocupado?"Guardando…":"Guardar"}</button></div></div></div>);
 }
 function Field({label:lbl,value,onChange,type="text",placeholder,multiline}){
   return(<div style={{marginBottom:12}}><label style={label}>{lbl}</label>{multiline?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={3} style={{...input,resize:"vertical"}}/>:<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={input}/>}</div>);
