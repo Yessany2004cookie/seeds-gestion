@@ -12,6 +12,7 @@ import { ContabilidadPage } from "./contabilidad";
 import { ResumenMesInicio } from "./resumenMesInicio";
 import { GrupoPage } from "./navegacion";
 import { InicioSoft } from "./inicioSoft";
+import { LINK_FUENTES, CSS_CIFRAS, fuentesExcel, EXCEL_TEXTO, cargarFuentesInforme } from "./tipografia";
 import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
 import { SelectorFondo } from "./fondo";
@@ -293,7 +294,7 @@ const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
   const cv = document.createElement('canvas'); cv.width = W*K; cv.height = H*K;
   const c = cv.getContext('2d'); c.scale(K, K);
   const AZUL = '#1B2A4A', NARANJA = '#EA580C', ACENTO = NARANJA, VERDE = '#166534', GRIS = '#475569', LINEA = '#CBD5E1';
-  const SERIF = 'Georgia,"Times New Roman",serif', SANS = '"Segoe UI",system-ui,sans-serif';
+  const SERIF = 'Manrope,"Segoe UI",Arial,sans-serif', SANS = 'Inter,"Segoe UI",Arial,sans-serif';
   const linea = (x1,y1,x2,y2,col=LINEA,w=1) => { c.strokeStyle=col; c.lineWidth=w; c.beginPath(); c.moveTo(x1,y1); c.lineTo(x2,y2); c.stroke(); };
 
   c.fillStyle = '#fff'; c.fillRect(0,0,W,H);
@@ -1287,7 +1288,7 @@ function ResumenFinanciero({data}){
   const max=Math.max(...barras.map(b=>b.v),1);
   const H=220;
 
-  return(<div style={{...card,padding:0,overflow:"hidden",marginBottom:24}}>
+  return(<div className="rf-soft" style={{...card,padding:0,overflow:"hidden",marginBottom:24}}>
     <style>{`
       .rf-bar{transition:height .9s cubic-bezier(.22,1,.36,1), filter .2s, transform .2s;transform-origin:bottom}
       .rf-load{animation:rf-eq .8s ease-in-out infinite alternate}
@@ -1297,15 +1298,15 @@ function ResumenFinanciero({data}){
       .rf-col:hover .rf-val{opacity:1;transform:translateY(0)}
     `}</style>
     {/* Encabezado */}
-    <div style={{padding:"18px 22px",background:AZUL_MARCA,borderBottom:`3px solid ${NARANJA_MARCA}`,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+    <div className="rf-cab" style={{padding:"18px 22px",background:AZUL_MARCA,borderBottom:`3px solid ${NARANJA_MARCA}`,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
       <div>
         <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:"#FDBA74",fontWeight:700}}>Resumen financiero</div>
         <div style={{fontSize:20,fontWeight:800,marginTop:2}}>{mes}</div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{textAlign:"right"}}>
-          <div style={{fontSize:11,color:"#CBD5E1"}}>Margen de ganancia</div>
-          <div style={{fontSize:22,fontWeight:800,color:ganancia>=0?"#6EE7B7":"#FCA5A5"}}>{ingresos>0?`${(ganancia/ingresos*100).toFixed(1)}%`:"—"}</div>
+          <div className="rf-margen-t" style={{fontSize:11,color:"#CBD5E1"}}>Margen de ganancia</div>
+          <div className={"rf-margen cifra "+(ganancia>=0?"bien":"mal")} style={{fontSize:22,fontWeight:800,color:ganancia>=0?"#6EE7B7":"#FCA5A5"}}>{ingresos>0?`${(ganancia/ingresos*100).toFixed(1)}%`:"—"}</div>
         </div>
         <select value={mes} onChange={e=>setMes(e.target.value)} style={{background:"rgba(255,255,255,.1)",color:"#fff",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,padding:"7px 10px",fontSize:13,fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
           {MESES.map(m=><option key={m} value={m} style={{color:"#1E293B"}}>{m}</option>)}
@@ -2094,10 +2095,10 @@ function HistorialPage({data,loadData,showToast}){
       </table>`;
     };
     const cuerpo=bloques.map(tablaDeBloque).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Estado de cuenta ${alumno.nombre} ${rangoTxt}</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Estado de cuenta ${alumno.nombre} ${rangoTxt}</title>
       <style>
         @page { size: letter portrait; margin: 15mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif}${CSS_CIFRAS}
         body{padding:0;color:#1E293B}
         .head{display:flex;align-items:center;gap:20px;border-bottom:3px solid #F97316;padding-bottom:14px;margin-bottom:18px}
         .head .htxt{text-align:left}
@@ -2602,9 +2603,9 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
         <tr><td>Fondo de graduación usado por la escuela que no tuvo que reponerse (ganancia del evento)</td><td class="r verde">${L(prestado-repuesto)}</td></tr>
       </tbody></table>
       <div class="nota">En ${esc(lista(mesesCob)||"meses anteriores")} la escuela utilizó ${L(prestado)} cobrados de graduación para cubrir sus gastos de operación, como préstamo interno del fondo del evento. En ${mes}, al pagar los gastos del evento (${L(gasMes)}), lo cobrado de graduación en el mes (${L(cobMes)}) no alcanzó y la escuela repuso ${L(repuesto)} con sus propios ingresos (mensualidades). Por eso las salidas de ${mes} son mayores: incluyen la devolución de ese préstamo interno, no un gasto adicional de la escuela. El evento cobró en total ${L(gCobTot)} y gastó ${L(gGasTot)}, con una ganancia de ${L(gCobTot-gGasTot)}${gPend>0?`; quedan ${L(gPend)} por cobrar`:""}.</div>`:"";
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cierre de ${mes} ${ANIO_ACTUAL}</title><style>
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Cierre de ${mes} ${ANIO_ACTUAL}</title><style>
       @page { size: letter portrait; margin: 14mm; }
-      *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}${CSS_CIFRAS}
       body{color:#000;font-size:12.5px}
       .head{display:flex;align-items:center;gap:18px;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:16px}
       .head h1{font-size:22px;letter-spacing:.3px}
@@ -3687,10 +3688,10 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       const sec=g.seccion_id?data.secciones.find(s=>s.id===g.seccion_id):null;
       return `<tr><td>${g.fecha||"—"}</td><td>${esc(mesGasto(g)||"—")}</td><td>${esc(g.descripcion||"—")}${sec?` <span style="color:#000000;font-size:11px">· ${esc(sec.nombre)}</span>`:""}</td><td>${esc(g.comentario||"—")}</td><td style="text-align:right;white-space:nowrap">${L(g.monto)}</td></tr>`;
     }).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte del evento — Graduación</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Reporte del evento — Graduación</title>
       <style>
         @page { size: letter portrait; margin: 15mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif}${CSS_CIFRAS}
         body{color:#000000}
         .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #000000;padding-bottom:14px;margin-bottom:18px}
         .head h1{font-size:21px;color:#000000}
@@ -3770,10 +3771,10 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       <tfoot><tr><td colspan="5">Subtotal ${esc(x.nombre)}</td><td class="r">${L(x.total)}</td><td class="r">${L(x.cob)}</td><td class="r">${L(x.total-x.cob)}</td></tr></tfoot></table>`).join("");
     const filasGastos=[...gastosEvento].sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||""))).map(g=>`<tr><td>${fCorta(g.fecha)}</td><td>${esc(mesGasto(g)||"—")}</td><td>${esc(g.descripcion||"—")}</td><td>${esc(g.seccion_id?nomSec(g.seccion_id):"Todo el evento")}</td><td class="sm">${esc(g.comentario||"—")}</td><td class="r">${L(g.monto)}</td></tr>`).join("");
     const proyectada=totalACobrar-gastadoEvento;
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Informe de graduación</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Informe de graduación</title>
       <style>
         @page { size: letter portrait; margin: 14mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif}${CSS_CIFRAS}
         body{color:#000000;font-size:12px}
         .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #000000;padding-bottom:14px;margin-bottom:16px}
         .head h1{font-size:21px;color:#000000}
@@ -4241,7 +4242,7 @@ function ReportesPage({data,showToast}){
   ];
   const svgGrafica=(()=>{const W=760,H=300,top=46,base=250,n=barrasRep.length,slot=W/n,bw=Math.min(62,slot*0.56);const max=Math.max(...barrasRep.map(b=>b.v),1);
     const fmt=(v)=>`L ${(Math.round(v*100)/100).toLocaleString()}`;
-    let out=`<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" style="font-family:Georgia,'Times New Roman',serif;display:block"><defs>`;
+    let out=`<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" style="font-family:'IBM Plex Sans',Arial,sans-serif;display:block"><defs>`;
     barrasRep.forEach((b,i)=>{out+=`<linearGradient id="gr${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${b.c[0]}"/><stop offset="1" stop-color="${b.c[1]}"/></linearGradient>`;});
     out+=`<pattern id="rayas" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="8" fill="rgba(255,255,255,.35)"/></pattern></defs>`;
     [0.25,0.5,0.75,1].forEach(t=>{const y=base-(base-top)*t;out+=`<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="#FFFFFF" stroke-dasharray="4 4"/>`;});
@@ -4366,7 +4367,8 @@ function ReportesPage({data,showToast}){
   const estadoHTML=hojas.map(h=>h.html).join("\n");
 
   const EDO_CSS=`
-    .edo,.tit,.pie,.aviso{font-family:Georgia,'Times New Roman',serif}
+    .edo,.tit,.pie,.aviso{font-family:'IBM Plex Sans',Arial,sans-serif}
+    .edo .num,.edo .pct{font-family:'IBM Plex Mono',Consolas,monospace}
     .edo{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px;color:#000000}
     .edo th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#555555;font-weight:700;text-align:left;padding:6px 8px;border-bottom:2px solid #000000}
     .edo td{padding:6px 8px;vertical-align:top}
@@ -4465,9 +4467,10 @@ function ReportesPage({data,showToast}){
     <p class="pie">Son las mismas cifras del estado de resultados, explicadas de forma sencilla. Cifras en Lempiras, redondeadas.</p>
   </div>`;
   const SEN_CSS=`
-    .sen{--t:#1F2937;--s:#5B6576;--b:#DCE1E8;--sup:#FFFFFF;--sup2:#F5F7FA;--ent:#2A5E45;--sal:#D9641E;--mal:#8E3131;--az:#1B2A4A;font-family:'Source Serif 4',Georgia,serif;color:var(--t)}
+    .sen{--t:#1F2937;--s:#5B6576;--b:#DCE1E8;--sup:#FFFFFF;--sup2:#F5F7FA;--ent:#2A5E45;--sal:#D9641E;--mal:#8E3131;--az:#1B2A4A;font-family:'IBM Plex Sans',Arial,sans-serif;color:var(--t)}
     html[data-fondo="oscuro"] .sen:not(.pdf){--t:#E9EDEF;--s:#8696A0;--b:#40444A;--sup:#2A2D31;--sup2:#33363B;--ent:#7FC9A3;--sal:#F0A46A;--mal:#EE9A9A;--az:#E9EDEF}
-    .sen h2,.sen h3,.sen strong{font-family:Lora,Georgia,serif}
+    .sen h2,.sen h3,.sen strong{font-family:'IBM Plex Sans',Arial,sans-serif}
+    .sen .lin b,.sen .fila .monto{font-family:'IBM Plex Mono',Consolas,monospace}
     .sen .titular{border-left:4px solid var(--sal);padding:4px 0 4px 14px;margin-bottom:16px}
     .sen .titular h2{font-size:21px;font-weight:600;margin:0;color:var(--az);line-height:1.35}
     .sen .titular p{font-size:14px;color:var(--s);margin:6px 0 0;line-height:1.5}
@@ -4496,7 +4499,7 @@ function ReportesPage({data,showToast}){
     .sen .fila .barra{grid-column:1/-1;height:8px;margin-top:4px}
     .sen ul{margin:0;padding-left:18px} .sen li{font-size:13.5px;line-height:1.55;margin-bottom:6px}
     .sen .vacio{font-size:13px;color:var(--s);margin:0}
-    .sen .glos summary{cursor:pointer;font-family:Lora,Georgia,serif;font-weight:600;font-size:14px;color:var(--az)}
+    .sen .glos summary{cursor:pointer;font-family:'IBM Plex Sans',Arial,sans-serif;font-weight:600;font-size:14px;color:var(--az)}
     .sen .glos p{font-size:13px;margin:6px 0 0;line-height:1.45}
     .sen .pie{font-size:11px;color:var(--s);margin-top:6px}
     @media (max-width:700px){.sen .tres,.sen .dos{grid-template-columns:1fr}.sen .lin{grid-template-columns:60px 1fr 90px}}`;
@@ -4504,10 +4507,10 @@ function ReportesPage({data,showToast}){
   // Documento completo del reporte (se usa para descargar el PDF y para imprimir)
   const nombreArchivo=`${vista==="sencilla"?"Resumen del mes":"Estado de resultados"} ${mesSel} ${anioSel}`;
   const documentoHTML=()=>{
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${nombreArchivo}</title>
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>${nombreArchivo}</title>
       <style>
         @page { size: letter portrait; margin: 14mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}${CSS_CIFRAS}
         body{color:#000000}
         .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #000000;padding-bottom:12px;margin-bottom:16px}
         .head h1{font-size:24px;color:#000000}
@@ -4557,6 +4560,7 @@ function ReportesPage({data,showToast}){
     const contenido=`<div class="pdfroot" style="width:100%;background:#F2F2F2"><style>${cssLocal}</style>${cuerpo}</div>`;
     try{
       const html2pdf=(await import("html2pdf.js")).default;
+      await cargarFuentesInforme();
       const pdfBlob=await html2pdf().set({
         margin:[10,10,12,10],
         filename:`${nombreArchivo}.pdf`,
@@ -4672,7 +4676,7 @@ function ReportesPage({data,showToast}){
       const img=logoXls?[{...logoXls,dpi:96,anchor:{row:1,column:1},offsetX:4,offsetY:2,title:"Logo"}]:undefined;
       const libro=[{data:resumen,sheet:"Resumen",columns:cols,images:img,showGridLines:false},
         ...hojas.filter(h=>!h.sinExcel).map(h=>({data:[...encabezado(h.t),...hojaAFilas(h.html)],sheet:h.t.slice(0,31),columns:cols,images:img,showGridLines:false}))];
-      const blob=await writeExcelFile(libro,{fontFamily:"Calibri",fontSize:11}).toBlob();
+      const blob=await writeExcelFile(fuentesExcel(libro),{fontFamily:EXCEL_TEXTO,fontSize:11}).toBlob();
       const nombre=`Reportes ${mesSel} ${anioSel}.xlsx`;
       if(pdfListo)URL.revokeObjectURL(pdfListo.url);
       setPdfListo({url:URL.createObjectURL(blob),nombre,blob,tipo:"Excel"});
@@ -4739,7 +4743,7 @@ function ReportesPage({data,showToast}){
       </div>
       <style>{HOJA_CSS}</style>
       <div className="pestanas" role="tablist">{hojas.map(h=><button key={h.k} role="tab" aria-selected={hojaActiva.k===h.k} onClick={()=>setHojaSel(h.k)}>{h.t}</button>)}</div>
-      <div style={{overflowX:"auto"}}><div className="hojaW" style={{minWidth:560,fontFamily:"Georgia,'Times New Roman',serif"}} dangerouslySetInnerHTML={{__html:hojaActiva.sinExcel?hojaActiva.html:comoHoja(hojaActiva.html)}}/></div>
+      <div style={{overflowX:"auto"}}><div className="hojaW" style={{minWidth:560,fontFamily:"'IBM Plex Sans',Arial,sans-serif"}} dangerouslySetInnerHTML={{__html:hojaActiva.sinExcel?hojaActiva.html:comoHoja(hojaActiva.html)}}/></div>
       <div style={{fontSize:11,color:"#5B6576",marginTop:8}}>El PDF y la impresión traen todas las hojas juntas. «Descargar Excel» crea un archivo con una hoja por pestaña, más un resumen.</div>
     </div>
     </>}
@@ -4769,6 +4773,7 @@ async function htmlAPdf(html, nombre){
   const cssLocal=css.replace(/@page[^}]*\}/,"").replace(/\*\{/g,".pdfroot,.pdfroot *{").replace(/(^|\s)body\{/,"$1.pdfroot{");
   const contenido=`<div class="pdfroot" style="width:100%;background:#fff"><style>${cssLocal}</style>${cuerpo}</div>`;
   const html2pdf=(await import("html2pdf.js")).default;
+  await cargarFuentesInforme();
   const out=await html2pdf().set({
     margin:[10,10,12,10], filename:`${nombre}.pdf`, image:{type:"jpeg",quality:0.96},
     html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff",scrollY:0},

@@ -64,8 +64,10 @@ function Kpi({ k, irA }) {
 function Barras({ meses }) {
   const [sel, setSel] = useState(null);
   const H = 230, max = Math.max(...meses.flatMap((m) => [m.ing, m.gas]), 1);
-  const paso = Math.pow(10, Math.floor(Math.log10(max)));
-  const tope = Math.ceil(max / paso) * paso;
+  // Paso "redondo" (1, 2, 2.5 o 5 × 10ⁿ) para que el eje lea L 0, 15k, 30k…
+  const bruto = max / 4, mag = Math.pow(10, Math.floor(Math.log10(bruto)));
+  const paso = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((v) => v >= bruto);
+  const tope = paso * 4;
   const lineas = [0, 0.25, 0.5, 0.75, 1].map((f) => f * tope);
   return (
     <div className="sp-barras" onMouseLeave={() => setSel(null)}>
