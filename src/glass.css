@@ -1,6 +1,6 @@
 /* ════════════════════════════════════════════════════════════
    ESTILO EJECUTIVO: fondo sobrio, superficies blancas sólidas, bordes finos,
-   esquinas casi rectas, tipografía serif y paleta de la escuela
+   esquinas casi rectas, tipografía Manrope + Inter y paleta de la escuela
    (azul marino y naranja) en tonos profesionales.
    ════════════════════════════════════════════════════════════ */
 :root {
@@ -8,8 +8,10 @@
   --azul: #1B2A4A; --azul-2: #24365C; --naranja: #D9641E; --naranja-claro: #F0A46A;
   --texto: #1F2937; --suave: #5B6576; --borde: #DCE1E8; --fondo: #F3F4F7;
   --sombra: 0 1px 2px rgba(16, 24, 40, .05);
-  --letra-texto: "Source Serif 4", Georgia, "Times New Roman", serif;
-  --letra-titulo: "Lora", Georgia, "Times New Roman", serif;
+  --letra-texto: "Inter", "Segoe UI", Arial, sans-serif;
+  --letra-titulo: "Manrope", "Segoe UI", Arial, sans-serif;
+  --letra-informe: "IBM Plex Sans", Arial, sans-serif;
+  --letra-cifra: "IBM Plex Mono", Consolas, "Courier New", monospace;
 }
 html, body { min-height: 100%; }
 body {
@@ -22,8 +24,13 @@ body {
 }
 #root { position: relative; z-index: 1; }
 
-/* Títulos con Lora; el resto del texto con Source Serif 4 */
-h1, h2, h3, h4, .titulo-marca, .cifra { font-family: var(--letra-titulo); letter-spacing: .1px; }
+/* Títulos con Manrope (700 los principales, 600 subtítulos y tarjetas); el resto con Inter.
+   Cifras de dinero, porcentajes y códigos con IBM Plex Mono. */
+h1, h2, .titulo-marca { font-family: var(--letra-titulo); font-weight: 700; letter-spacing: -.2px; }
+h3, h4, h5 { font-family: var(--letra-titulo); font-weight: 600; letter-spacing: -.1px; }
+.cifra { font-family: var(--letra-cifra); letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+button, label, th { font-weight: 600; }
+.informe { font-family: var(--letra-informe); }
 h1, h2, h3, h4 { color: var(--azul); }
 table { font-variant-numeric: lining-nums tabular-nums; }
 th { letter-spacing: .4px; }
@@ -93,8 +100,6 @@ button:not(:disabled):active { filter: brightness(.88); }
 .tarjeta-kpi { transition: border-color .15s ease, box-shadow .15s ease; }
 .tarjeta-kpi:hover { box-shadow: 0 4px 12px rgba(16, 24, 40, .08) !important; }
 
-/* Fondo decorativo (burbujas y Pulpi) apagado en el estilo ejecutivo */
-.burbujas { display: none; }
 
 /* Barras de desplazamiento finas */
 * { scrollbar-width: thin; scrollbar-color: rgba(91, 101, 118, .35) transparent; }
@@ -243,3 +248,6 @@ div[style*="position: fixed"][style*="inset: 0px"][style*="background: rgba(0, 0
   background: #fff; border: 1px solid #CDD3DC;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* El menú lateral nunca se encoge (antes, con pantallas angostas y tablas anchas, se cortaba a la izquierda) */
+.vidrio-menu { flex-shrink: 0; }

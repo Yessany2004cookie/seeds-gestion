@@ -2,11 +2,13 @@
 // La clave de Anthropic vive solo aquí, en la variable de entorno
 // ANTHROPIC_API_KEY de Vercel; nunca llega al navegador.
 import Anthropic from "@anthropic-ai/sdk";
-import { supabase } from "../src/supabaseClient.js";
+import { createClient } from "@supabase/supabase-js";
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "../src/supabaseClient.js";
 
 export const config = { maxDuration: 60 };
 
-const MODELO = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+// Haiku: el modelo más económico; alcanza bien para preguntas sobre las cifras.
+const MODELO = process.env.ANTHROPIC_MODEL || "claude-haiku-5-5";
 const MAX_MENSAJES = 16;
 const MAX_CARACTERES = 4000;
 
@@ -31,6 +33,13 @@ export default async function handler(req, res) {
   if (!token) return res.status(401).json({ error: "Inicia sesión para usar el asistente." });
   const { data: auth, error: authError } = await supabase.auth.getUser(token);
   if (authError || !auth?.user) return res.status(401).json({ error: "Tu sesión expiró. Vuelve a iniciar sesión." });
+  // Y que sea de administración: el asistente usa cifras financieras y gasta crédito de la clave de IA
+  const comoUsuario = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: esAdmin, error: rolError } = await comoUsuario.rpc("es_admin");
+  if (rolError || esAdmin !== true) return res.status(403).json({ error: "Solo administración puede usar el asistente financiero." });
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: "El asistente aún no está configurado: falta la variable ANTHROPIC_API_KEY en Vercel." });
@@ -57,7 +66,7 @@ export default async function handler(req, res) {
       model: MODELO,
       max_tokens: 16000,
       thinking: { type: "adaptive" },
-      output_config: { effort: "medium" },
+      output_config: { effort: "low" },
       system: [
         { type: "text", text: INSTRUCCIONES },
         { type: "text", text: `DATOS DEL SISTEMA (JSON, cifras en lempiras):\n${datos}`, cache_control: { type: "ephemeral" } },

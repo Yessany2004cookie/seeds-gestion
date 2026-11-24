@@ -12,12 +12,13 @@ export const SUAVE = "#5B6576";
 // Los colores vivos que usan las pantallas se cambian por su versión sobria,
 // para que botones, etiquetas e iconos se vean de la misma familia.
 const SOBRIOS = {
-  "#2563EB": "#2B4C7E", "#3B82F6": "#2B4C7E", "#1D4ED8": "#233F6A", "#0891B2": "#2D6A7F", "#0EA5E9": "#2D6A7F",
+  "#2563EB": "#2B4C7E", "#3B82F6": "#2B4C7E", "#1D4ED8": "#233F6A", "#0891B2": AZUL, "#0EA5E9": AZUL,
   "#059669": "#2F6B4F", "#10B981": "#2F6B4F", "#16A34A": "#2F6B4F", "#15803D": "#2A5E45", "#166534": "#24533D",
-  "#DC2626": "#A33A3A", "#EF4444": "#A33A3A", "#B91C1C": "#8E3131",
-  "#7C3AED": "#4E4A7E", "#8B5CF6": "#4E4A7E", "#6D28D9": "#45416F", "#A855F7": "#4E4A7E",
+  "#25D366": "#2F6B4F", "#DC2626": "#A33A3A", "#EF4444": "#A33A3A", "#B91C1C": "#8E3131",
+  // Morado, dorado y turquesa pasan al azul de la marca: menos colores, un solo acento (naranja)
+  "#7C3AED": AZUL, "#8B5CF6": AZUL, "#6D28D9": AZUL, "#A855F7": AZUL,
   "#F97316": NARANJA, "#EA580C": "#C2571A", "#FB923C": NARANJA,
-  "#D97706": "#A8701E", "#F59E0B": "#A8701E", "#B45309": "#8F5E1A",
+  "#D97706": AZUL, "#F59E0B": AZUL, "#B45309": AZUL,
   "#1E293B": AZUL, "#0F172A": AZUL, "#000000": AZUL,
 };
 export const tono = (c) => (typeof c === "string" && SOBRIOS[c.toUpperCase()]) || c;

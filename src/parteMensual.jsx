@@ -92,7 +92,7 @@ export function ParteMensual({ secciones, alumnos, docentesDe, sede, avisar, sec
     try {
       const writeExcelFile = (await import("write-excel-file/browser")).default;
       const { datos, columnas } = hojaExcel(p, titulo);
-      const blob = await writeExcelFile(datos, { columns: columnas, sheet: "Parte mensual", orientation: "landscape", stickyRowsCount: 6, fontFamily: "Calibri", fontSize: 11 }).toBlob();
+      const blob = await writeExcelFile(datos, { columns: columnas, sheet: "Parte mensual", orientation: "landscape", stickyRowsCount: 6, fontFamily: "Inter", fontSize: 11 }).toBlob();
       listo(blob, "xlsx", "Excel");
     } catch (e) { avisar && avisar("No se pudo crear el Excel: " + e.message, "error"); }
     setGenerando("");
@@ -199,7 +199,7 @@ export function ParteMensual({ secciones, alumnos, docentesDe, sede, avisar, sec
 function documentoHTML(p, t) {
   const th = "border:1px solid #CBD5E1;padding:4px 3px;font-size:9px;background:#FFF7ED;color:#9A3412";
   const td = "border:1px solid #E2E8F0;padding:3px;font-size:9px;text-align:center";
-  return `<div style="font-family:'Segoe UI',Arial,sans-serif;color:#1E293B;width:100%">
+  return `<div style="font-family:Inter,'Segoe UI',Arial,sans-serif;color:#1E293B;width:100%">
     <div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #F97316;padding-bottom:8px;margin-bottom:8px">
       <img src="${LOGO_SEEDS}" style="width:54px;height:54px;object-fit:contain"/>
       <div style="flex:1"><div style="font-size:15px;font-weight:800">SEEDS ENGLISH SCHOOL</div>

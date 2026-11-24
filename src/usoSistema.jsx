@@ -21,6 +21,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, btn, btnO } from "./estilo";
 import { Clock, FileSpreadsheet, Download, X, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { EXCEL_TEXTO } from "./tipografia";
 
 const INACTIVO_MS = 2 * 60 * 1000;     // sin actividad por 2 min → deja de contar
 const LECTURA_MS = 5 * 60 * 1000;      // en pantallas de lectura (reportes, finanzas…) se espera hasta 5 min
@@ -331,7 +332,7 @@ export function UsoSistemaPanel({ secciones = [], showToast }) {
       const blob = await writeExcelFile([
         { data: resumen, sheet: "Resumen", columns: [{ width: 34 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 40 }] },
         { data: porDia, sheet: "Por día", stickyRowsCount: 1, columns: [{ width: 34 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 14 }, { width: 16 }, { width: 26 }] },
-      ], { fontFamily: "Calibri", fontSize: 11 }).toBlob();
+      ], { fontFamily: EXCEL_TEXTO, fontSize: 11 }).toBlob();
       const nombre = `Horas trabajadas ${nombreMes(mes)}.xlsx`;
       setArchivo({ url: URL.createObjectURL(blob), nombre });
     } catch (e) { showToast && showToast("No se pudo crear el Excel: " + e.message, "error"); }

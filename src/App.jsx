@@ -1,13 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
+import { useAjuste, registrarRecordatorios, ultimosRecordatorios } from "./ajustes";
 import { card, input, btn, btnO, label, badge, tono, AZUL as AZUL_MARCA, NARANJA as NARANJA_MARCA } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
 import { SELLO_SEEDS, FIRMA_ADMIN } from "./sello";
-import { AlertasFinanzasPage } from "./alertasFinanzas";
+import { AlertasFinanzasPage, logoParaExcel } from "./alertasFinanzas";
+import { encabezadoExcel } from "./documentoFormal";
+import { FinResumenExcel, FinMaestrosExcel, FinGastosExcel, IngresosExcel, DescargasFinanzas, hojasResumen, hojasMaestros, hojasGastos, hojasIngresos } from "./finanzasExcel";
+import { useVista, SelectorVista, EstilosVistas } from "./vistas";
 import { ContabilidadPage } from "./contabilidad";
+import { ResumenMesInicio } from "./resumenMesInicio";
+import { GrupoPage } from "./navegacion";
+import { InicioSoft } from "./inicioSoft";
+import { LINK_FUENTES, CSS_CIFRAS, fuentesExcel, EXCEL_TEXTO, cargarFuentesInforme } from "./tipografia";
 import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
-import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
+import { SelectorFondo } from "./fondo";
+import { useModulos, ModulosPanel } from "./modulos";
+import { RespaldosAutomaticos } from "./respaldosAuto";
+import { useMarca, LogoEditable, TextoEditable, guardarMarca, guardarEtiqueta, mostrarPestana, ocultarPestana, ConfirmarConClave, PersonalizarPanel, ClaveSeguridadPanel, PESTANAS_FIJAS } from "./marca";
+import { DocenteApp, PESTANAS_DOCENTE, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
   Plus, Trash2, Edit, Search, Calendar, X, Eye,
@@ -290,7 +302,7 @@ const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
   const cv = document.createElement('canvas'); cv.width = W*K; cv.height = H*K;
   const c = cv.getContext('2d'); c.scale(K, K);
   const AZUL = '#1B2A4A', NARANJA = '#EA580C', ACENTO = NARANJA, VERDE = '#166534', GRIS = '#475569', LINEA = '#CBD5E1';
-  const SERIF = 'Georgia,"Times New Roman",serif', SANS = '"Segoe UI",system-ui,sans-serif';
+  const SERIF = 'Manrope,"Segoe UI",Arial,sans-serif', SANS = 'Inter,"Segoe UI",Arial,sans-serif';
   const linea = (x1,y1,x2,y2,col=LINEA,w=1) => { c.strokeStyle=col; c.lineWidth=w; c.beginPath(); c.moveTo(x1,y1); c.lineTo(x2,y2); c.stroke(); };
 
   c.fillStyle = '#fff'; c.fillRect(0,0,W,H);
@@ -695,7 +707,14 @@ export default function App() {
   // Administración que también da clases: puede cambiar a la vista docente
   const [vistaDocente, setVistaDocente] = useState(()=>{try{return localStorage.getItem("seeds_vista")==="docente";}catch(e){return false;}});
   // Recorrido guiado y novedades de administración
-  const recorrido = useRecorrido(rol.estado==="admin"&&!vistaDocente?session:null, "admin");
+  // Módulos activos de esta institución (Configuración → Sistema y respaldos)
+  const modulos = useModulos(session);
+  // Plantilla personalizable: logo, nombre y nombres de pestañas (Configuración → Sistema y respaldos)
+  const marca = useMarca();
+  const [personalizando, setPersonalizando] = useState(false);
+  const [ocultarPest, setOcultarPest] = useState(null);
+  useEffect(() => { document.title = marca.nombreO("Seeds English School") + " · " + marca.subtituloO("Sistema de Gestión"); }, [marca.nombre, marca.subtitulo]);
+  const recorrido = useRecorrido(rol.estado==="admin"&&!vistaDocente&&modulos.listo?session:null, "admin", (n)=>modulos.activo(n.modulo));
   const cambiarVista = (docente) => { setVistaDocente(docente); try{localStorage.setItem("seeds_vista",docente?"docente":"admin");}catch(e){} };
 
   const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
@@ -753,39 +772,49 @@ export default function App() {
   useEffect(() => { if(session && rol.estado==="admin") loadData(); }, [session, rol.estado, loadData]);
 
   // Contador de tiempo de trabajo real (solo en el panel de administración)
-  useContadorUso({ activo: !!session && rol.estado==="admin" && !(rol.perfil?.maestro_id && vistaDocente), seccion: page, userId: session?.user?.id });
+  useContadorUso({ activo: !!session && rol.estado==="admin" && modulos.listo && modulos.activo("contador") && !(rol.perfil?.maestro_id && vistaDocente), seccion: page, userId: session?.user?.id });
 
   const logout = async () => { await supabase.auth.signOut(); setSession(null); };
 
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC"}}><div style={{textAlign:"center"}}><img src={LOGO_SEEDS} alt="Seeds" style={{width:80,height:80,objectFit:"contain",marginBottom:12}}/><p style={{color:"#64748B"}}>Cargando Seeds...</p></div></div>;
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC"}}><div style={{textAlign:"center"}}><img src={marca.logoSrc} alt="" style={{width:80,height:80,objectFit:"contain",marginBottom:12}}/><p style={{color:"#64748B"}}>Cargando…</p></div></div>;
   if (!session) return <LoginPage showToast={showToast} toast={toast} />;
   if (rol.estado === "cargando") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC",color:"#64748B",fontSize:14}}>Cargando…</div>;
+  if (rol.estado === "docente" && !modulos.listo) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC",color:"#64748B",fontSize:14}}>Cargando…</div>;
+  if (rol.estado === "docente" && !modulos.activo("docentes")) return <PantallaMensaje titulo="El portal docente no está activo" texto="Administración desactivó el portal docente en esta institución." onSalir={logout} />;
   if (rol.estado === "docente") return <DocenteApp session={session} perfil={rol.perfil} />;
-  if (rol.estado === "admin" && rol.perfil?.maestro_id && vistaDocente) return <DocenteApp session={session} perfil={rol.perfil} onVolver={()=>cambiarVista(false)} />;
-  if (rol.estado === "sin_acceso") return <PantallaMensaje titulo="Tu usuario no tiene acceso" texto="Pide a administración de Seeds que te dé acceso al sistema." onSalir={logout} />;
+  if (rol.estado === "admin" && rol.perfil?.maestro_id && vistaDocente && modulos.activo("docentes")) return <DocenteApp session={session} perfil={rol.perfil} onVolver={()=>cambiarVista(false)} />;
+  if (rol.estado === "sin_acceso") return <PantallaMensaje titulo="Tu usuario no tiene acceso" texto="Pide a administración que te dé acceso al sistema." onSalir={logout} />;
 
   // Menú agrupado: cada grupo es un submenú que se abre y se cierra
-  const GRUPOS = [
+  const GRUPOS_TODOS = [
     {id:"inicio",label:null,items:[{id:"dashboard",label:"Inicio",icon:Home}]},
     {id:"escuela",label:"Escuela y alumnado",icon:GraduationCap,items:[
       {id:"secciones",label:"Secciones",icon:BookOpen},{id:"maestros",label:"Maestros",icon:GraduationCap},
-      {id:"alumnos",label:"Matrícula",icon:Users},{id:"docentes",label:"Gestión curricular",icon:ClipboardList}]},
+      {id:"alumnos",label:"Matrícula",icon:Users},{id:"docentes",label:"Gestión curricular",icon:ClipboardList,modulo:"docentes"}]},
     {id:"cobros",label:"Cobros",icon:FileText,items:[
       {id:"facturas",label:"Facturas y pagos",icon:FileText},{id:"historial",label:"Historial",icon:Calendar},
-      {id:"recordatorios",label:"Recordatorios",icon:Bell},{id:"materiales",label:"Materiales",icon:CreditCard},
-      {id:"graduacion",label:"Graduación",icon:Award}]},
+      {id:"recordatorios",label:"Recordatorios",icon:Bell,modulo:"recordatorios"},{id:"materiales",label:"Materiales",icon:CreditCard,modulo:"materiales"},
+      {id:"graduacion",label:"Graduación",icon:Award,modulo:"graduacion"}]},
     {id:"finanzas_g",label:"Finanzas",icon:DollarSign,items:[
-      {id:"alertas",label:"Alertas",icon:AlertCircle},{id:"finanzas",label:"Gastos, deudas y caja",icon:DollarSign},
-      {id:"ingresos",label:"Ingresos extra",icon:TrendingUp},{id:"reportes",label:"Reportes",icon:FileText}]},
-    {id:"contab_g",label:"Contabilidad",icon:BookOpen,items:[
+      {id:"alertas",label:"Alertas",icon:AlertCircle,modulo:"alertas"},{id:"finanzas",label:"Gastos, deudas y caja",icon:DollarSign},
+      {id:"ingresos",label:"Ingresos extra",icon:TrendingUp,modulo:"ingresos"},{id:"reportes",label:"Reportes",icon:FileText}]},
+    {id:"contab_g",label:"Contabilidad",icon:BookOpen,modulo:"contabilidad",items:[
       {id:"c_resultados",label:"Estado de resultados",icon:TrendingUp},{id:"c_balance",label:"Balance general",icon:BookOpen},
       {id:"c_flujo",label:"Flujo de efectivo",icon:DollarSign},{id:"c_diario",label:"Libro diario",icon:FileText},
-      {id:"c_mayor",label:"Libro mayor",icon:FileText},{id:"c_cierre",label:"Cierre de mes",icon:Check},
+      {id:"c_mayor",label:"Libro mayor",icon:FileText},{id:"c_balanza",label:"Balanza de comprobación",icon:Check},
+      {id:"c_antiguedad",label:"Antigüedad de saldos",icon:Calendar},{id:"c_ajustes",label:"Asientos de ajuste",icon:Edit},{id:"c_cierre",label:"Cierre de mes",icon:Check},
       {id:"c_apertura",label:"Apertura",icon:Edit},{id:"c_catalogo",label:"Catálogo de cuentas",icon:ClipboardList}]},
     {id:"sistema_g",label:"Configuración",icon:Edit,items:[
       {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema y respaldos",icon:LogIn}]},
-  ];
-  const NAV = GRUPOS.flatMap(g=>g.items.map(it=>({...it,grupo:g.label})));
+  ].map(g=>modulos.activo(g.modulo)?{...g,label:g.label&&marca.etiqueta("g:"+g.id,g.label),items:g.items.filter(it=>modulos.activo(it.modulo)).map(it=>({...it,labelOriginal:it.label,label:marca.etiqueta("n:"+it.id,it.label),grupoId:g.id}))}:null).filter(g=>g&&g.items.length);
+  // Pestañas ocultas: no se ven en el menú (al personalizar se ven en gris para poder mostrarlas)
+  const GRUPOS = GRUPOS_TODOS.map(g=>({...g,items:g.items.filter(it=>personalizando||!marca.oculta(it.id))})).filter(g=>g.items.length);
+  const NAV = GRUPOS_TODOS.flatMap(g=>g.items.filter(it=>!marca.oculta(it.id)).map(it=>({...it,grupo:g.label})));
+  // Si la página abierta es de un módulo que se apagó, se muestra Inicio
+  // Las categorías también son páginas: "grupo:<id>" muestra sus tarjetas de navegación
+  const grupoDe = (p) => typeof p==="string"&&p.startsWith("grupo:") ? GRUPOS_TODOS.map(g=>({...g,items:g.items.filter(it=>!marca.oculta(it.id))})).find(g=>g.label&&g.items.length&&"grupo:"+g.id===p) : null;
+  const grupoPagina = grupoDe(page);
+  const pageVisible = NAV.some(n=>n.id===page)||grupoPagina ? page : "dashboard";
 
   // Vista de datos filtrada por la sucursal activa.
   // Como la sucursal vive en la sección, filtramos secciones y de ahí todo lo demás.
@@ -824,40 +853,64 @@ export default function App() {
     historial:<HistorialPage {...propsSuc}/>,
     recordatorios:<RecordatoriosPage {...propsSuc}/>,
     ingresos:<IngresosPage {...propsSuc}/>,
-    alertas:<AlertasFinanzasPage data={dataSuc}/>,
+    alertas:<AlertasFinanzasPage data={dataSuc} showToast={showToast} sucursalActiva={sucursalActiva}/>,
     finanzas:<FinanzasPage {...propsSuc}/>,
     c_resultados:<ContabilidadPage key="resultados" data={data} showToast={showToast} tabFijo="resultados"/>,
     c_balance:<ContabilidadPage key="balance" data={data} showToast={showToast} tabFijo="balance"/>,
     c_flujo:<ContabilidadPage key="flujo" data={data} showToast={showToast} tabFijo="flujo"/>,
     c_diario:<ContabilidadPage key="diario" data={data} showToast={showToast} tabFijo="diario"/>,
     c_mayor:<ContabilidadPage key="mayor" data={data} showToast={showToast} tabFijo="mayor"/>,
+    c_balanza:<ContabilidadPage key="balanza" data={data} showToast={showToast} tabFijo="balanza"/>,
+    c_antiguedad:<ContabilidadPage key="antiguedad" data={data} showToast={showToast} tabFijo="antiguedad"/>,
+    c_ajustes:<ContabilidadPage key="ajustes" data={data} showToast={showToast} tabFijo="ajustes"/>,
     c_cierre:<ContabilidadPage key="cierre" data={data} showToast={showToast} tabFijo="cierre"/>,
     c_apertura:<ContabilidadPage key="apertura" data={data} showToast={showToast} tabFijo="apertura"/>,
     c_catalogo:<ContabilidadPage key="catalogo" data={data} showToast={showToast} tabFijo="catalogo"/>,
-    reportes:<><UsoSistemaPanel secciones={NAV} showToast={showToast}/><ReportesPage {...propsSuc}/></>,
+    reportes:<>{modulos.activo("contador")&&<UsoSistemaPanel secciones={[...NAV,...GRUPOS_TODOS.filter(g=>g.label).map(g=>({id:"grupo:"+g.id,label:g.label}))]} showToast={showToast}/>}<ReportesPage {...propsSuc}/></>,
     docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
     config:<ConfiguracionPage {...props}/>,
-    sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}/>,
+    sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}
+      personalizar={{grupos:GRUPOS_TODOS.filter(g=>g.label),pestanas:GRUPOS_TODOS.flatMap(g=>g.items),pestanasDocente:modulos.activo("docentes")?PESTANAS_DOCENTE.filter(n=>modulos.activo(n.modulo)):[],onEditarMenu:()=>{setPersonalizando(true);setSidebarOpen(true);}}}/>,
   };
+
+  if (grupoPagina) pageMap[page] = <GrupoPage key={page} grupo={grupoPagina} irA={setPage}/>;
 
   return (
     <div style={{display:"flex",height:"100vh",background:"transparent"}}>
       {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.25)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",zIndex:40}}/>}
       <aside className="vidrio-menu" style={{position:"fixed",left:sidebarOpen?10:-280,top:10,bottom:10,width:240,color:"#fff",zIndex:50,transition:"left 0.25s cubic-bezier(.2,.8,.2,1)",display:"flex",flexDirection:"column",borderRadius:6,overflow:"hidden",...(window.innerWidth>768?{position:"relative",left:0,top:0,bottom:0,margin:0,borderRadius:0}:{})}}>
-        <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,.08)",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-          <div style={{background:"#fff",borderRadius:4,padding:6,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <img src={LOGO_SEEDS} alt="Seeds" style={{width:96,height:96,objectFit:"contain"}}/>
+        <div style={{position:"relative",padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,.08)",display:"flex",flexDirection:"column",alignItems:"center",gap:8,background:personalizando?"rgba(217,100,30,.12)":"transparent"}}>
+          {!personalizando&&<button onClick={()=>setPersonalizando(true)} title="Personalizar logo, nombre y pestañas" aria-label="Personalizar" style={{position:"absolute",top:8,right:8,background:"rgba(255,255,255,.08)",border:"1px solid rgba(255,255,255,.15)",borderRadius:3,color:"#C9D2E0",cursor:"pointer",fontSize:11,padding:"3px 7px",fontFamily:"inherit"}}>✏️</button>}
+          <LogoEditable src={marca.logoSrc} editando={personalizando} tam={96} showToast={showToast}/>
+          <div style={{textAlign:"center",width:"100%"}}>
+            <div className="titulo-marca" style={{fontWeight:700,fontSize:17,color:"#fff",letterSpacing:.3}}><TextoEditable oscuro editando={personalizando} valor={marca.nombreO("Seeds English")} max={50} titulo="Cambiar nombre de la institución" onGuardar={t=>guardarMarca({nombre:t.trim()||null},showToast,"Nombre actualizado")} estilo={{color:"#fff"}}/></div>
+            <div style={{fontSize:10.5,color:"#F0A46A",textTransform:"uppercase",letterSpacing:1.4,marginTop:3,fontWeight:600}}><TextoEditable oscuro editando={personalizando} valor={marca.subtituloO("Sistema de Gestión")} max={40} titulo="Cambiar subtítulo" onGuardar={t=>guardarMarca({subtitulo:t.trim()||null},showToast,"Subtítulo actualizado")} estilo={{color:"#F0A46A"}}/></div>
           </div>
-          <div style={{textAlign:"center"}}><div className="titulo-marca" style={{fontWeight:700,fontSize:17,color:"#fff",letterSpacing:.3}}>Seeds English</div><div style={{fontSize:10.5,color:"#F0A46A",textTransform:"uppercase",letterSpacing:1.4,marginTop:3,fontWeight:600}}>Sistema de Gestión</div></div>
+          {personalizando&&<div style={{fontSize:11.5,color:"#F6D3B8",textAlign:"center",lineHeight:1.4}}>Toque la foto o cualquier nombre con ✏️ para cambiarlo.</div>}
+          {personalizando&&<button onClick={()=>setPersonalizando(false)} style={{...btn(),padding:"6px 16px",fontSize:12.5}}>✓ Listo</button>}
         </div>
         <nav style={{flex:1,padding:"10px 10px",overflowY:"auto"}}>
           {GRUPOS.map(g=>{
             const activoAqui=g.items.some(it=>it.id===page);
-            const abierto=!g.label||activoAqui||gruposAbiertos[g.id];
+            const enGrupo=page==="grupo:"+g.id;
+            const abierto=!g.label||activoAqui||gruposAbiertos[g.id]||personalizando;
             const GIcon=g.icon;
             return(<div key={g.id} style={{marginBottom:4}}>
-              {g.label&&<button data-tour={"g-"+g.id} onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui?"#F0A46A":"#C9D2E0",fontSize:11.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16}/><span style={{flex:1}}>{g.label}</span><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>}
-              {abierto&&g.items.map(n=>{const Icon=n.icon;const a=page===n.id;return(
+              {g.label&&personalizando&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",color:"#F0A46A",fontSize:11.5,fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16} style={{flexShrink:0}}/><span style={{flex:1,minWidth:0}}><TextoEditable oscuro editando valor={g.label} max={30} titulo="Cambiar nombre del grupo" onGuardar={t=>guardarEtiqueta("g:"+g.id,t,showToast)} estilo={{color:"inherit"}}/></span></div>}
+              {g.label&&!personalizando&&<div data-tour={"g-"+g.id} style={{display:"flex",alignItems:"stretch",borderRadius:3,background:enGrupo?"rgba(255,255,255,.09)":"transparent",borderLeft:enGrupo?"3px solid #D9641E":"3px solid transparent"}}>
+                <button className="menu-item" onClick={()=>{setPage("grupo:"+g.id);setGruposAbiertos(p=>({...p,[g.id]:true}));setSidebarOpen(false);}} title={"Ver todo lo de "+g.label} style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0,padding:"9px 4px 9px 11px",border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui||enGrupo?"#F0A46A":"#C9D2E0",fontSize:11.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16} style={{flexShrink:0}}/><span style={{flex:1}}>{g.label}</span></button>
+                <button onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} aria-label={(abierto?"Cerrar ":"Abrir ")+g.label} aria-expanded={abierto} style={{flexShrink:0,width:34,border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui||enGrupo?"#F0A46A":"#C9D2E0",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>
+              </div>}
+              {abierto&&g.items.map(n=>{const Icon=n.icon;const a=page===n.id;
+                if(personalizando){const oculta=marca.oculta(n.id);return(
+                <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:g.label?"6px 8px 6px 30px":"8px 8px 8px 14px",marginBottom:2,color:"#C9D2E0",fontSize:13,opacity:oculta?.45:1}}>
+                  <Icon size={15} style={{flexShrink:0}}/>
+                  <span style={{flex:1,minWidth:0}}><TextoEditable oscuro editando valor={n.label} max={40} titulo="Cambiar nombre de la pestaña" onGuardar={t=>guardarEtiqueta("n:"+n.id,t,showToast)} estilo={{color:"inherit"}}/></span>
+                  {PESTANAS_FIJAS.includes(n.id)?null:oculta
+                    ?<button onClick={async()=>{const e=await mostrarPestana(n.id);showToast(e||`${n.label}: visible otra vez`,e?"error":"success");}} title="Volver a mostrar" aria-label={"Mostrar "+n.label} style={{flexShrink:0,background:"none",border:"1px solid rgba(255,255,255,.25)",borderRadius:3,color:"#fff",cursor:"pointer",fontSize:11,padding:"2px 6px",fontFamily:"inherit"}}>Mostrar</button>
+                    :<button onClick={()=>setOcultarPest(n)} title="Ocultar esta pestaña (pide clave)" aria-label={"Ocultar "+n.label} style={{flexShrink:0,background:"none",border:"none",color:"#FCA5A5",cursor:"pointer",padding:2,display:"flex"}}><Trash2 size={14}/></button>}
+                </div>);}
+                return(
                 <button key={n.id} data-tour={"n-"+n.id} className={"menu-item"+(a?" activo":"")} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:g.label?"8px 14px 8px 30px":"10px 14px",marginBottom:2,border:"none",borderLeft:a?"3px solid #D9641E":"3px solid transparent",borderRadius:3,cursor:"pointer",background:a?"rgba(255,255,255,.09)":"transparent",color:a?"#fff":"#B8C2D3",fontSize:13,fontWeight:a?600:400,textAlign:"left",fontFamily:"inherit"}}><Icon size={15}/>{n.label}</button>
               );})}
             </div>);
@@ -870,7 +923,7 @@ export default function App() {
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             {window.innerWidth<=768&&page!=="dashboard"&&<button onClick={()=>history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20}/></button>}
             {window.innerWidth<=768&&<button onClick={()=>setSidebarOpen(true)} aria-label="Menú" style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Menu size={22} color="#475569"/></button>}
-            <h1 className="titulo-barra" style={{fontSize:18,fontWeight:600,color:"#1B2A4A",margin:0}}>{(()=>{const n=NAV.find(x=>x.id===page);return n?(n.grupo?`${n.grupo} · ${n.label}`:n.label):"";})()}</h1>
+            <h1 className="titulo-barra" style={{fontSize:18,fontWeight:600,color:"#1B2A4A",margin:0}}>{(()=>{if(grupoPagina)return grupoPagina.label;const n=NAV.find(x=>x.id===page);return n?(n.grupo?<><button onClick={()=>setPage("grupo:"+n.grupoId)} className="miga" title={"Ver todo lo de "+n.grupo}>{n.grupo}</button> · {n.label}</>:n.label):"";})()}</h1>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {data.sucursales.length>0&&<div data-tour="sucursal" className="selector-sucursal" style={{display:"flex",alignItems:"center",gap:6,background:"#F5F7FA",border:"1px solid #CDD3DC",borderRadius:4,padding:"4px 10px",minWidth:0}}>
@@ -879,17 +932,21 @@ export default function App() {
                 {data.sucursales.filter(s=>s.activa!==false).map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
             </div>}
-            {rol.perfil?.maestro_id&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1px solid #E7B48F",borderRadius:4,cursor:"pointer",padding:"5px 10px",color:"#C2571A",fontSize:12,fontWeight:600,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
-            <ContadorVisible/>
+            {rol.perfil?.maestro_id&&modulos.activo("docentes")&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1px solid #E7B48F",borderRadius:4,cursor:"pointer",padding:"5px 10px",color:"#C2571A",fontSize:12,fontWeight:600,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
+            {modulos.activo("contador")&&<ContadorVisible/>}
+            <SelectorFondo/>
             <BotonAyuda onClick={recorrido.abrir}/>
             <button data-tour="refrescar" onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"#fff",border:"1px solid #CDD3DC",borderRadius:4,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
             <div style={{fontSize:12,color:"#64748B"}} className="hide-mobile">{session.user.email}</div>
           </div>
         </header>
-        <div style={{flex:1,overflow:"auto",padding:20}}>{pageMap[page]}</div>
+        <div style={{flex:1,overflow:"auto",padding:20}}>{pageMap[pageVisible]}</div>
       </main>
-      <AsistenteIA data={dataSuc} session={session} nombreSucursal={data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||""}/>
-      <Recorrido estado={recorrido} pasos={PASOS_ADMIN} abrirMenu={setSidebarOpen} irA={setPage}/>
+      {modulos.activo("asistente")&&<AsistenteIA data={dataSuc} session={session} nombreSucursal={data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||""}/>}
+      <Recorrido estado={recorrido} pasos={PASOS_ADMIN.filter(p=>modulos.activo(p.modulo))} abrirMenu={setSidebarOpen} irA={setPage}/>
+      {ocultarPest&&<ConfirmarConClave titulo={`Ocultar «${ocultarPest.label}»`} que="ocultar una pestaña"
+        consecuencia={<>La pestaña <strong>{ocultarPest.label}</strong> dejará de verse en el menú para todos. <strong>No se borra ningún dato</strong>: puede volver a mostrarla al personalizar o en Configuración → Sistema y respaldos.</>}
+        textoBoton="Ocultar pestaña" accion={c=>ocultarPestana(ocultarPest.id,c)} onCerrar={()=>setOcultarPest(null)} onListo={()=>showToast(`${ocultarPest.label}: oculta`)}/>}
       {toast&&<div className="vidrio-ahumado aviso-flotante" role="status">
         <span className="aviso-icono" style={{background:toast.type==="success"?"#10B981":"#EF4444"}}>{toast.type==="success"?"✓":"!"}</span>
         <span>{toast.msg}</span>
@@ -1115,6 +1172,7 @@ function AsistenteIA({data,session,nombreSucursal}){
 
 // ── LOGIN (Supabase Auth) ──
 function LoginPage({showToast,toast}){
+  const marca=useMarca();
   const[email,setEmail]=useState("");const[pass,setPass]=useState("");const[error,setError]=useState("");const[show,setShow]=useState(false);const[busy,setBusy]=useState(false);
   const go=async()=>{
     if(!email||!pass){setError("Completa todos los campos");return;}
@@ -1126,7 +1184,7 @@ function LoginPage({showToast,toast}){
   return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:AZUL_MARCA,padding:20}}>
       <div style={{background:"#fff",borderRadius:6,borderTop:"4px solid #D9641E",padding:"40px 36px",width:"100%",maxWidth:380,boxShadow:"0 20px 50px rgba(0,0,0,0.3)"}}>
-        <div style={{textAlign:"center",marginBottom:28}}><img src={LOGO_SEEDS} alt="Seeds English School" style={{width:190,height:190,objectFit:"contain",marginBottom:4}}/><h1 style={{fontSize:23,fontWeight:700,color:"#1B2A4A",margin:0}}>Seeds English School</h1><p style={{fontSize:13,color:"#64748B",margin:"6px 0 0"}}>Sistema de Gestión Escolar</p></div>
+        <div style={{textAlign:"center",marginBottom:28}}><img src={marca.logoSrc} alt={marca.nombreO("Seeds English School")} style={{width:190,height:190,objectFit:"contain",marginBottom:4}}/><h1 style={{fontSize:23,fontWeight:700,color:"#1B2A4A",margin:0}}>{marca.nombreO("Seeds English School")}</h1><p style={{fontSize:13,color:"#64748B",margin:"6px 0 0"}}>{marca.subtituloO("Sistema de Gestión Escolar")}</p></div>
         <div style={{marginBottom:16}}><label style={label}>Correo electrónico</label><div style={{position:"relative"}}><Mail size={16} style={{position:"absolute",left:10,top:11,color:"#94A3B8"}}/><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@correo.com" type="email" style={{...input,paddingLeft:34}} onKeyDown={e=>e.key==="Enter"&&go()}/></div></div>
         <div style={{marginBottom:20}}><label style={label}>Contraseña</label><div style={{position:"relative"}}><LogIn size={16} style={{position:"absolute",left:10,top:11,color:"#94A3B8"}}/><input value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" type={show?"text":"password"} style={{...input,paddingLeft:34}} onKeyDown={e=>e.key==="Enter"&&go()}/><button onClick={()=>setShow(!show)} style={{position:"absolute",right:8,top:7,background:"none",border:"none",cursor:"pointer",color:"#94A3B8"}}><Eye size={16}/></button></div></div>
         {error&&<div style={{padding:"8px 12px",background:"#FEF2F2",color:"#DC2626",borderRadius:6,fontSize:12,marginBottom:14,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={14}/>{error}</div>}
@@ -1139,33 +1197,60 @@ function LoginPage({showToast,toast}){
 
 // ── DASHBOARD ──
 function Dashboard({data,setPage,loadData,showToast}){
-  const ta=data.alumnos.filter(a=>a.estado==="activo").length;
-  const ts=data.secciones.filter(s=>s.activa!==false).length;
-  const pend=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
-  const mes=MESES[new Date().getMonth()];
-  const compMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL));
-  const ingMens=compMes.reduce((s,f)=>s+(Number(f.monto_total)||0),0);
-  const ingMora=compMes.reduce((s,f)=>s+moraCobrada(f),0);
-  const ventMat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
-  const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
-  const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
-  const gradPag=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,ANIO_ACTUAL));
-  const ingGrad=gradPag.reduce((s,v)=>s+gradRecibido(v),0);
-  const ganGrad=ingGrad-costoGradDe(data,mes,ANIO_ACTUAL);
-  const ingOtros=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,ANIO_ACTUAL)).reduce((s,i)=>s+(Number(i.monto)||0),0);
-  const ing=ingMens+ingMora+ingMat+ingGrad+ingOtros;
-  const gastos=data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
-  // Salidas totales = gastos + costo de materiales + gastos de graduación (así Ingresos − Gastos = Ganancia)
-  const gastosTot=gastos+(ingMat-ganMat)+(ingGrad-ganGrad);
-  const ganancia=ing-gastosTot;
-  const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastosTot.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
+  const modulos=useModulos(true);
+  const hoy=new Date();
+  // Números de un mes (mismo criterio de siempre: Ingresos − Gastos = Ganancia)
+  const numerosDe=(mes,anio)=>{
+    const compMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,anio));
+    const ingMens=compMes.reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+    const ingMora=compMes.reduce((s,f)=>s+moraCobrada(f),0);
+    const ventMat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,anio));
+    const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
+    const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
+    const gradPag=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,anio));
+    const ingGrad=gradPag.reduce((s,v)=>s+gradRecibido(v),0);
+    const ganGrad=ingGrad-costoGradDe(data,mes,anio);
+    const ingOtros=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,anio)).reduce((s,i)=>s+(Number(i.monto)||0),0);
+    const ing=ingMens+ingMora+ingMat+ingGrad+ingOtros;
+    const gastos=data.gastos.filter(g=>esGastoDe(g,mes,anio)).reduce((s,g)=>s+(Number(g.monto)||0),0);
+    // Salidas totales = gastos + costo de materiales + gastos de graduación
+    const gas=gastos+(ingMat-ganMat)+(ingGrad-ganGrad);
+    const cobros=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada"&&f.mes_correspondiente===mes&&anioCobro(f)===anio);
+    const pend=cobros.filter(f=>f.estado==="pendiente"||f.estado==="parcial").length;
+    return {ing,gas,cobros,pend};
+  };
+  // Últimos 6 meses, del más viejo al actual
+  const meses=[...Array(6)].map((_,k)=>{const d=new Date(hoy.getFullYear(),hoy.getMonth()-5+k,1);const mes=MESES[d.getMonth()];const fin=new Date(d.getFullYear(),d.getMonth()+1,0).toISOString().slice(0,10);
+    return {mes,anio:d.getFullYear(),nombre:`${mes} ${d.getFullYear()}`,etiqueta:mes.slice(0,3),fin,...numerosDe(mes,d.getFullYear())};});
+  const act=meses[5];
+  const activos=data.alumnos.filter(a=>a.estado==="activo");
+  // Alumnos activos al cierre de cada mes (por fecha de ingreso)
+  const serieAlumnos=meses.map((m,k)=>k===5?activos.length:activos.filter(a=>!a.fecha_ingreso||a.fecha_ingreso<=m.fin).length);
+  const pendTotal=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
+  const Lm=(v)=>`L ${Math.round(v).toLocaleString("es-HN")}`;
+  const kpis=[
+    {l:"Alumnos activos",v:activos.length,serie:serieAlumnos,p:"alumnos"},
+    {l:`Ingresos ${act.mes.toLowerCase()}`,v:Lm(act.ing),serie:meses.map(m=>m.ing),p:"finanzas"},
+    {l:`Gastos ${act.mes.toLowerCase()}`,v:Lm(act.gas),serie:meses.map(m=>m.gas),p:"finanzas",subirEsBueno:false},
+    {l:"Cobros pendientes",v:pendTotal,serie:meses.map(m=>m.pend),p:"facturas",subirEsBueno:false},
+  ];
+  const cm=act.cobros;
+  const cobros=[
+    {k:"pagado",l:"Pagados",n:cm.filter(f=>f.estado!=="pendiente"&&f.estado!=="parcial").length},
+    {k:"parcial",l:"Con abono",n:cm.filter(f=>f.estado==="parcial").length},
+    {k:"pendiente",l:"Pendientes",n:cm.filter(f=>f.estado==="pendiente").length},
+  ];
+  const secciones=data.secciones.filter(s=>s.activa!==false).map(s=>({nombre:s.nombre,n:activos.filter(a=>a.seccion_id===s.id).length})).filter(s=>s.n>0).sort((a,b)=>b.n-a.n).slice(0,4);
+  const nombreAl=Object.fromEntries(data.alumnos.map(a=>[a.id,a.nombre]));
+  const fmtF=(f)=>{if(!f)return"—";const[y,m,d]=String(f).slice(0,10).split("-");return `${d}/${m}/${y}`;};
+  const recientes=data.facturas.filter(f=>f.tipo_factura==="comprobante").sort((a,b)=>String(b.fecha_pago||b.fecha_emision||"").localeCompare(String(a.fecha_pago||a.fecha_emision||""))||String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,5)
+    .map(f=>({id:f.id,numero:f.numero_factura||"—",alumno:nombreAl[f.alumno_id]||"—",mes:f.mes_correspondiente,fecha:fmtF(f.fecha_pago||f.fecha_emision),monto:(Number(f.monto_total)||0)+moraCobrada(f)}));
   return(<div>
-    <AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
-      {stats.map((s,i)=>{const Icon=s.i;return(<div key={i} className="tarjeta-kpi" onClick={()=>setPage(s.p)} style={{...card,cursor:"pointer",padding:"16px 18px",display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${tono(s.c)}`}}><div style={{background:tono(s.c)+"12",border:`1px solid ${tono(s.c)}30`,borderRadius:4,padding:10,display:"flex"}}><Icon size={20} color={tono(s.c)}/></div><div style={{minWidth:0}}><div style={{fontSize:11,color:"#5B6576",textTransform:"uppercase",letterSpacing:.6,fontWeight:600}}>{s.l}</div><div className="cifra" style={{fontSize:22,fontWeight:700,color:"#1B2A4A",marginTop:2}}>{s.v}</div></div></div>);})}
-    </div>
+    {modulos.activo("asistencia")&&<AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>}
+    <InicioSoft kpis={kpis} meses={meses} cobros={cobros} secciones={secciones} recientes={recientes} mes={act.nombre} irA={setPage}/>
+    <ResumenMesInicio data={data} setPage={setPage} verAlertas={modulos.activo("alertas")}/>
     <ResumenFinanciero data={data}/>
-    <div style={card}><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Acciones rápidas</h3><div style={{display:"flex",flexWrap:"wrap",gap:10}}><button onClick={()=>setPage("alumnos")} style={btn("#2563EB")}><UserPlus size={15}/>Nueva matrícula</button><button onClick={()=>setPage("facturas")} style={btn("#059669")}><FileText size={15}/>Crear cobros</button><button onClick={()=>setPage("recordatorios")} style={btn("#7C3AED")}><Bell size={15}/>Recordatorios</button></div></div>
+    <div style={card}><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Acciones rápidas</h3><div style={{display:"flex",flexWrap:"wrap",gap:10}}><button onClick={()=>setPage("alumnos")} style={btn("#2563EB")}><UserPlus size={15}/>Nueva matrícula</button><button onClick={()=>setPage("facturas")} style={btn("#059669")}><FileText size={15}/>Crear cobros</button>{modulos.activo("recordatorios")&&<button onClick={()=>setPage("recordatorios")} style={btn("#7C3AED")}><Bell size={15}/>Recordatorios</button>}</div></div>
   </div>);
 }
 
@@ -1211,7 +1296,7 @@ function ResumenFinanciero({data}){
   const max=Math.max(...barras.map(b=>b.v),1);
   const H=220;
 
-  return(<div style={{...card,padding:0,overflow:"hidden",marginBottom:24}}>
+  return(<div className="rf-soft" style={{...card,padding:0,overflow:"hidden",marginBottom:24}}>
     <style>{`
       .rf-bar{transition:height .9s cubic-bezier(.22,1,.36,1), filter .2s, transform .2s;transform-origin:bottom}
       .rf-load{animation:rf-eq .8s ease-in-out infinite alternate}
@@ -1221,15 +1306,15 @@ function ResumenFinanciero({data}){
       .rf-col:hover .rf-val{opacity:1;transform:translateY(0)}
     `}</style>
     {/* Encabezado */}
-    <div style={{padding:"18px 22px",background:AZUL_MARCA,borderBottom:`3px solid ${NARANJA_MARCA}`,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+    <div className="rf-cab" style={{padding:"18px 22px",background:AZUL_MARCA,borderBottom:`3px solid ${NARANJA_MARCA}`,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
       <div>
         <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:"#FDBA74",fontWeight:700}}>Resumen financiero</div>
         <div style={{fontSize:20,fontWeight:800,marginTop:2}}>{mes}</div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{textAlign:"right"}}>
-          <div style={{fontSize:11,color:"#CBD5E1"}}>Margen de ganancia</div>
-          <div style={{fontSize:22,fontWeight:800,color:ganancia>=0?"#6EE7B7":"#FCA5A5"}}>{ingresos>0?`${(ganancia/ingresos*100).toFixed(1)}%`:"—"}</div>
+          <div className="rf-margen-t" style={{fontSize:11,color:"#CBD5E1"}}>Margen de ganancia</div>
+          <div className={"rf-margen cifra "+(ganancia>=0?"bien":"mal")} style={{fontSize:22,fontWeight:800,color:ganancia>=0?"#6EE7B7":"#FCA5A5"}}>{ingresos>0?`${(ganancia/ingresos*100).toFixed(1)}%`:"—"}</div>
         </div>
         <select value={mes} onChange={e=>setMes(e.target.value)} style={{background:"rgba(255,255,255,.1)",color:"#fff",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,padding:"7px 10px",fontSize:13,fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
           {MESES.map(m=><option key={m} value={m} style={{color:"#1E293B"}}>{m}</option>)}
@@ -1493,6 +1578,7 @@ function SeccionesPage({data,loadData,showToast,sucursalActiva}){
 // ── MAESTROS ──
 function MaestrosPage({data,loadData,showToast}){
   const {perfiles,recargar}=useAccesosDocentes();
+  const portal=useModulos(true).activo("docentes");
   const[modal,setModal]=useState(null);const[form,setForm]=useState({nombre:"",telefono:"",email:"",secciones_ids:[],salario:""});
   const open=(m=null)=>{setForm(m?{nombre:m.nombre,telefono:m.telefono||"",email:m.email||"",secciones_ids:m.secciones_ids||[],salario:m.salario||""}:{nombre:"",telefono:"",email:"",secciones_ids:[],salario:""});setModal(m?.id||"new");};
   const sv=async()=>{
@@ -1509,7 +1595,7 @@ function MaestrosPage({data,loadData,showToast}){
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><p style={{fontSize:13,color:"#64748B",margin:0}}>{data.maestros.length} maestros</p><button onClick={()=>open()} style={btn("#2563EB")}><Plus size={15}/>Nuevo maestro</button></div>
     {perfiles===null&&<AvisoActivarModulo showToast={showToast}/>}
-    <div style={card}>{data.maestros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay maestros</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Nombre","Teléfono","Email","Salario","Secciones","Portal docente",""].map(h=><th key={h} style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{data.maestros.map(m=>(<tr key={m.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"8px 10px",fontWeight:600}}>{m.nombre}</td><td style={{padding:"8px 10px"}}>{m.telefono||"—"}</td><td style={{padding:"8px 10px"}}>{m.email||"—"}</td><td style={{padding:"8px 10px",fontWeight:600,color:"#059669"}}>{m.salario?`L ${Number(m.salario).toLocaleString()}`:"—"}</td><td style={{padding:"8px 10px"}}>{(m.secciones_ids||[]).map(sid=>{const sec=data.secciones.find(s=>s.id===sid);return sec?<span key={sid} style={{...badge("#F97316"),marginRight:4}}>{sec.nombre}</span>:null;})}{(!m.secciones_ids||m.secciones_ids.length===0)&&"—"}</td><td style={{padding:"8px 10px"}}><AccesoDocente maestro={m} perfiles={perfiles} recargar={recargar} showToast={showToast}/></td><td style={{padding:"8px 10px",whiteSpace:"nowrap"}}><button onClick={()=>open(m)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>del(m.id)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Trash2 size={15} color="#EF4444"/></button></td></tr>))}</tbody></table></div>)}</div>
+    <div style={card}>{data.maestros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay maestros</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Nombre","Teléfono","Email","Salario","Secciones",...(portal?["Portal docente"]:[]),""].map(h=><th key={h} style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{data.maestros.map(m=>(<tr key={m.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"8px 10px",fontWeight:600}}>{m.nombre}</td><td style={{padding:"8px 10px"}}>{m.telefono||"—"}</td><td style={{padding:"8px 10px"}}>{m.email||"—"}</td><td style={{padding:"8px 10px",fontWeight:600,color:"#059669"}}>{m.salario?`L ${Number(m.salario).toLocaleString()}`:"—"}</td><td style={{padding:"8px 10px"}}>{(m.secciones_ids||[]).map(sid=>{const sec=data.secciones.find(s=>s.id===sid);return sec?<span key={sid} style={{...badge("#F97316"),marginRight:4}}>{sec.nombre}</span>:null;})}{(!m.secciones_ids||m.secciones_ids.length===0)&&"—"}</td>{portal&&<td style={{padding:"8px 10px"}}><AccesoDocente maestro={m} perfiles={perfiles} recargar={recargar} showToast={showToast}/></td>}<td style={{padding:"8px 10px",whiteSpace:"nowrap"}}><button onClick={()=>open(m)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>del(m.id)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Trash2 size={15} color="#EF4444"/></button></td></tr>))}</tbody></table></div>)}</div>
     {modal&&<Modal title={modal==="new"?"Nuevo maestro":"Editar maestro"} onClose={()=>setModal(null)} onSave={sv}><Field label="Nombre" value={form.nombre} onChange={v=>setForm({...form,nombre:v})}/><Field label="Teléfono" value={form.telefono} onChange={v=>setForm({...form,telefono:v})}/><Field label="Email" value={form.email} onChange={v=>setForm({...form,email:v})} type="email"/><Field label="Salario mensual (L)" value={form.salario} onChange={v=>setForm({...form,salario:v})} type="number" placeholder="Ej: 5000"/><div><label style={label}>Secciones</label><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{data.secciones.map(s=>(<button key={s.id} onClick={()=>tog(s.id)} style={{padding:"6px 12px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"inherit",border:form.secciones_ids.includes(s.id)?"2px solid #F97316":"1px solid #D1D5DB",background:form.secciones_ids.includes(s.id)?"#FFF7ED":"#fff",color:form.secciones_ids.includes(s.id)?"#F97316":"#64748B",fontWeight:form.secciones_ids.includes(s.id)?600:400}}>{form.secciones_ids.includes(s.id)&&<Check size={12} style={{marginRight:4}}/>}{s.nombre}</button>))}{data.secciones.length===0&&<p style={{fontSize:12,color:"#94A3B8"}}>Crea secciones primero</p>}</div></div></Modal>}
   </div>);
 }
@@ -2017,10 +2103,10 @@ function HistorialPage({data,loadData,showToast}){
       </table>`;
     };
     const cuerpo=bloques.map(tablaDeBloque).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Estado de cuenta ${alumno.nombre} ${rangoTxt}</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Estado de cuenta ${alumno.nombre} ${rangoTxt}</title>
       <style>
         @page { size: letter portrait; margin: 15mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif}${CSS_CIFRAS}
         body{padding:0;color:#1E293B}
         .head{display:flex;align-items:center;gap:20px;border-bottom:3px solid #F97316;padding-bottom:14px;margin-bottom:18px}
         .head .htxt{text-align:left}
@@ -2109,6 +2195,9 @@ function HistorialPage({data,loadData,showToast}){
   // Marcar un mes como PENDIENTE (crea un cobro pendiente para gestionar la deuda)
   const marcarPendiente=async(mes,anio)=>{
     if(!alumno)return;
+    const clave=`${alumno.id}|${mes}|${anio}`;
+    if(PENDIENTES_EN_CURSO.has(clave))return; // doble clic: ya se está guardando
+    PENDIENTES_EN_CURSO.add(clave);
     try{
       const monto=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
       const n=data.facturas.length+1;
@@ -2117,6 +2206,7 @@ function HistorialPage({data,loadData,showToast}){
       await loadData();
       showToast(`${mes} ${anio} marcado como pendiente`);
     }catch(e){showToast("Error: "+e.message,"error");}
+    finally{PENDIENTES_EN_CURSO.delete(clave);}
   };
 
   // Marcar un mes pendiente como "al día" (quita el cobro pendiente de ese mes)
@@ -2299,12 +2389,16 @@ function HistorialPage({data,loadData,showToast}){
 // ── RECORDATORIOS ──
 function RecordatoriosPage({data,showToast}){
   const[selSec,setSelSec]=useState("");const[enviando,setEnviando]=useState(false);const[enviados,setEnviados]=useState([]);
-  const[mensaje,setMensaje]=useState("Estimado padre de familia, le recordamos que la mensualidad de {mes} está pendiente (L {monto}). Favor enviar comprobante de pago. Seeds English School 🌱");
-  const mes=MESES[new Date().getMonth()];
+  // El texto del mensaje y el historial de avisos se guardan en la base de datos
+  const[mensaje,setMensaje]=useAjuste("plantilla_recordatorio","Estimado padre de familia, le recordamos que la mensualidad de {mes} está pendiente (L {monto}). Favor enviar comprobante de pago. Seeds English School 🌱");
+  const mes=MESES[new Date().getMonth()];const anioRec=new Date().getFullYear();
+  const[ultimos,setUltimos]=useState({});
+  useEffect(()=>{ultimosRecordatorios(mes,anioRec).then(setUltimos);},[mes,anioRec]);
+  const anotar=(ids,canal)=>{const ahora=new Date().toISOString();setUltimos(p=>{const n={...p};ids.forEach(id=>{n[id]={fecha:ahora,canal};});return n;});registrarRecordatorios(ids.map(alumno_id=>({alumno_id,mes,anio:anioRec,canal})));};
   const contactos=(selSec?data.alumnos.filter(a=>a.seccion_id===selSec&&a.estado==="activo"):data.alumnos.filter(a=>a.estado==="activo")).filter(al=>al.beca!==true).filter(al=>!data.facturas.some(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&f.estado==="pagada"&&(f.tipo_factura||"cobro")==="cobro")).map(al=>{const p=data.padres.find(p=>p.id===al.padre_id);const sec=data.secciones.find(s=>s.id===al.seccion_id);const cobro=data.facturas.find(f=>f.alumno_id===al.id&&f.mes_correspondiente===mes&&(f.tipo_factura||"cobro")==="cobro");const mora=cobro?calcMora(cobro, data.secciones, data.alumnos):0;const base=(Number(al.monto_personalizado)>0)?Number(al.monto_personalizado):Number(sec?.mensualidad)||0;return{alumno_id:al.id,alumno:al.nombre,padre:p?.nombre,telefono:p?.telefono,email:p?.email,seccion:sec?.nombre,monto:base+mora,mora};});
-  const envUno=(c)=>{if(!c.telefono){showToast(`${c.alumno}: Sin teléfono`,"error");return;}const msg=mensaje.replace("{mes}",mes).replace("{monto}",c.monto.toLocaleString());abrirWhatsApp(c.telefono,msg);setEnviados(p=>[...p,c.alumno_id]);showToast(`Chat abierto: ${c.padre||c.alumno}`);};
+  const envUno=(c)=>{if(!c.telefono){showToast(`${c.alumno}: Sin teléfono`,"error");return;}const msg=mensaje.replace("{mes}",mes).replace("{monto}",c.monto.toLocaleString());abrirWhatsApp(c.telefono,msg);setEnviados(p=>[...p,c.alumno_id]);anotar([c.alumno_id],"whatsapp");showToast(`Chat abierto: ${c.padre||c.alumno}`);};
   const envTodos=()=>{const ct=contactos.filter(c=>c.telefono&&!enviados.includes(c.alumno_id));if(!ct.length){showToast("Sin pendientes","error");return;}setEnviando(true);let i=0;const iv=setInterval(()=>{if(i>=ct.length){clearInterval(iv);setEnviando(false);showToast(`✓ ${ct.length} enviados`);return;}envUno(ct[i]);i++;},2500);};
-  const envEmail=()=>{const ct=contactos.filter(c=>c.email&&!enviados.includes(c.alumno_id));if(!ct.length){showToast("Sin correos","error");return;}const msg=mensaje.replace("{mes}",mes).replace("{monto}","su monto");window.open(`mailto:${ct.map(c=>c.email).join(",")}?subject=${encodeURIComponent("Recordatorio - Seeds")}&body=${encodeURIComponent(msg)}`,"_blank");setEnviados(p=>[...p,...ct.map(c=>c.alumno_id)]);showToast(`Correo con ${ct.length} destinatarios`);};
+  const envEmail=()=>{const ct=contactos.filter(c=>c.email&&!enviados.includes(c.alumno_id));if(!ct.length){showToast("Sin correos","error");return;}const msg=mensaje.replace("{mes}",mes).replace("{monto}","su monto");window.open(`mailto:${ct.map(c=>c.email).join(",")}?subject=${encodeURIComponent("Recordatorio - Seeds")}&body=${encodeURIComponent(msg)}`,"_blank");setEnviados(p=>[...p,...ct.map(c=>c.alumno_id)]);anotar(ct.map(c=>c.alumno_id),"correo");showToast(`Correo con ${ct.length} destinatarios`);};
   return(<div>
     <div style={card}><h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 14px",display:"flex",alignItems:"center",gap:6}}><Bell size={16} color="#7C3AED"/>Recordatorios — {mes}</h3>
       <div style={{display:"grid",gridTemplateColumns:window.innerWidth>500?"1fr 1fr":"1fr",gap:16,marginBottom:16}}><div><label style={label}>Sección</label><select value={selSec} onChange={e=>{setSelSec(e.target.value);setEnviados([]);}} style={{...input,cursor:"pointer"}}><option value="">Todas</option>{data.secciones.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}</select></div><div><label style={label}>Resumen</label><div style={{display:"flex",gap:10,fontSize:13}}><span style={badge("#DC2626")}>{contactos.length} pendientes</span><span style={badge("#059669")}>{enviados.length} enviados</span></div></div></div>
@@ -2313,7 +2407,7 @@ function RecordatoriosPage({data,showToast}){
     </div>
     <div style={card}><h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Pendientes ({contactos.length})</h3>
       {contactos.length===0?<p style={{fontSize:13,color:"#059669",padding:20,textAlign:"center"}}>✓ Todos al día</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Alumno","Padre","Tel.","Sección","Monto","Mora","Enviar"].map(h=><th key={h} style={{textAlign:h==="Enviar"?"center":h==="Monto"||h==="Mora"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead>
-        <tbody>{contactos.map((c,i)=>{const done=enviados.includes(c.alumno_id);return(<tr key={i} style={{borderBottom:"1px solid #F1F5F9",background:done?"#F0FDF4":"transparent"}}><td style={{padding:"6px 8px",fontWeight:600}}>{c.alumno}</td><td style={{padding:"6px 8px"}}>{c.padre||"—"}</td><td style={{padding:"6px 8px"}}>{c.telefono?telBonito(c.telefono):<span style={{color:"#DC2626"}}>Sin tel.</span>}</td><td style={{padding:"6px 8px"}}>{c.seccion?<span style={badge("#F97316")}>{c.seccion}</span>:"—"}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:600}}>L {c.monto.toLocaleString()}</td><td style={{padding:"6px 8px",textAlign:"right",color:c.mora>0?"#DC2626":"#94A3B8"}}>{c.mora>0?`L ${c.mora}`:"—"}</td>
+        <tbody>{contactos.map((c,i)=>{const done=enviados.includes(c.alumno_id);return(<tr key={i} style={{borderBottom:"1px solid #F1F5F9",background:done?"#F0FDF4":"transparent"}}><td style={{padding:"6px 8px",fontWeight:600}}>{c.alumno}{ultimos[c.alumno_id]&&<div style={{fontSize:10.5,fontWeight:400,color:"#64748B"}}>Último aviso: {new Date(ultimos[c.alumno_id].fecha).toLocaleDateString("es-HN",{day:"numeric",month:"short"})} ({ultimos[c.alumno_id].canal==="correo"?"correo":"WhatsApp"})</div>}</td><td style={{padding:"6px 8px"}}>{c.padre||"—"}</td><td style={{padding:"6px 8px"}}>{c.telefono?telBonito(c.telefono):<span style={{color:"#DC2626"}}>Sin tel.</span>}</td><td style={{padding:"6px 8px"}}>{c.seccion?<span style={badge("#F97316")}>{c.seccion}</span>:"—"}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:600}}>L {c.monto.toLocaleString()}</td><td style={{padding:"6px 8px",textAlign:"right",color:c.mora>0?"#DC2626":"#94A3B8"}}>{c.mora>0?`L ${c.mora}`:"—"}</td>
           <td style={{padding:"6px 8px",textAlign:"center"}}>{done?<span style={badge("#059669")}>✓</span>:c.telefono?<button onClick={()=>envUno(c)} style={{background:"#25D366",border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:4}}><Phone size={12} color="#fff"/></button>:<span style={{fontSize:11,color:"#DC2626"}}>Sin tel.</span>}</td></tr>);})}</tbody></table></div>)}
     </div>
   </div>);
@@ -2322,6 +2416,7 @@ function RecordatoriosPage({data,showToast}){
 // ── FINANZAS ──
 function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const[tab,setTab]=useState("resumen");const[modal,setModal]=useState(null);
+  const[vista,setVista]=useVista();
   const[imgPreview,setImgPreview]=useState(null);
   const[cxpForm,setCxpForm]=useState(null); // nueva cuenta por pagar
   const[cierre,setCierre]=useState(null); // {mes, real, tipoSalida}
@@ -2460,6 +2555,20 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
   const rentasPend=mesesConActividad.map(m=>({mes:m,monto:rentaPendMes(m)})).filter(x=>x.monto>0);
   const totRentasPend=rentasPend.reduce((s,x)=>s+x.monto,0);
   const disponible=cajaHoy-totRentasPend;
+  // Datos para la vista Excel (mismas cifras que la vista sencilla)
+  const excelFin=(()=>{
+    const cxpP=cxpPendientes(data).sort((a,b)=>MESES.indexOf(a.mes_correspondiente)-MESES.indexOf(b.mes_correspondiente));
+    const totCxp=cxpP.reduce((s,c)=>s+(Number(c.monto)||0),0);
+    let deuda=null;
+    if((data.deudas||[]).length>0){const iniciales=[...data.deudas].sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||"")));const desde=iniciales[0]?.fecha||"";
+      const total=iniciales.reduce((s,d)=>s+(Number(d.monto)||0),0);const pagos=data.gastos.filter(g=>g.tipo==="deuda"&&String(g.fecha||"")>=desde);
+      const enGastos=iniciales.reduce((s,d)=>s+(Number(d.pagado_en_gastos)||0),0);const pm={};pagos.forEach(g=>{const m=mesDeFecha(g.fecha)||"—";pm[m]=(pm[m]||0)+(Number(g.monto)||0);});
+      const pagado=pagos.reduce((s,g)=>s+(Number(g.monto)||0),0)+enGastos;deuda={iniciales,total,enGastos,porMes:MESES.filter(m=>pm[m]).map(m=>[m,pm[m]]),falta:Math.round((total-pagado)*100)/100};}
+    const meses=MESES.slice(0,mesHoy+1).reverse().map(mes=>{const c=cajaDelMes(data,mes,ANIO_ACTUAL);const im=MESES.indexOf(mes);
+      const pendiente=rentasPend.filter(x=>MESES.indexOf(x.mes)<=im).reduce((s,x)=>s+x.monto,0)+cxpP.filter(x=>MESES.indexOf(x.mes_correspondiente)<=im).reduce((s,x)=>s+(Number(x.monto)||0),0);
+      return{mes,inicio:c.saldo-c.neto,entradas:c.entradas,salidas:c.salidas,saldo:c.saldo,pendiente,libre:c.saldo-pendiente};}).filter(m=>m.entradas||m.salidas||m.saldo);
+    return{cxpP,quedaHoy:cajaHoy-totRentasPend-totCxp,deuda,meses};
+  })();
   // ── PDF del cierre de mes (formal, para compartir) ──
   const[pdfListo,setPdfListo]=useState(null);const[generandoPdf,setGenerandoPdf]=useState(false);const[pdfCierreMes,setPdfCierreMes]=useState(null);
   const documentoCierre=(mes)=>{
@@ -2506,9 +2615,9 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
         <tr><td>Fondo de graduación usado por la escuela que no tuvo que reponerse (ganancia del evento)</td><td class="r verde">${L(prestado-repuesto)}</td></tr>
       </tbody></table>
       <div class="nota">En ${esc(lista(mesesCob)||"meses anteriores")} la escuela utilizó ${L(prestado)} cobrados de graduación para cubrir sus gastos de operación, como préstamo interno del fondo del evento. En ${mes}, al pagar los gastos del evento (${L(gasMes)}), lo cobrado de graduación en el mes (${L(cobMes)}) no alcanzó y la escuela repuso ${L(repuesto)} con sus propios ingresos (mensualidades). Por eso las salidas de ${mes} son mayores: incluyen la devolución de ese préstamo interno, no un gasto adicional de la escuela. El evento cobró en total ${L(gCobTot)} y gastó ${L(gGasTot)}, con una ganancia de ${L(gCobTot-gGasTot)}${gPend>0?`; quedan ${L(gPend)} por cobrar`:""}.</div>`:"";
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cierre de ${mes} ${ANIO_ACTUAL}</title><style>
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Cierre de ${mes} ${ANIO_ACTUAL}</title><style>
       @page { size: letter portrait; margin: 14mm; }
-      *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}${CSS_CIFRAS}
       body{color:#000;font-size:12.5px}
       .head{display:flex;align-items:center;gap:18px;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:16px}
       .head h1{font-size:22px;letter-spacing:.3px}
@@ -2599,9 +2708,15 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
       <button onClick={()=>setTab("resumen")} style={tBtn(tab==="resumen")}>📊 Resumen</button>
       <button onClick={()=>setTab("maestros")} style={tBtn(tab==="maestros")}>👩‍🏫 Pagos a maestros</button>
       <button onClick={()=>setTab("gastos")} style={tBtn(tab==="gastos")}>📋 Todos los gastos</button>
+      <span style={{flex:1}}/><div style={{alignSelf:"center",padding:"4px 0",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <DescargasFinanzas showToast={showToast} titulo={tab==="resumen"?"Gastos, deudas y caja":tab==="maestros"?"Pagos a maestros":"Gastos"} hojas={()=>tab==="resumen"?hojasResumen({cajaHoy,rentasPend,cxp:excelFin.cxpP,quedaHoy:excelFin.quedaHoy,deuda:excelFin.deuda,meses:excelFin.meses}):tab==="maestros"?hojasMaestros({maestros:data.maestros,gastos:data.gastos,meses:MESES.slice(0,mesHoy+1)}):hojasGastos({gastos:data.gastos,nombreMaestro:(id)=>data.maestros.find(m=>m.id===id)?.nombre||""})}/>
+        <SelectorVista vista={vista} setVista={setVista}/></div>
     </div>
+    <EstilosVistas/>
+    {tab==="resumen"&&vista==="excel"&&<FinResumenExcel cajaHoy={cajaHoy} rentasPend={rentasPend} cxp={excelFin.cxpP} quedaHoy={excelFin.quedaHoy} deuda={excelFin.deuda} meses={excelFin.meses}/>}
+    {tab==="maestros"&&vista==="excel"&&<FinMaestrosExcel maestros={data.maestros} gastos={data.gastos} meses={MESES.slice(0,mesHoy+1)}/>}
 
-    {tab==="resumen"&&(()=>{
+    {tab==="resumen"&&vista!=="excel"&&(()=>{
       const Lc=(n)=>`L ${(Math.round((Number(n)||0)*100)/100).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
       const Ln=(n)=>n<0?`(${Lc(Math.abs(n))})`:Lc(n);
       // Rentas pendientes acumuladas hasta un mes (meses ya pasados sin renta registrada)
@@ -2756,7 +2871,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
       </div>
     </Modal>}
 
-    {tab==="maestros"&&<div>
+    {tab==="maestros"&&vista!=="excel"&&<div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
         <p style={{fontSize:13,color:"#64748B",margin:0}}>Pagos: {data.gastos.filter(g=>g.tipo==="salario").length}</p>
         <button onClick={()=>openGasto("salario")} style={btn("#059669")}><Plus size={15}/>Pagar maestro</button>
@@ -2790,7 +2905,8 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
           <button onClick={()=>openGasto("deuda")} style={btn("#B45309")}><Plus size={15}/>Pago de deuda</button>
         </div>
       </div>
-      <div style={card}>{data.gastos.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay gastos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Tipo","Descripción","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{[...data.gastos].reverse().map(g=>{const tc={salario:"#059669",renta:"#7C3AED",otro:"#64748B",comision:"#0891B2",deuda:"#B45309"};const tl={salario:"Salario",renta:"Renta",otro:"Otro",comision:"ACH",deuda:"Pago de deuda"};return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px"}}>{g.fecha}</td><td style={{padding:"6px 8px"}}><span style={badge(tc[g.tipo]||"#64748B")}>{tl[g.tipo]||g.tipo}</span></td><td style={{padding:"6px 8px"}}>{g.descripcion}</td><td style={{padding:"6px 8px"}}>{mesGasto(g)||g.mes_correspondiente}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td><td style={{padding:"6px 8px"}}><button onClick={()=>eliminarGasto(g.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td></tr>);})}</tbody></table></div>)}</div>
+      {vista==="excel"&&<FinGastosExcel gastos={data.gastos} nombreMaestro={(id)=>data.maestros.find(m=>m.id===id)?.nombre||""}/>}
+      {vista!=="excel"&&<div style={card}>{data.gastos.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay gastos</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Tipo","Descripción","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{[...data.gastos].reverse().map(g=>{const tc={salario:"#059669",renta:"#7C3AED",otro:"#64748B",comision:"#0891B2",deuda:"#B45309"};const tl={salario:"Salario",renta:"Renta",otro:"Otro",comision:"ACH",deuda:"Pago de deuda"};return(<tr key={g.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"6px 8px"}}>{g.fecha}</td><td style={{padding:"6px 8px"}}><span style={badge(tc[g.tipo]||"#64748B")}>{tl[g.tipo]||g.tipo}</span></td><td style={{padding:"6px 8px"}}>{g.descripcion}</td><td style={{padding:"6px 8px"}}>{mesGasto(g)||g.mes_correspondiente}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#DC2626"}}>L {Number(g.monto).toLocaleString()}</td><td style={{padding:"6px 8px"}}><button onClick={()=>eliminarGasto(g.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Trash2 size={13} color="#EF4444"/></button></td></tr>);})}</tbody></table></div>)}</div>}
     </div>}
 
     {modal==="gasto"&&<Modal title={form.tipo==="salario"?"💰 Pagar maestro":form.tipo==="renta"?"🏠 Registrar renta":form.tipo==="deuda"?"💳 Pago de deuda anterior":"📋 Registrar gasto"} onClose={()=>setModal(null)} onSave={saveGasto}>
@@ -2821,7 +2937,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
 }
 
 // ── SISTEMA (usuarios, respaldos) ──
-function SistemaPage({data,loadData,showToast,session}){
+function SistemaPage({data,loadData,showToast,session,personalizar}){
   const exportar=()=>{
     const backup={fecha:new Date().toISOString(),version:5,...data};
     const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
@@ -2843,6 +2959,9 @@ function SistemaPage({data,loadData,showToast,session}){
     e.target.value="";
   };
   return(<div>
+    <PersonalizarPanel showToast={showToast} {...personalizar}/>
+    <ClaveSeguridadPanel showToast={showToast}/>
+    <ModulosPanel showToast={showToast}/>
     <div style={card}>
       <h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 10px"}}>👤 Tu cuenta</h3>
       <p style={{fontSize:13,color:"#475569"}}>Sesión activa: <strong>{session.user.email}</strong></p>
@@ -2855,11 +2974,12 @@ function SistemaPage({data,loadData,showToast,session}){
     </div>
     <div style={card}>
       <h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 10px"}}>💾 Respaldos</h3>
-      <p style={{fontSize:13,color:"#475569",marginBottom:12}}>Tus datos viven seguros en Supabase (nube). Aun así, descarga un respaldo cada mes como protección extra.</p>
+      <p style={{fontSize:13,color:"#475569",marginBottom:12}}>Tus datos viven seguros en Supabase (nube) y se copian solos una vez al mes. Aun así, de vez en cuando descarga un respaldo y guárdalo en tu computadora como protección extra.</p>
       <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
         <button onClick={exportar} style={btn("#059669")}><Download size={15}/>Descargar respaldo</button>
         <label style={{...btn("#2563EB"),cursor:"pointer"}}><Upload size={15}/>Restaurar respaldo<input type="file" accept=".json" onChange={importar} style={{display:"none"}}/></label>
       </div>
+      <RespaldosAutomaticos showToast={showToast}/>
       <div style={{background:"#FEF3C7",borderRadius:8,padding:12,fontSize:12,color:"#92400E",marginTop:14}}>
         ⚠️ <strong>Importante (plan gratuito de Supabase):</strong> si nadie entra a la app durante 7 días seguidos, Supabase "pausa" el proyecto (los datos NO se borran, solo se pausa). Para reactivarlo: entra a supabase.com → tu proyecto → botón "Restore". Con uso diario de la escuela esto no pasa; solo pendiente en vacaciones largas.
       </div>
@@ -3580,10 +3700,10 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       const sec=g.seccion_id?data.secciones.find(s=>s.id===g.seccion_id):null;
       return `<tr><td>${g.fecha||"—"}</td><td>${esc(mesGasto(g)||"—")}</td><td>${esc(g.descripcion||"—")}${sec?` <span style="color:#000000;font-size:11px">· ${esc(sec.nombre)}</span>`:""}</td><td>${esc(g.comentario||"—")}</td><td style="text-align:right;white-space:nowrap">${L(g.monto)}</td></tr>`;
     }).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte del evento — Graduación</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Reporte del evento — Graduación</title>
       <style>
         @page { size: letter portrait; margin: 15mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif}${CSS_CIFRAS}
         body{color:#000000}
         .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #000000;padding-bottom:14px;margin-bottom:18px}
         .head h1{font-size:21px;color:#000000}
@@ -3663,10 +3783,10 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       <tfoot><tr><td colspan="5">Subtotal ${esc(x.nombre)}</td><td class="r">${L(x.total)}</td><td class="r">${L(x.cob)}</td><td class="r">${L(x.total-x.cob)}</td></tr></tfoot></table>`).join("");
     const filasGastos=[...gastosEvento].sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||""))).map(g=>`<tr><td>${fCorta(g.fecha)}</td><td>${esc(mesGasto(g)||"—")}</td><td>${esc(g.descripcion||"—")}</td><td>${esc(g.seccion_id?nomSec(g.seccion_id):"Todo el evento")}</td><td class="sm">${esc(g.comentario||"—")}</td><td class="r">${L(g.monto)}</td></tr>`).join("");
     const proyectada=totalACobrar-gastadoEvento;
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Informe de graduación</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Informe de graduación</title>
       <style>
         @page { size: letter portrait; margin: 14mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif}${CSS_CIFRAS}
         body{color:#000000;font-size:12px}
         .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #000000;padding-bottom:14px;margin-bottom:16px}
         .head h1{font-size:21px;color:#000000}
@@ -4013,11 +4133,40 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 }
 
 // ── REPORTES (resumen económico mensual completo) ──
+// ── Cifras de un mes para el Informe financiero en Excel (mismas reglas que Reportes) ──
+export function calcularMesReporte(data,mes,anio){
+  const sum=(xs,f)=>xs.reduce((s,x)=>s+(Number(f(x))||0),0);
+  const comps=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,anio));
+  const mensualidades=sum(comps,f=>f.monto_total), mora=sum(comps,moraCobrada);
+  const ventas=data.ventas_material.filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,anio));
+  const materiales=sum(ventas,v=>v.precio_venta), costoMat=sum(ventas,v=>v.costo);
+  const grad=data.cobros_graduacion.filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,anio));
+  const graduacion=sum(grad,gradRecibido), costoGrad=sum(gastosGradDe(data,mes,anio),g=>g.monto);
+  const extra=sum((data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,anio)),i=>i.monto);
+  const gm=data.gastos.filter(g=>esGastoDe(g,mes,anio));
+  const salarios=sum(gm.filter(g=>g.tipo==="salario"),g=>g.monto), renta=sum(gm.filter(g=>g.tipo==="renta"),g=>g.monto);
+  const comisiones=sum(gm.filter(g=>g.tipo==="comision"),g=>g.monto), deudas=sum(gm.filter(g=>g.tipo==="deuda"),g=>g.monto);
+  const servicios=sum(gm.filter(g=>g.tipo==="otro"&&/(luz|energ|agua|internet|tel[eé]fono|cable)/i.test(g.descripcion||"")),g=>g.monto);
+  const otros=sum(gm.filter(g=>!["salario","renta","comision","deuda"].includes(g.tipo)),g=>g.monto)-servicios;
+  const ingresos=mensualidades+mora+materiales+graduacion+extra, costos=costoMat+costoGrad, utilBruta=ingresos-costos;
+  const gastosOp=salarios+renta+servicios+otros, utilOp=utilBruta-gastosOp, otrosGastos=comisiones+deudas, neta=utilOp-otrosGastos;
+  const caja=cajaDelMes(data,mes,anio);
+  // Cobranza del mes: cobros enviados (uno por alumno) contra los ya pagados
+  const cob={};data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada"&&f.mes_correspondiente===mes&&anioCobro(f)===anio).forEach(f=>{if(!cob[f.alumno_id]||String(f.created_at)<String(cob[f.alumno_id].created_at))cob[f.alumno_id]=f;});
+  const cobros=Object.values(cob), facturado=sum(cobros,f=>f.monto_total), pendiente=sum(cobros.filter(f=>f.estado==="pendiente"||f.estado==="parcial"),f=>Number(f.saldo)>0?f.saldo:f.monto_total);
+  return{mes,anio,mensualidades,mora,materiales,graduacion,extra,ingresos,costoMat,costoGrad,costos,utilBruta,salarios,renta,servicios,otros,gastosOp,utilOp,comisiones,deudas,otrosGastos,neta,
+    cajaInicio:caja.saldo-caja.neto,entradas:caja.entradas,salidas:caja.salidas,cajaFin:caja.saldo,facturado,cobrado:facturado-pendiente,pendiente,alumnos:cobros.length};
+}
+
 function ReportesPage({data,showToast}){
+  const marcaRep=useMarca();
   const[mesSel,setMesSel]=useState(MESES[new Date().getMonth()]);
   const[anioSel,setAnioSel]=useState(ANIO_ACTUAL);
   // Qué rubros se desglosan (se recuerda en este navegador)
   const[desglose,setDesglose]=useState(()=>{try{return JSON.parse(localStorage.getItem("seeds_desglose"))||["salarios"];}catch(e){return["salarios"];}});
+  // Vista sencilla (explicada) o contable (estado de resultados); se recuerda en este navegador
+  const[vista,setVista]=useState(()=>{try{return localStorage.getItem("seeds_vista_reporte")||"sencilla";}catch(e){return"sencilla";}});
+  const cambiarVista=(v)=>{setVista(v);try{localStorage.setItem("seeds_vista_reporte",v);}catch(e){}};
   const toggleDesglose=(k)=>{const n=desglose.includes(k)?desglose.filter(x=>x!==k):[...desglose,k];setDesglose(n);try{localStorage.setItem("seeds_desglose",JSON.stringify(n));}catch(e){}};
 
   // Ingresos por mensualidades: cuentan en el mes en que ENTRÓ el pago (fecha_pago real)
@@ -4130,7 +4279,7 @@ function ReportesPage({data,showToast}){
   ];
   const svgGrafica=(()=>{const W=760,H=300,top=46,base=250,n=barrasRep.length,slot=W/n,bw=Math.min(62,slot*0.56);const max=Math.max(...barrasRep.map(b=>b.v),1);
     const fmt=(v)=>`L ${(Math.round(v*100)/100).toLocaleString()}`;
-    let out=`<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" style="font-family:Georgia,'Times New Roman',serif;display:block"><defs>`;
+    let out=`<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" style="font-family:'IBM Plex Sans',Arial,sans-serif;display:block"><defs>`;
     barrasRep.forEach((b,i)=>{out+=`<linearGradient id="gr${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${b.c[0]}"/><stop offset="1" stop-color="${b.c[1]}"/></linearGradient>`;});
     out+=`<pattern id="rayas" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="8" fill="rgba(255,255,255,.35)"/></pattern></defs>`;
     [0.25,0.5,0.75,1].forEach(t=>{const y=base-(base-top)*t;out+=`<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="#FFFFFF" stroke-dasharray="4 4"/>`;});
@@ -4162,7 +4311,9 @@ function ReportesPage({data,showToast}){
   const fTotal=(label,total,cls="tot",neg=false)=>`<tr class="${cls}"><td>${label}</td><td></td><td class="num">${neg?Mneg(total):M(total)}</td><td class="pct">${P(total)}</td></tr>`;
 
   const avisoPend=porPagar.length?`<div class="aviso">⚠ <strong>Gastos pendientes de pago en ${mesSel}:</strong> ${porPagar.map(x=>`${esc(x.label)} (${M(x.monto)})`).join(", ")}. Total pendiente: <strong>${M(totPorPagar)}</strong>.</div>`:"";
-  const estadoHTML=`${avisoPend}
+  // El reporte contable se arma por hojas (como un libro de Excel): en pantalla se ve una a la vez,
+  // en el PDF van todas seguidas y al descargar Excel cada una es una hoja del archivo.
+  const hResultados=`${avisoPend}
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <thead><tr><th>Concepto</th><th class="num">Parcial</th><th class="num">Total</th><th class="pct">% ingr.</th></tr></thead>
       <tbody>
@@ -4185,9 +4336,8 @@ function ReportesPage({data,showToast}){
 
         <tr class="${resultado>=0?"neta":"neta perdida"}"><td>${resultado>=0?"Utilidad neta del mes":"Pérdida neta del mes"} (bruta − III)</td><td></td><td class="num">${resultado>=0?M(resultado):Mneg(Math.abs(resultado))}</td><td class="pct">${margen}</td></tr>
       </tbody>
-    </table>
-
-    <h3 class="tit">IV. Cuentas pendientes <span class="nota">(no afectan la utilidad del mes hasta que se paguen o cobren)</span></h3>
+    </table>`;
+  const hPendientes=`<h3 class="tit">IV. Cuentas pendientes <span class="nota">(no afectan la utilidad del mes hasta que se paguen o cobren)</span></h3>
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <tbody>
         ${fSec("Cuentas por pagar")}
@@ -4198,9 +4348,8 @@ function ReportesPage({data,showToast}){
         ${fTotal("Total por cobrar",totPorCobrar)}
         ${totPorPagar>0?`<tr class="sub"><td>Utilidad ajustada (si se paga lo pendiente)</td><td></td><td class="num">${resultado-totPorPagar>=0?M(resultado-totPorPagar):Mneg(Math.abs(resultado-totPorPagar))}</td><td class="pct">${P(resultado-totPorPagar)}</td></tr>`:""}
       </tbody>
-    </table>
-
-    <h3 class="tit">Flujo de caja del mes <span class="nota">(dinero que realmente entró y salió, por fecha de pago)</span></h3>
+    </table>`;
+  const hFlujo=`<h3 class="tit">Flujo de caja del mes <span class="nota">(dinero que realmente entró y salió, por fecha de pago)</span></h3>
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <tbody>
         <tr class="cta"><td>Saldo en caja al inicio del mes</td><td></td><td class="num">${cajaRep.saldo-cajaRep.neto>=0?M(cajaRep.saldo-cajaRep.neto):Mneg(Math.abs(cajaRep.saldo-cajaRep.neto))}</td><td></td></tr>
@@ -4213,9 +4362,8 @@ function ReportesPage({data,showToast}){
         ${fTotal("Saldo en caja al cierre del mes",Math.abs(cajaRep.saldo),"tot",cajaRep.saldo<0)}
       </tbody>
     </table>
-    <p class="pie">La utilidad del mes y el dinero en caja no son iguales: la utilidad resta cada gasto en el mes al que pertenece; la caja muestra cuándo salió el dinero (pagos atrasados, deudas). Las cuentas por pagar pendientes aparecen en la sección IV.</p>
-
-    ${(ingGraduacion>0||costoGraduacion>0)?`<h3 class="tit">Nota sobre el evento de graduación</h3>
+    <p class="pie">La utilidad del mes y el dinero en caja no son iguales: la utilidad resta cada gasto en el mes al que pertenece; la caja muestra cuándo salió el dinero (pagos atrasados, deudas). Las cuentas por pagar pendientes aparecen en la sección IV.</p>`;
+  const hGraduacion=(ingGraduacion>0||costoGraduacion>0)?`<h3 class="tit">Nota sobre el evento de graduación</h3>
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <tbody>
         ${fSec("En este mes")}
@@ -4232,12 +4380,10 @@ function ReportesPage({data,showToast}){
     </table>
     <p class="pie">${gradResMes<0
       ?`Los gastos del evento asignados a ${esc(mesSel)} superan lo cobrado de graduación en este mes por ${M(Math.abs(gradResMes))}. Esa diferencia se cubrió con los demás ingresos del mes (mensualidades). No es una pérdida del evento: la mayor parte de la graduación se cobró en meses anteriores, donde aparece como ingreso sin costo, y ese dinero se usó en esos meses. Sumando todos los meses, el evento deja la ganancia indicada arriba.`
-      :`Los ingresos de graduación se registran en el mes en que se cobran y sus gastos en el mes del evento al que corresponden. La ganancia real del evento es lo cobrado menos todo lo gastado.`}</p>`:""}
-
-    <h3 class="tit">V. Análisis gráfico</h3>
-    <div class="grafica">${svgGrafica}</div>
-
-    <h3 class="tit">Anexos</h3>
+      :`Los ingresos de graduación se registran en el mes en que se cobran y sus gastos en el mes del evento al que corresponden. La ganancia real del evento es lo cobrado menos todo lo gastado.`}</p>`:"";
+  const hGrafica=`<h3 class="tit">V. Análisis gráfico</h3>
+    <div class="grafica">${svgGrafica}</div>`;
+  const hAnexos=`<h3 class="tit">Anexos</h3>
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <tbody>
         ${fSec("Anexo A — Materiales cobrados")}
@@ -4247,9 +4393,19 @@ function ReportesPage({data,showToast}){
       </tbody>
     </table>
     <p class="pie">Criterios: los ingresos cuentan en el mes al que se asignó el pago; los gastos en el mes al que se restan. En costo de ventas se resta lo que cuestan los materiales y los gastos reales registrados del evento de graduación. Las cifras entre paréntesis son restas.</p>`;
+  const hojas=[
+    {k:"resultados",t:"Estado de resultados",html:hResultados},
+    {k:"pendientes",t:"Pendientes",html:hPendientes},
+    {k:"flujo",t:"Flujo de caja",html:hFlujo},
+    ...(hGraduacion?[{k:"graduacion",t:"Graduación",html:hGraduacion}]:[]),
+    {k:"grafica",t:"Gráfica",html:hGrafica,sinExcel:true},
+    {k:"anexos",t:"Anexos",html:hAnexos},
+  ];
+  const estadoHTML=hojas.map(h=>h.html).join("\n");
 
   const EDO_CSS=`
-    .edo,.tit,.pie,.aviso{font-family:Georgia,'Times New Roman',serif}
+    .edo,.tit,.pie,.aviso{font-family:'IBM Plex Sans',Arial,sans-serif}
+    .edo .num,.edo .pct{font-family:'IBM Plex Mono',Consolas,monospace}
     .edo{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px;color:#000000}
     .edo th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#555555;font-weight:700;text-align:left;padding:6px 8px;border-bottom:2px solid #000000}
     .edo td{padding:6px 8px;vertical-align:top}
@@ -4278,13 +4434,120 @@ function ReportesPage({data,showToast}){
     .grafica svg{max-width:760px;margin:0 auto}
     .pie{font-size:11px;color:#888888;margin-top:18px;line-height:1.5}`;
 
+  // ── VISTA SENCILLA (para quien no sabe de contabilidad) ──
+  // Usa exactamente las mismas cifras del estado de resultados; solo cambia
+  // cómo se explican: frases cortas, barras y palabras de todos los días.
+  const Ls=(n)=>`L ${Math.round(Number(n)||0).toLocaleString("es-HN")}`;
+  const deCien=(v)=>ingresoTotal>0?Math.round(v/ingresoTotal*100):0;
+  const fuentes=[
+    {t:"Mensualidades",e:`Lo que pagaron los padres por las clases (${compsMes.length} ${compsMes.length===1?"pago":"pagos"})`,v:ingMensualidades},
+    {t:"Recargos por pagar tarde",e:"Lo extra que pagaron quienes se atrasaron (mora)",v:ingMora},
+    {t:"Libros y materiales",e:"Lo que pagaron los padres por libros y materiales",v:ingMateriales},
+    {t:"Graduación",e:`Cuotas de graduación cobradas este mes (${gradMes.length} ${gradMes.length===1?"alumno":"alumnos"})`,v:ingGraduacion},
+    {t:"Otros ingresos",e:"Donaciones, eventos y otros ingresos registrados",v:ingExtra},
+  ].filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  const topOtros=detOtros.slice(0,3).map(x=>x.label).join(", ");
+  const usos=[
+    {t:"Salarios de maestros",e:`${detSalarios.length} ${detSalarios.length===1?"pago":"pagos"} de salario`,v:totSalarios},
+    {t:"Renta del local",e:"Lo que se paga por el lugar donde funciona la escuela",v:totRenta},
+    {t:"Otros gastos",e:topOtros?`Por ejemplo: ${topOtros}${detOtros.length>3?"…":""}`:"Servicios, compras y otros pagos",v:totOtros},
+    {t:"Compra de libros y materiales",e:"Lo que costaron a la editorial los libros que se vendieron",v:costoMateriales},
+    {t:"Gastos de la graduación",e:"Lo que se gastó en el evento este mes",v:costoGraduacion},
+  ].filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  const maxBarra=Math.max(ingresoTotal,totalEgresos,1);
+  const fila=(x,total,cls)=>`<div class="fila"><div class="txt"><b>${esc(x.t)}</b><span>${esc(x.e)}</span></div><div class="monto">${Ls(x.v)}<small>${total>0?Math.round(x.v/total*100):0}%</small></div><div class="barra"><i class="${cls}" style="width:${total>0?Math.max(x.v/total*100,1.5):0}%"></i></div></div>`;
+  const sinMov=ingresoTotal===0&&totalEgresos===0;
+  const titular=sinMov?`Todavía no hay movimientos registrados en ${mesSel}.`
+    :resultado>=0?`En ${mesSel} a la escuela le quedaron <b class="bien">${Ls(resultado)}</b> de ganancia.`
+    :`En ${mesSel} se gastó <b class="mal">${Ls(Math.abs(resultado))} más</b> de lo que entró.`;
+  const bajada=sinMov?"Cuando registres cobros y gastos de este mes, aquí verás el resumen."
+    :`Entraron ${Ls(ingresoTotal)} y se gastaron ${Ls(totalEgresos)}. `+(resultado>=0
+      ?(ingresoTotal>0?`De cada L 100 que entraron, quedaron L ${deCien(resultado)}.`:"")
+      :"Esa diferencia sale del dinero que había guardado de meses anteriores.");
+  const puntos=[];
+  if(totSalarios>0&&ingresoTotal>0)puntos.push(`Los salarios se llevan <b>L ${deCien(totSalarios)} de cada L 100</b> que entran.`);
+  if(resultado<0&&usos[0])puntos.push(`El gasto más grande del mes fue <b>${esc(usos[0].t.toLowerCase())}</b> (${Ls(usos[0].v)}).`);
+  if(totPorPagar>0)puntos.push(`Falta pagar <b>${Ls(totPorPagar)}</b> de este mes (${esc(porPagar.map(x=>x.label).join(", "))}). Todavía no está restado: cuando se pague, la ganancia del mes quedaría en <b>${resultado-totPorPagar<0?"−":""}${Ls(Math.abs(resultado-totPorPagar))}</b>.`);
+  if(totPorCobrar>0)puntos.push(`Todavía le deben a la escuela <b>${Ls(totPorCobrar)}</b> de este mes (${esc(porCobrar.map(x=>`${x.label.toLowerCase()} ${Ls(x.monto)}`).join(", "))}). Se sumará como ingreso cuando lo paguen.`);
+  if(!totPorPagar&&!totPorCobrar&&!sinMov)puntos.push("No hay cuentas pendientes: nadie le debe a la escuela y la escuela no debe nada de este mes.");
+  puntos.push(`Al cierre del mes debería haber <b>${cajaRep.saldo<0?"−":""}${Ls(Math.abs(cajaRep.saldo))}</b> en caja. La ganancia y la caja no siempre coinciden: a veces se pagan cosas de meses anteriores o se cobra por adelantado.`);
+  const GLOSARIO=[
+    ["Ingresos","Todo el dinero que entró a la escuela."],
+    ["Egresos","Todo lo que se gastó."],
+    ["Utilidad neta","La ganancia: lo que queda después de pagar todo. Si es negativa se llama pérdida."],
+    ["Margen neto","De cada L 100 que entran, cuántos quedan de ganancia."],
+    ["Costo de ventas","Lo que costó comprar lo que se vendió (libros, materiales, graduación)."],
+    ["Gastos de operación","Lo necesario para que la escuela funcione: salarios, renta, servicios."],
+    ["Cuentas por cobrar","Dinero que le deben a la escuela."],
+    ["Cuentas por pagar","Dinero que la escuela debe."],
+    ["Flujo de caja","Cuándo entró y salió el dinero de verdad, por fecha de pago."],
+    ["(L 1,000)","Un número entre paréntesis es una resta."],
+  ];
+  const sencilloHTML=(paraPdf=false)=>`<div class="sen${paraPdf?" pdf":""}">
+    <div class="titular"><h2>${titular}</h2><p>${bajada}</p></div>
+    <div class="tres">
+      <div class="caja"><span>Dinero que entró</span><strong class="bien">${Ls(ingresoTotal)}</strong><em>Mensualidades, libros, graduación y otros</em></div>
+      <div class="caja"><span>Dinero que se gastó</span><strong class="gasto">${Ls(totalEgresos)}</strong><em>Salarios, renta, compras y otros</em></div>
+      <div class="caja fuerte"><span>${resultado>=0?"Lo que quedó (ganancia)":"Lo que faltó (pérdida)"}</span><strong class="${resultado>=0?"bien":"mal"}">${resultado<0?"−":""}${Ls(Math.abs(resultado))}</strong><em>${ingresoTotal>0?(resultado>=0?`L ${deCien(resultado)} de cada L 100`:"Se gastó más de lo que entró"):"—"}</em></div>
+    </div>
+    <div class="balanza">
+      <div class="lin"><span>Entró</span><div class="barra"><i class="ent" style="width:${ingresoTotal/maxBarra*100}%"></i></div><b>${Ls(ingresoTotal)}</b></div>
+      <div class="lin"><span>Se gastó</span><div class="barra"><i class="sal" style="width:${totalEgresos/maxBarra*100}%"></i></div><b>${Ls(totalEgresos)}</b></div>
+    </div>
+    <div class="dos">
+      <div class="bloque"><h3>¿De dónde vino el dinero?</h3>${fuentes.length?fuentes.map(x=>fila(x,ingresoTotal,"ent")).join(""):`<p class="vacio">No entró dinero este mes.</p>`}</div>
+      <div class="bloque"><h3>¿En qué se gastó?</h3>${usos.length?usos.map(x=>fila(x,totalEgresos,"sal")).join(""):`<p class="vacio">No hay gastos registrados este mes.</p>`}</div>
+    </div>
+    <div class="bloque"><h3>Lo más importante</h3><ul>${puntos.map(p=>`<li>${p}</li>`).join("")}</ul></div>
+    ${paraPdf?`<div class="bloque glos"><h3>Palabras del reporte contable</h3>${GLOSARIO.map(([a,b])=>`<p><b>${a}:</b> ${b}</p>`).join("")}</div>`
+      :`<details class="bloque glos"><summary>¿Qué significan las palabras del reporte contable?</summary>${GLOSARIO.map(([a,b])=>`<p><b>${a}:</b> ${b}</p>`).join("")}</details>`}
+    <p class="pie">Son las mismas cifras del estado de resultados, explicadas de forma sencilla. Cifras en Lempiras, redondeadas.</p>
+  </div>`;
+  const SEN_CSS=`
+    .sen{--t:#1F2937;--s:#5B6576;--b:#DCE1E8;--sup:#FFFFFF;--sup2:#F5F7FA;--ent:#2A5E45;--sal:#D9641E;--mal:#8E3131;--az:#1B2A4A;font-family:'IBM Plex Sans',Arial,sans-serif;color:var(--t)}
+    html[data-fondo="oscuro"] .sen:not(.pdf){--t:#E9EDEF;--s:#8696A0;--b:#40444A;--sup:#2A2D31;--sup2:#33363B;--ent:#7FC9A3;--sal:#F0A46A;--mal:#EE9A9A;--az:#E9EDEF}
+    .sen h2,.sen h3,.sen strong{font-family:'IBM Plex Sans',Arial,sans-serif}
+    .sen .lin b,.sen .fila .monto{font-family:'IBM Plex Mono',Consolas,monospace}
+    .sen .titular{border-left:4px solid var(--sal);padding:4px 0 4px 14px;margin-bottom:16px}
+    .sen .titular h2{font-size:21px;font-weight:600;margin:0;color:var(--az);line-height:1.35}
+    .sen .titular p{font-size:14px;color:var(--s);margin:6px 0 0;line-height:1.5}
+    .sen .bien{color:var(--ent)} .sen .mal{color:var(--mal)} .sen .gasto{color:var(--sal)}
+    .sen .tres{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+    .sen .caja{border:1px solid var(--b);border-radius:6px;padding:12px 14px;background:var(--sup)}
+    .sen .caja.fuerte{background:var(--sup2)}
+    .sen .caja span{display:block;font-size:12px;color:var(--s)}
+    .sen .caja strong{display:block;font-size:24px;margin:2px 0}
+    .sen .caja em{display:block;font-size:11.5px;color:var(--s);font-style:normal}
+    .sen .balanza{border:1px solid var(--b);border-radius:6px;padding:12px 14px;margin-bottom:16px;background:var(--sup)}
+    .sen .lin{display:grid;grid-template-columns:70px 1fr 110px;gap:10px;align-items:center;font-size:13px;padding:4px 0}
+    .sen .lin b{text-align:right;font-variant-numeric:tabular-nums}
+    .sen .barra{height:12px;background:var(--sup2);border-radius:2px;overflow:hidden}
+    .sen .barra i{display:block;height:100%;border-radius:2px}
+    .sen .barra i.ent{background:var(--ent)} .sen .barra i.sal{background:var(--sal)}
+    .sen .dos{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .sen .bloque{border:1px solid var(--b);border-radius:6px;padding:12px 14px;margin-bottom:12px;background:var(--sup)}
+    .sen .bloque h3{font-size:15px;font-weight:600;margin:0 0 8px;color:var(--az)}
+    .sen .fila{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 0;border-bottom:1px solid var(--b)}
+    .sen .fila:last-child{border-bottom:none}
+    .sen .fila .txt b{display:block;font-size:13.5px}
+    .sen .fila .txt span{display:block;font-size:11.5px;color:var(--s);line-height:1.4}
+    .sen .fila .monto{text-align:right;font-weight:700;font-size:13.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .sen .fila .monto small{display:block;font-weight:400;font-size:11px;color:var(--s)}
+    .sen .fila .barra{grid-column:1/-1;height:8px;margin-top:4px}
+    .sen ul{margin:0;padding-left:18px} .sen li{font-size:13.5px;line-height:1.55;margin-bottom:6px}
+    .sen .vacio{font-size:13px;color:var(--s);margin:0}
+    .sen .glos summary{cursor:pointer;font-family:'IBM Plex Sans',Arial,sans-serif;font-weight:600;font-size:14px;color:var(--az)}
+    .sen .glos p{font-size:13px;margin:6px 0 0;line-height:1.45}
+    .sen .pie{font-size:11px;color:var(--s);margin-top:6px}
+    @media (max-width:700px){.sen .tres,.sen .dos{grid-template-columns:1fr}.sen .lin{grid-template-columns:60px 1fr 90px}}`;
+
   // Documento completo del reporte (se usa para descargar el PDF y para imprimir)
-  const nombreArchivo=`Estado de resultados ${mesSel} ${anioSel}`;
+  const nombreArchivo=`${vista==="sencilla"?"Resumen del mes":"Estado de resultados"} ${mesSel} ${anioSel}`;
   const documentoHTML=()=>{
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${nombreArchivo}</title>
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>${nombreArchivo}</title>
       <style>
         @page { size: letter portrait; margin: 14mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}${CSS_CIFRAS}
         body{color:#000000}
         .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #000000;padding-bottom:12px;margin-bottom:16px}
         .head h1{font-size:24px;color:#000000}
@@ -4296,25 +4559,25 @@ function ReportesPage({data,showToast}){
         tr{page-break-inside:avoid}
         .firmas{display:flex;gap:60px;margin-top:50px}
         .firmas div{flex:1;border-top:1px solid #000000;padding-top:6px;text-align:center;font-size:11px;color:#000000}
-        ${EDO_CSS}
+        ${vista==="sencilla"?SEN_CSS:EDO_CSS}
       </style></head><body>
       <div class="head">
         <div style="width:140px;height:140px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#F2F2F2;border:1px solid #E5E5E5;border-radius:16px;padding:8px"><img src="${LOGO_SEEDS}" alt="Seeds English School" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
         <div>
           <h1>Seeds English School</h1>
           <p>Jesús de Otoro, Intibucá, Honduras</p>
-          <p style="margin-top:6px;font-size:15px;font-weight:800;color:#000000">ESTADO DE RESULTADOS — ${mesSel.toUpperCase()} ${anioSel}</p>
+          <p style="margin-top:6px;font-size:15px;font-weight:800;color:#000000">${vista==="sencilla"?"RESUMEN DEL MES":"ESTADO DE RESULTADOS"} — ${mesSel.toUpperCase()} ${anioSel}</p>
           <p>Del 1 al ${new Date(anioSel,MESES.indexOf(mesSel)+1,0).getDate()} de ${mesSel} de ${anioSel} · Cifras en Lempiras · Generado el ${hoyTxt}</p>
         </div>
       </div>
-      <div class="cards">
+      ${vista==="sencilla"?sencilloHTML(true):`<div class="cards">
         <div class="card"><div class="lbl">Total ingresos</div><div class="val">${M(ingresoTotal)}</div></div>
         <div class="card"><div class="lbl">Total egresos</div><div class="val">${M(totalEgresos)}</div></div>
         <div class="card" style="border-color:${resultado>=0?"#15803D":"#B91C1C"}"><div class="lbl">${resultado>=0?"Utilidad neta":"Pérdida neta"}</div><div class="val" style="color:${resultado>=0?"#15803D":"#B91C1C"}">${resultado>=0?M(resultado):`(${M(Math.abs(resultado))})`}</div></div>
         <div class="card"><div class="lbl">Margen neto</div><div class="val">${margen}</div></div>
       </div>
       ${estadoHTML}
-      <div class="firmas"><div>Elaborado por</div><div>Revisado / Aprobado</div></div>
+      <div class="firmas"><div>Elaborado por</div><div>Revisado / Aprobado</div></div>`}
       </body></html>`;
   };
 
@@ -4334,13 +4597,14 @@ function ReportesPage({data,showToast}){
     const contenido=`<div class="pdfroot" style="width:100%;background:#F2F2F2"><style>${cssLocal}</style>${cuerpo}</div>`;
     try{
       const html2pdf=(await import("html2pdf.js")).default;
+      await cargarFuentesInforme();
       const pdfBlob=await html2pdf().set({
         margin:[10,10,12,10],
         filename:`${nombreArchivo}.pdf`,
         image:{type:"jpeg",quality:0.96},
         html2canvas:{scale:2,useCORS:true,backgroundColor:"#F2F2F2",scrollY:0},
         jsPDF:{unit:"mm",format:"letter",orientation:"portrait"},
-        pagebreak:{mode:["css","legacy"],avoid:["tr",".grafica",".cards",".aviso",".firmas",".head"]},
+        pagebreak:{mode:["css","legacy"],avoid:["tr",".grafica",".cards",".aviso",".firmas",".head",".fila",".caja",".titular",".balanza",".glos p",".sen li"]},
       }).from(contenido,"string").outputPdf("blob");
       // Se genera el archivo y se muestra una ventana con el enlace de descarga:
       // el clic del usuario sobre el enlace es lo que más confiable funciona
@@ -4366,21 +4630,136 @@ function ReportesPage({data,showToast}){
     setTimeout(()=>{w.focus();w.print();},400);
   };
 
+  // ── Vista tipo hoja de cálculo en pantalla ──
+  const[hojaSel,setHojaSel]=useState("resultados");
+  const hojaActiva=hojas.find(h=>h.k===hojaSel)||hojas[0];
+  // Agrega la columna de número de fila (como en Excel) a las tablas de la hoja
+  const comoHoja=(html)=>html.replace(/<colgroup>/g,'<colgroup><col style="width:38px"/>').replace(/<tr([^>]*)>\s*<th/g,'<tr$1><th class="rn"></th><th').replace(/<tr([^>]*)>(?!\s*<th)/g,'<tr$1><td class="rn"></td>');
+  const HOJA_CSS=`
+    .hojaW{counter-reset:fila}
+    .hojaW .edo{border:1px solid #C9D1DC;margin-bottom:4px}
+    .hojaW .edo td,.hojaW .edo th{border:1px solid #DCE1E8 !important;padding:5px 8px}
+    .hojaW .edo th{background:#EEF1F5;color:#3F4A5A}
+    .hojaW .edo tr{counter-increment:fila}
+    .hojaW .edo .rn{background:#EEF1F5;color:#7A8597;font-size:10.5px;text-align:center;padding:5px 2px !important;font-family:Calibri,Arial,sans-serif}
+    .hojaW .edo td.rn::before,.hojaW .edo th.rn::before{content:counter(fila)}
+    .hojaW .edo .sec td{background:#F3F5F8;padding-top:7px}
+    .hojaW .edo .sec td.rn{background:#EEF1F5}
+    .hojaW .edo .cta td:nth-child(2){padding-left:14px}
+    .hojaW .edo .det td:nth-child(2){padding-left:28px}
+    .hojaW .edo .pend td:nth-child(2){padding-left:28px}
+    .hojaW .edo .pend td:first-child{border-left:1px solid #DCE1E8 !important}
+    .hojaW .tit{margin:14px 0 6px}
+    .hojaW .tit:first-child{margin-top:0}
+    .pestanas{display:flex;gap:2px;flex-wrap:wrap;border-bottom:2px solid #1B2A4A;margin-bottom:12px}
+    .pestanas button{padding:7px 14px;border:1px solid #CDD3DC;border-bottom:none;border-radius:4px 4px 0 0;background:#F3F5F8;color:#3F4A5A;font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
+    .pestanas button[aria-selected="true"]{background:#1B2A4A;color:#fff;border-color:#1B2A4A}
+    html[data-fondo="oscuro"] .hojaW .edo,html[data-fondo="oscuro"] .hojaW .edo td,html[data-fondo="oscuro"] .hojaW .edo th{border-color:#40444A !important}
+    html[data-fondo="oscuro"] .hojaW .edo th,html[data-fondo="oscuro"] .hojaW .edo .rn,html[data-fondo="oscuro"] .hojaW .edo .sec td{background:#33363B !important}
+    html[data-fondo="oscuro"] .hojaW .edo .rn{color:#8696A0 !important}
+    html[data-fondo="oscuro"] .pestanas{border-color:#D9641E}
+    html[data-fondo="oscuro"] .pestanas button{background:#33363B;color:#D1D7DB;border-color:#40444A}
+    html[data-fondo="oscuro"] .pestanas button[aria-selected="true"]{background:#D9641E;color:#fff;border-color:#D9641E}`;
+
+  // ── Descargar Excel: una hoja por cada parte del reporte ──
+  const[generandoXls,setGenerandoXls]=useState(false);
+  const aNumero=(t)=>{const s=String(t).trim();if(!/^\(?L\s?-?[\d,]+(\.\d+)?\)?$/.test(s))return null;const v=parseFloat(s.replace(/[^\d.\-]/g,""));return s.startsWith("(")?-v:v;};
+  const FMT_L='"L "#,##0.00;("L "#,##0.00)';
+  const hojaAFilas=(html)=>{
+    const raiz=new DOMParser().parseFromString(`<div>${html}</div>`,"text/html").body.firstChild;
+    const filas=[];
+    const texto=(el)=>(el?.textContent||"").replace(/\s+/g," ").trim();
+    raiz.childNodes.forEach(n=>{
+      if(n.nodeType!==1)return;
+      if(n.matches("h3.tit")){if(filas.length)filas.push([]);filas.push([{value:texto(n),fontWeight:"bold",fontSize:12,textColor:"#1B2A4A"}]);return;}
+      if(n.matches("p.pie,div.aviso")){filas.push([{value:texto(n),textColor:n.matches(".aviso")?"#8E3131":"#5B6576",columnSpan:5},null,null,null,null]);return;}
+      if(!n.matches("table"))return;
+      n.querySelectorAll("tr").forEach(tr=>{
+        const cls=tr.className||"";
+        const celdas=[...tr.children];
+        if(celdas[0]?.tagName==="TH"){filas.push(["Concepto","Parcial","Total","% ingr.","Detalle"].map(v=>({value:v,fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:v==="Concepto"||v==="Detalle"?"left":"right"})));return;}
+        const c0=celdas[0]?.cloneNode(true);const notas=c0?[...c0.querySelectorAll(".nota")].map(x=>texto(x)).join(" · "):"";
+        c0&&c0.querySelectorAll(".nota").forEach(x=>x.remove());
+        const negrita=/\b(sec|tot|sub|neta)\b/.test(cls);
+        const base={fontWeight:negrita?"bold":undefined,backgroundColor:/\bsec\b/.test(cls)?"#E8ECF2":/\b(sub|neta)\b/.test(cls)?"#F3F5F8":undefined,
+          textColor:/\bpend\b|perdida/.test(cls)?"#8E3131":/\bneta\b/.test(cls)?"#2A5E45":undefined,topBorderStyle:/\b(tot|sub|neta)\b/.test(cls)?"thin":undefined};
+        let concepto=texto(c0),detalle=notas;if(!concepto&&detalle){concepto=detalle;detalle="";}
+        const fila=[{...base,value:concepto,indent:/\bdet\b|\bpend\b/.test(cls)?2:/\bcta\b/.test(cls)?1:0}];
+        [1,2,3].forEach(i=>{const t=texto(celdas[i]);const v=aNumero(t);const pct=/^-?[\d.]+%$/.test(t)?parseFloat(t)/100:null;
+          fila.push(v!==null?{...base,value:v,type:Number,format:FMT_L}:pct!==null?{...base,value:pct,type:Number,format:"0.0%"}:{...base,value:t||null,align:"right"});});
+        fila.push({...base,value:detalle||null,textColor:"#5B6576",fontWeight:undefined});
+        filas.push(fila);
+      });
+    });
+    return filas;
+  };
+  const descargarExcel=async()=>{
+    if(generandoXls)return;setGenerandoXls(true);
+    try{
+      const writeExcelFile=(await import("write-excel-file/browser")).default;
+      // Encabezado formal: fila con el logo, nombre de la institución, título y fecha
+      const logoXls=await logoParaExcel(marcaRep.logoSrc);
+      const encabezado=(t)=>encabezadoExcel("A",{ancho:5,logo:logoXls,nombre:marcaRep.nombreO("Seeds English School"),sub:"Finanzas · Reportes",titulo:t,periodo:`${mesSel} ${anioSel}`});
+      const cols=[{width:46},{width:16},{width:16},{width:10},{width:60}];
+      const resumen=[...encabezado("Resumen del mes"),
+        [{value:"Concepto",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF"},{value:"Monto",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:"right"},{value:"%",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:"right"},null,{value:"Qué es",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF"}],
+        [{value:"Dinero que entró",fontWeight:"bold",backgroundColor:"#E8ECF2"},{value:ingresoTotal,type:Number,format:FMT_L,fontWeight:"bold",backgroundColor:"#E8ECF2"},{value:1,type:Number,format:"0%",backgroundColor:"#E8ECF2"},null,null],
+        ...fuentes.map(x=>[{value:x.t,indent:1},{value:x.v,type:Number,format:FMT_L},{value:ingresoTotal?x.v/ingresoTotal:0,type:Number,format:"0.0%"},null,{value:x.e,textColor:"#5B6576"}]),
+        [{value:"Dinero que se gastó",fontWeight:"bold",backgroundColor:"#E8ECF2"},{value:totalEgresos,type:Number,format:FMT_L,fontWeight:"bold",backgroundColor:"#E8ECF2"},{value:ingresoTotal?totalEgresos/ingresoTotal:0,type:Number,format:"0.0%",backgroundColor:"#E8ECF2"},null,null],
+        ...usos.map(x=>[{value:x.t,indent:1},{value:x.v,type:Number,format:FMT_L},{value:ingresoTotal?x.v/ingresoTotal:0,type:Number,format:"0.0%"},null,{value:x.e,textColor:"#5B6576"}]),
+        [{value:resultado>=0?"Lo que quedó (ganancia)":"Lo que faltó (pérdida)",fontWeight:"bold",topBorderStyle:"thin",textColor:resultado>=0?"#2A5E45":"#8E3131"},{value:resultado,type:Number,format:FMT_L,fontWeight:"bold",topBorderStyle:"thin",textColor:resultado>=0?"#2A5E45":"#8E3131"},{value:ingresoTotal?resultado/ingresoTotal:0,type:Number,format:"0.0%",topBorderStyle:"thin"},null,null],
+        [],[{value:"Falta pagar de este mes"},{value:totPorPagar,type:Number,format:FMT_L}],[{value:"Le deben a la escuela de este mes"},{value:totPorCobrar,type:Number,format:FMT_L}],[{value:"Dinero en caja al cierre"},{value:cajaRep.saldo,type:Number,format:FMT_L}],
+      ];
+      const img=logoXls?[{...logoXls,dpi:96,anchor:{row:1,column:1},offsetX:4,offsetY:2,title:"Logo"}]:undefined;
+      // Hoja 1: Informe financiero tipo tablero (mes vs. mes anterior, bloques y gráficas)
+      const [{hojaInforme},{calcularAntiguedad},{extraHoja}]=await Promise.all([import("./informeExcel"),import("./contabilidadExtra"),import("./alertasExcel")]);
+      const kSel=anioSel*12+MESES.indexOf(mesSel);
+      const mesDe=(k)=>({mes:MESES[((k%12)+12)%12],anio:Math.floor(k/12)});
+      const serie=[4,3,2,1,0].map(d=>{const m=mesDe(kSel-d);return{...calcularMesReporte(data,m.mes,m.anio),etq:`${m.mes.slice(0,3)} ${String(m.anio).slice(2)}`};});
+      const ant=mesDe(kSel-1);
+      const finSel=`${anioSel}-${String(MESES.indexOf(mesSel)+1).padStart(2,"0")}-${String(new Date(anioSel,MESES.indexOf(mesSel)+1,0).getDate()).padStart(2,"0")}`;
+      const hoyISO=new Date().toISOString().slice(0,10);
+      const informe=await hojaInforme({marca:{nombre:marcaRep.nombreO("Seeds English School")},logo:logoXls,mesTxt:`${mesSel} ${anioSel}`,antTxt:`${ant.mes} ${ant.anio}`,
+        actual:serie[4],anterior:serie[3],serie,
+        balance:{caja:cajaRep.saldo,porCobrar:calcularAntiguedad(data,finSel<hoyISO?finSel:hoyISO).totCxc,porPagar:(data.cuentas_por_pagar||[]).filter(c=>!c.pagada).reduce((t,c)=>t+(Number(c.monto)||0),0)+rentaPendiente}});
+      const libro=[informe,{data:resumen,sheet:"Resumen",columns:cols,images:img,showGridLines:false},
+        ...hojas.filter(h=>!h.sinExcel).map(h=>({data:[...encabezado(h.t),...hojaAFilas(h.html)],sheet:h.t.slice(0,31),columns:cols,images:img,showGridLines:false}))];
+      const blob=await writeExcelFile(fuentesExcel(libro),{fontFamily:EXCEL_TEXTO,fontSize:10,features:[extraHoja]}).toBlob();
+      const nombre=`Reportes ${mesSel} ${anioSel}.xlsx`;
+      if(pdfListo)URL.revokeObjectURL(pdfListo.url);
+      setPdfListo({url:URL.createObjectURL(blob),nombre,blob,tipo:"Excel"});
+    }catch(e){showToast&&showToast("No se pudo crear el Excel: "+e.message,"error");}
+    finally{setGenerandoXls(false);}
+  };
+
   const tarjeta=(t,v,c,sub)=>(<div style={{...card,borderLeft:`3px solid ${c}`,margin:0}}><div style={{fontSize:11,color:"#555555",textTransform:"uppercase",letterSpacing:.4}}>{t}</div><div style={{fontSize:21,fontWeight:800,color:c}}>{v}</div>{sub&&<div style={{fontSize:11,color:"#888888"}}>{sub}</div>}</div>);
 
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
-      <h3 style={{fontSize:16,fontWeight:700,color:"#000000",margin:0}}>📊 Estado de resultados — {mesSel} {anioSel}</h3>
+      <h3 style={{fontSize:16,fontWeight:700,color:"#000000",margin:0}}>📊 {vista==="sencilla"?"Resumen del mes":"Estado de resultados"} — {mesSel} {anioSel}</h3>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <select value={mesSel} onChange={e=>setMesSel(e.target.value)} style={{...input,width:160,cursor:"pointer"}}>
           {MESES.map(m=><option key={m} value={m}>{m}</option>)}
         </select>
         <select value={anioSel} onChange={e=>setAnioSel(Number(e.target.value))} style={{...input,width:100,cursor:"pointer"}}>{[ANIO_ACTUAL,ANIO_ACTUAL-1,ANIO_ACTUAL-2].map(y=><option key={y} value={y}>{y}</option>)}</select>
         <button onClick={descargarPDF} disabled={generando} style={{...btn("#000000"),opacity:generando?.7:1,cursor:generando?"wait":"pointer"}}><Download size={15}/>{generando?"Generando PDF…":"Descargar PDF"}</button>
+        <button onClick={descargarExcel} disabled={generandoXls} style={{...btn("#15803D"),opacity:generandoXls?.7:1,cursor:generandoXls?"wait":"pointer"}}><Download size={15}/>{generandoXls?"Generando Excel…":"Descargar Excel"}</button>
         <button onClick={imprimir} style={btnO}><FileText size={15}/>Imprimir</button>
       </div>
     </div>
 
+    {/* Vista sencilla o contable */}
+    <div style={{...card,padding:"10px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+      <div role="tablist" style={{display:"inline-flex",border:"1px solid #CDD3DC",borderRadius:4,overflow:"hidden"}}>
+        {[["sencilla","Vista sencilla"],["contable","Vista Excel"]].map(([k,t])=><button key={k} role="tab" className="vista-tab" aria-selected={vista===k} onClick={()=>cambiarVista(k)} style={{padding:"7px 14px",border:"none",borderRight:k==="sencilla"?"1px solid #CDD3DC":"none",background:vista===k?AZUL_MARCA:"#FFFFFF",color:vista===k?"#fff":"#344054",fontSize:13,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>{t}</button>)}
+      </div>
+      <style>{`html[data-fondo="oscuro"] .vista-tab[aria-selected="true"]{background:#D9641E!important;color:#fff!important}`}</style>
+      <span style={{fontSize:12,color:"#5B6576"}}>{vista==="sencilla"?"Explicado en palabras sencillas, sin términos contables.":"Como hoja de Excel: celdas, filas y columnas. Para contador o banco."}</span>
+    </div>
+
+    {vista==="sencilla"&&<div style={{...card,padding:"20px 22px"}}><style>{SEN_CSS}</style><div dangerouslySetInnerHTML={{__html:sencilloHTML(false)}}/></div>}
+
+    {vista==="contable"&&<>
     {/* Elegir qué egresos desglosar */}
     <div style={{...card,padding:"12px 16px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
       <span style={{fontSize:12,fontWeight:700,color:"#000000",marginRight:4}}>Desglosar egresos:</span>
@@ -4410,19 +4789,23 @@ function ReportesPage({data,showToast}){
           <div style={{fontSize:12,color:"#555555"}}>Del 1 al {new Date(anioSel,MESES.indexOf(mesSel)+1,0).getDate()} de {mesSel} de {anioSel} · Cifras en Lempiras</div>
         </div>
       </div>
-      <div style={{overflowX:"auto"}}><div style={{minWidth:520,fontFamily:"Georgia,'Times New Roman',serif"}} dangerouslySetInnerHTML={{__html:estadoHTML}}/></div>
+      <style>{HOJA_CSS}</style>
+      <div className="pestanas" role="tablist">{hojas.map(h=><button key={h.k} role="tab" aria-selected={hojaActiva.k===h.k} onClick={()=>setHojaSel(h.k)}>{h.t}</button>)}</div>
+      <div style={{overflowX:"auto"}}><div className="hojaW" style={{minWidth:560,fontFamily:"'IBM Plex Sans',Arial,sans-serif"}} dangerouslySetInnerHTML={{__html:hojaActiva.sinExcel?hojaActiva.html:comoHoja(hojaActiva.html)}}/></div>
+      <div style={{fontSize:11,color:"#5B6576",marginTop:8}}>El PDF y la impresión traen todas las hojas juntas. «Descargar Excel» crea un archivo con una hoja por pestaña, más un resumen.</div>
     </div>
+    </>}
 
     {/* PDF listo: enlace de descarga */}
     {pdfListo&&<div onClick={cerrarPdf} style={{position:"fixed",inset:0,background:"rgba(15,23,42,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#F2F2F2",borderRadius:14,padding:24,width:"100%",maxWidth:400,textAlign:"center",boxShadow:"0 20px 50px rgba(0,0,0,.25)"}}>
         <div style={{fontSize:40,lineHeight:1}}>📄</div>
-        <h3 style={{fontSize:17,fontWeight:800,color:"#000000",margin:"10px 0 4px"}}>Tu PDF está listo</h3>
+        <h3 style={{fontSize:17,fontWeight:800,color:"#000000",margin:"10px 0 4px"}}>Tu {pdfListo.tipo||"PDF"} está listo</h3>
         <p style={{fontSize:12,color:"#555555",margin:"0 0 18px",wordBreak:"break-word"}}>{pdfListo.nombre}</p>
-        <a href={pdfListo.url} download={pdfListo.nombre} style={{...btn("#000000"),width:"100%",justifyContent:"center",textDecoration:"none",boxSizing:"border-box",padding:"12px 18px",fontSize:14}}><Download size={16}/>Guardar PDF</a>
+        <a href={pdfListo.url} download={pdfListo.nombre} style={{...btn("#000000"),width:"100%",justifyContent:"center",textDecoration:"none",boxSizing:"border-box",padding:"12px 18px",fontSize:14}}><Download size={16}/>Guardar {pdfListo.tipo||"PDF"}</a>
         <div style={{display:"flex",gap:8,marginTop:10}}>
-          <a href={pdfListo.url} target="_blank" rel="noopener" style={{...btnO,flex:1,justifyContent:"center",textDecoration:"none"}}><Eye size={14}/>Abrir PDF</a>
-          {typeof navigator!=="undefined"&&navigator.canShare&&navigator.canShare({files:[new File([pdfListo.blob],pdfListo.nombre,{type:"application/pdf"})]})&&<button onClick={()=>navigator.share({files:[new File([pdfListo.blob],pdfListo.nombre,{type:"application/pdf"})],title:pdfListo.nombre}).catch(()=>{})} style={{...btnO,flex:1,justifyContent:"center"}}><Send size={14}/>Compartir</button>}
+          {!pdfListo.tipo&&<a href={pdfListo.url} target="_blank" rel="noopener" style={{...btnO,flex:1,justifyContent:"center",textDecoration:"none"}}><Eye size={14}/>Abrir PDF</a>}
+          {typeof navigator!=="undefined"&&navigator.canShare&&navigator.canShare({files:[new File([pdfListo.blob],pdfListo.nombre,{type:pdfListo.blob.type||"application/pdf"})]})&&<button onClick={()=>navigator.share({files:[new File([pdfListo.blob],pdfListo.nombre,{type:pdfListo.blob.type||"application/pdf"})],title:pdfListo.nombre}).catch(()=>{})} style={{...btnO,flex:1,justifyContent:"center"}}><Send size={14}/>Compartir</button>}
         </div>
         <button onClick={cerrarPdf} style={{marginTop:14,background:"none",border:"none",color:"#555555",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cerrar</button>
       </div>
@@ -4438,6 +4821,7 @@ async function htmlAPdf(html, nombre){
   const cssLocal=css.replace(/@page[^}]*\}/,"").replace(/\*\{/g,".pdfroot,.pdfroot *{").replace(/(^|\s)body\{/,"$1.pdfroot{");
   const contenido=`<div class="pdfroot" style="width:100%;background:#fff"><style>${cssLocal}</style>${cuerpo}</div>`;
   const html2pdf=(await import("html2pdf.js")).default;
+  await cargarFuentesInforme();
   const out=await html2pdf().set({
     margin:[10,10,12,10], filename:`${nombre}.pdf`, image:{type:"jpeg",quality:0.96},
     html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff",scrollY:0},
@@ -4480,6 +4864,7 @@ function IngresosPage({data,loadData,showToast,sucursalActiva}){
   const mesActual=MESES[new Date().getMonth()];
   const[modal,setModal]=useState(false);
   const[fMes,setFMes]=useState("");
+  const[vista,setVista]=useVista();
   const CATEGORIAS=["Donación","Evento","Inscripción","Servicio extra","Venta","Reembolso","Otro"];
   const nuevoForm=()=>({descripcion:"",monto:"",categoria:"Donación",fecha:new Date().toISOString().split("T")[0],mes_ingreso:mesActual,alumno_id:"",notas:""});
   const[form,setForm]=useState(nuevoForm());
@@ -4522,9 +4907,13 @@ function IngresosPage({data,loadData,showToast,sucursalActiva}){
         <span style={{fontSize:11,color:"#64748B"}}>Total{fMes?` ${fMes}`:""}: </span>
         <span style={{fontSize:18,fontWeight:800,color:"#059669"}}>L {total.toLocaleString()}</span>
       </div>
+      <span style={{flex:1}}/><EstilosVistas/>
+      <DescargasFinanzas showToast={showToast} titulo={`Ingresos extra${fMes?" "+fMes:""}`} hojas={()=>hojasIngresos({lista,nombreAlumno:(id)=>data.alumnos.find(a=>a.id===id)?.nombre||""})}/>
+      <SelectorVista vista={vista} setVista={setVista}/>
     </div>
 
-    <div style={card}>
+    {vista==="excel"&&<IngresosExcel lista={lista} nombreAlumno={(id)=>data.alumnos.find(a=>a.id===id)?.nombre||""}/>}
+    {vista!=="excel"&&<div style={card}>
       {lista.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay ingresos extra{fMes?` en ${fMes}`:""}. Agrega el primero con "Nuevo ingreso".</p>:(
         <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Fecha","Categoría","Descripción","Alumno/Padre","Mes","Monto",""].map(h=><th key={h} style={{textAlign:h==="Monto"?"right":"left",padding:"6px 8px",color:"#64748B",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
@@ -4539,7 +4928,7 @@ function IngresosPage({data,loadData,showToast,sucursalActiva}){
           </tr>);})}</tbody>
         </table></div>
       )}
-    </div>
+    </div>}
 
     {modal&&<Modal title="💵 Nuevo ingreso extra" onClose={()=>setModal(false)} onSave={guardar}>
       <Field label="Descripción *" value={form.descripcion} onChange={v=>setForm({...form,descripcion:v})} placeholder="Ej: Donación evento navideño"/>
@@ -4562,8 +4951,21 @@ function IngresosPage({data,loadData,showToast,sucursalActiva}){
   </div>);
 }
 
+// Marcas de "se está guardando" para botones sueltos (fuera de una ventana)
+const PENDIENTES_EN_CURSO=new Set();
 function Modal({title,onClose,onSave,children,wide}){
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:wide?640:440,maxHeight:"90vh",overflow:"auto"}}><div style={{padding:"16px 20px",borderBottom:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3 style={{fontSize:15,fontWeight:700,margin:0,color:"#1E293B"}}>{title}</h3><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><X size={18} color="#64748B"/></button></div><div style={{padding:20}}>{children}</div><div style={{padding:"0 20px 16px",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={onClose} style={btnO}>Cancelar</button><button onClick={onSave} style={btn()}>Guardar</button></div></div></div>);
+  // Evita guardar dos veces lo mismo (doble clic): mientras se guarda, el botón queda bloqueado
+  const guardando=useRef(false);
+  const [ocupado,setOcupado]=useState(false);
+  const vivo=useRef(true);
+  useEffect(()=>()=>{vivo.current=false;},[]);
+  const alGuardar=async()=>{
+    if(guardando.current||!onSave)return;
+    guardando.current=true;setOcupado(true);
+    try{await onSave();}
+    finally{guardando.current=false;if(vivo.current)setOcupado(false);}
+  };
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:wide?640:440,maxHeight:"90vh",overflow:"auto"}}><div style={{padding:"16px 20px",borderBottom:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3 style={{fontSize:15,fontWeight:700,margin:0,color:"#1E293B"}}>{title}</h3><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><X size={18} color="#64748B"/></button></div><div style={{padding:20}}>{children}</div><div style={{padding:"0 20px 16px",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={onClose} style={btnO}>Cancelar</button><button onClick={alGuardar} disabled={ocupado} style={{...btn(),opacity:ocupado?0.6:1,cursor:ocupado?"wait":"pointer"}}>{ocupado?"Guardando…":"Guardar"}</button></div></div></div>);
 }
 function Field({label:lbl,value,onChange,type="text",placeholder,multiline}){
   return(<div style={{marginBottom:12}}><label style={label}>{lbl}</label>{multiline?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={3} style={{...input,resize:"vertical"}}/>:<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={input}/>}</div>);

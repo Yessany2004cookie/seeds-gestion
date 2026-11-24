@@ -1,0 +1,28 @@
+# Mantener activo el proyecto de Supabase
+# En el plan gratuito, Supabase pausa el proyecto si pasa 7 días sin uso
+# (por ejemplo en vacaciones). Esto hace una consulta pequeña cada 3 días
+# para que no se pause. No lee ni cambia datos y no necesita claves secretas:
+# usa la misma clave pública que ya está en src/supabaseClient.js.
+name: Mantener activo Supabase
+
+on:
+  schedule:
+    - cron: "0 14 */3 * *"   # cada 3 días, 8:00 AM hora de Honduras
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Consultar Supabase
+        run: |
+          URL=$(grep -oP "SUPABASE_URL = '\K[^']+" src/supabaseClient.js)
+          KEY=$(grep -oP "SUPABASE_ANON_KEY = '\K[^']+" src/supabaseClient.js)
+          code=$(curl -s -o /dev/null -w "%{http_code}" "$URL/rest/v1/modulos_sistema?select=id&limit=1" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          echo "Respuesta de Supabase: $code"
+          [ "$code" -lt 500 ]

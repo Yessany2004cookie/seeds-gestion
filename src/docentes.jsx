@@ -3,12 +3,23 @@
 // seguridad de la base de datos: supabase/roles_docentes.sql).
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { supabase } from "./supabaseClient";
+import { cargarIgnorados, ignorarAlerta } from "./ajustes";
 import { card, input, btn, btnO, label, badge } from "./estilo";
-import { LOGO_SEEDS } from "./logo";
 import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
 import { FormularioClase, AdminChecklist } from "./formulario";
 import { ParteMensual } from "./parteMensual";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_DOCENTE } from "./recorrido";
+import { useModulos } from "./modulos";
+import { useMarca } from "./marca";
+
+// Pestañas del portal docente (administración puede cambiarles el nombre en Sistema y respaldos)
+export const PESTANAS_DOCENTE = [
+  { id: "inicio", label: "Inicio" }, { id: "grupos", label: "Mis grupos" },
+  { id: "asistencia", label: "Libreta de asistencia", modulo: "asistencia" }, { id: "parte", label: "Parte mensual", modulo: "asistencia" },
+  { id: "bitacora", label: "Bitácora", modulo: "bitacoras" }, { id: "reflections", label: "Reflections", modulo: "reflections" },
+  { id: "reporte", label: "Check list de la clase", modulo: "reflections" }, { id: "solicitudes", label: "Solicitudes", modulo: "solicitudes" },
+];
+import { SelectorFondo } from "./fondo";
 import { Bitacora, AdminBitacoras, PortadaCuero, useVueltaHoja, ESTILOS_LIBRO, ComboMaestros } from "./bitacora";
 import {
   LogOut, Users, BookOpen, Check, X, Menu, Send, Home, ClipboardList, ChevronLeft as AtrasIcon,
@@ -112,7 +123,9 @@ export function DocenteApp({ session, perfil, onVolver }) {
   }, []);
   const [menu, setMenu] = useState(false);
   // Recorrido guiado y novedades del portal docente
-  const recorrido = useRecorrido(perfil.maestro_id ? session : null, "docente");
+  const modulos = useModulos(session);
+  const marca = useMarca();
+  const recorrido = useRecorrido(perfil.maestro_id && modulos.listo ? session : null, "docente", (n) => modulos.activo(n.modulo));
   const [datos, setDatos] = useState({ maestro: null, secciones: [], alumnos: [], padres: [] });
   const [cargando, setCargando] = useState(true);
   const [toast, setToast] = useState(null);
@@ -144,13 +157,15 @@ export function DocenteApp({ session, perfil, onVolver }) {
   const NAV = [
     { id: "inicio", label: "Inicio", icon: Home },
     { id: "grupos", label: "Mis grupos", icon: Users },
-    { id: "asistencia", label: "Libreta de asistencia", icon: UserCheck },
-    { id: "parte", label: "Parte mensual", icon: FileText },
-    { id: "bitacora", label: "Bitácora", icon: BookOpen },
-    { id: "reflections", label: "Reflections", icon: MessageSquare },
-    { id: "reporte", label: "Check list de la clase", icon: ClipboardList },
-    { id: "solicitudes", label: "Solicitudes", icon: Inbox },
-  ];
+    { id: "asistencia", label: "Libreta de asistencia", icon: UserCheck, modulo: "asistencia" },
+    { id: "parte", label: "Parte mensual", icon: FileText, modulo: "asistencia" },
+    { id: "bitacora", label: "Bitácora", icon: BookOpen, modulo: "bitacoras" },
+    { id: "reflections", label: "Reflections", icon: MessageSquare, modulo: "reflections" },
+    { id: "reporte", label: "Check list de la clase", icon: ClipboardList, modulo: "reflections" },
+    { id: "solicitudes", label: "Solicitudes", icon: Inbox, modulo: "solicitudes" },
+  ].filter((n) => modulos.activo(n.modulo)).map((n) => ({ ...n, label: marca.etiqueta("d:" + n.id, n.label) }));
+  // Si la página abierta es de un módulo que se apagó, se muestra Inicio
+  const pagina = NAV.some((n) => n.id === page) ? page : "inicio";
   const escritorio = window.innerWidth > 768;
   const props = { datos, maestroId: perfil.maestro_id, avisar, setPage };
   const paginas = {
@@ -173,9 +188,9 @@ export function DocenteApp({ session, perfil, onVolver }) {
       {menu && <div onClick={() => setMenu(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.25)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 40 }} />}
       <aside className="vidrio-menu" style={{ position: "fixed", left: menu ? 10 : -280, top: 10, bottom: 10, width: 240, color: "#fff", zIndex: 50, transition: "left 0.25s cubic-bezier(.2,.8,.2,1)", display: "flex", flexDirection: "column", borderRadius: 6, overflow: "hidden", ...(escritorio ? { position: "relative", left: 0, top: 0, bottom: 0, margin: 0, borderRadius: 0 } : {}) }}>
         <div style={{ padding: "20px 16px", borderBottom: "1px solid rgba(255,255,255,.08)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-          <div style={{ background: "#fff", borderRadius: 4, padding: 6 }}><img src={LOGO_SEEDS} alt="Seeds" style={{ width: 88, height: 88, objectFit: "contain" }} /></div>
+          <div style={{ background: "#fff", borderRadius: 4, padding: 6 }}><img src={marca.logoSrc} alt={marca.nombreO("Seeds English")} style={{ width: 88, height: 88, objectFit: "contain" }} /></div>
           <div style={{ textAlign: "center" }}>
-            <div className="titulo-marca" style={{ fontWeight: 700, fontSize: 17, color: "#fff", letterSpacing: .3 }}>Seeds English</div>
+            <div className="titulo-marca" style={{ fontWeight: 700, fontSize: 17, color: "#fff", letterSpacing: .3 }}>{marca.nombreO("Seeds English")}</div>
             <div style={{ fontSize: 10.5, color: "#F0A46A", textTransform: "uppercase", letterSpacing: 1.4, marginTop: 3, fontWeight: 600 }}>Portal docente</div>
           </div>
         </div>
@@ -192,28 +207,30 @@ export function DocenteApp({ session, perfil, onVolver }) {
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
             {!escritorio && page !== "inicio" && <button onClick={() => history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20} /></button>}
             {!escritorio && <button onClick={() => setMenu(true)} aria-label="Menú" style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Menu size={22} color="#475569" /></button>}
-            <h1 className="titulo-barra" style={{ fontSize: 18, fontWeight: 600, color: "#1B2A4A", margin: 0 }}>{NAV.find((n) => n.id === page)?.label}</h1>
+            <h1 className="titulo-barra" style={{ fontSize: 18, fontWeight: 600, color: "#1B2A4A", margin: 0 }}>{NAV.find((n) => n.id === pagina)?.label}</h1>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {onVolver && <button onClick={onVolver} title="Volver a administración" style={{ ...btnO, padding: "5px 10px", fontSize: 12, color: NAR, borderColor: "#FED7AA" }}>Administración</button>}
+            <SelectorFondo />
             <BotonAyuda onClick={recorrido.abrir} />
             <button onClick={cargar} title="Actualizar" style={{ background: "#fff", border: "1px solid #CDD3DC", borderRadius: 4, cursor: "pointer", padding: "5px 8px", display: "flex" }}><RefreshCw size={14} color="#64748B" /></button>
             <div className="hide-mobile" style={{ fontSize: 12, color: "#64748B", textAlign: "right" }}><div style={{ fontWeight: 700, color: "#1E293B" }}>{datos.maestro?.nombre || ""}</div><div>{session.user.email}</div></div>
           </div>
         </header>
-        <div style={{ flex: 1, overflow: "auto", padding: 20 }}>{cargando ? <Vacio>Cargando…</Vacio> : paginas[page]}</div>
+        <div style={{ flex: 1, overflow: "auto", padding: 20 }}>{cargando ? <Vacio>Cargando…</Vacio> : paginas[pagina]}</div>
       </main>
       <Toast toast={toast} />
-      {!cargando && <Recorrido estado={recorrido} pasos={PASOS_DOCENTE} abrirMenu={setMenu} irA={setPage} />}
+      {!cargando && <Recorrido estado={recorrido} pasos={PASOS_DOCENTE.filter((p) => modulos.activo(p.modulo))} abrirMenu={setMenu} irA={setPage} />}
     </div>
   );
 }
 
 export function PantallaMensaje({ titulo, texto, onSalir }) {
+  const marca = useMarca();
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F1F5F9", padding: 20 }}>
       <div style={{ ...card, maxWidth: 420, textAlign: "center" }}>
-        <img src={LOGO_SEEDS} alt="Seeds" style={{ width: 90, height: 90, objectFit: "contain" }} />
+        <img src={marca.logoSrc} alt={marca.nombreO("Seeds")} style={{ width: 90, height: 90, objectFit: "contain" }} />
         <h2 style={{ fontSize: 17, color: "#1E293B", margin: "10px 0 6px" }}>{titulo}</h2>
         <p style={{ fontSize: 13, color: "#64748B", margin: "0 0 16px" }}>{texto}</p>
         <button onClick={onSalir} style={btn()}><LogOut size={15} />Cerrar sesión</button>
@@ -705,20 +722,26 @@ export function AdminDocentesPage({ data, showToast }) {
   const [error, setError] = useState("");
   const tBtn = (a) => ({ padding: "10px 16px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", borderBottom: a ? `3px solid ${NAR}` : "3px solid transparent", background: "transparent", color: a ? NAR : "#64748B" });
   const props = { data, showToast, setError };
+  const modulos = useModulos(true);
+  const TABS = [
+    { id: "solicitudes", label: "📥 Solicitudes", modulo: "solicitudes" },
+    { id: "asistencia", label: "✅ Asistencia", modulo: "asistencia" },
+    { id: "reflections", label: "💬 Reflections", modulo: "reflections" },
+    { id: "reportes", label: "📋 Check list de clase", modulo: "reflections" },
+    { id: "bitacoras", label: "📖 Bitácoras", modulo: "bitacoras" },
+  ].filter((t) => modulos.activo(t.modulo));
+  const tabVisible = TABS.some((t) => t.id === tab) ? tab : TABS[0]?.id;
+  if (!TABS.length) return <div style={{ ...card, fontSize: 13, color: "#64748B" }}>No hay partes de Gestión curricular activas. Puede encenderlas en Configuración → Sistema y respaldos.</div>;
   return (<div>
     {error && (error.startsWith("Falta activar") ? <AvisoActivarModulo showToast={showToast} /> : <div style={{ ...card, background: "#FFF7ED", border: "1px solid #FDBA74", color: "#9A3412", fontSize: 13 }}>⚠ {error}</div>)}
     <div style={{ display: "flex", borderBottom: "1px solid #E2E8F0", marginBottom: 16, flexWrap: "wrap" }}>
-      <button onClick={() => setTab("solicitudes")} style={tBtn(tab === "solicitudes")}>📥 Solicitudes</button>
-      <button onClick={() => setTab("asistencia")} style={tBtn(tab === "asistencia")}>✅ Asistencia</button>
-      <button onClick={() => setTab("reflections")} style={tBtn(tab === "reflections")}>💬 Reflections</button>
-      <button onClick={() => setTab("reportes")} style={tBtn(tab === "reportes")}>📋 Check list de clase</button>
-      <button onClick={() => setTab("bitacoras")} style={tBtn(tab === "bitacoras")}>📖 Bitácoras</button>
+      {TABS.map((t) => <button key={t.id} onClick={() => setTab(t.id)} style={tBtn(tabVisible === t.id)}>{t.label}</button>)}
     </div>
-    {tab === "solicitudes" && <AdminSolicitudes {...props} />}
-    {tab === "asistencia" && <AdminAsistencia {...props} />}
-    {tab === "reflections" && <AdminReflections {...props} />}
-    {tab === "reportes" && <AdminChecklist {...props} />}
-    {tab === "bitacoras" && <AdminBitacoras data={data} showToast={showToast} />}
+    {tabVisible === "solicitudes" && <AdminSolicitudes {...props} />}
+    {tabVisible === "asistencia" && <AdminAsistencia {...props} />}
+    {tabVisible === "reflections" && <AdminReflections {...props} />}
+    {tabVisible === "reportes" && <AdminChecklist {...props} />}
+    {tabVisible === "bitacoras" && <AdminBitacoras data={data} showToast={showToast} />}
   </div>);
 }
 
@@ -948,11 +971,13 @@ export function AccesoDocente({ maestro, perfiles, recargar, showToast }) {
 // ════════════════════════════════════════════════════════════
 const DIAS_SIN_ASISTENCIA = 60;
 const leerIgnorados = () => { try { return JSON.parse(localStorage.getItem("seeds_inactividad_ignorados")) || {}; } catch (e) { return {}; } };
+// Lo que se ignora se guarda en la base de datos (alertas_ignoradas): lo ven todas las cuentas de administración
 
 export function AlertasInactividad({ data, loadData, showToast }) {
   const [regs, setRegs] = useState(null); // null = sin datos (módulo no activo o cargando)
   const [ultimas, setUltimas] = useState({}); // alumno_id -> última fecha que asistió (de cualquier época)
   const [ignorados, setIgnorados] = useState(leerIgnorados);
+  useEffect(() => { cargarIgnorados().then(setIgnorados); }, []);
   const [ocupado, setOcupado] = useState(null);
   const desde = new Date(Date.now() - DIAS_SIN_ASISTENCIA * 86400000).toLocaleDateString("en-CA");
 
@@ -1007,9 +1032,9 @@ export function AlertasInactividad({ data, loadData, showToast }) {
     loadData();
   };
   const ignorar = (a) => {
-    const n = { ...leerIgnorados(), [a.id]: hoyMs + 30 * 86400000 };
-    try { localStorage.setItem("seeds_inactividad_ignorados", JSON.stringify(n)); } catch (e) { /* sin almacenamiento */ }
-    setIgnorados(n);
+    const hasta = hoyMs + 30 * 86400000;
+    setIgnorados((p) => ({ ...p, [a.id]: hasta }));
+    ignorarAlerta(a.id, hasta).then((err) => { if (err) showToast("No se pudo guardar en la base de datos; solo quedó en este navegador", "error"); });
   };
   const th = { textAlign: "left", padding: "8px 10px", fontSize: 11, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.4, borderBottom: "1px solid #FED7AA" };
   const td = { padding: "10px", borderBottom: "1px solid #FFEDD5", fontSize: 13, verticalAlign: "middle" };
