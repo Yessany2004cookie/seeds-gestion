@@ -171,33 +171,33 @@ export function DocenteApp({ session, perfil, onVolver }) {
   return (
     <div style={{ display: "flex", height: "100vh", background: "transparent" }}>
       {menu && <div onClick={() => setMenu(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.25)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 40 }} />}
-      <aside className="vidrio-menu" style={{ position: "fixed", left: menu ? 10 : -280, top: 10, bottom: 10, width: 240, color: "#fff", zIndex: 50, transition: "left 0.25s cubic-bezier(.2,.8,.2,1)", display: "flex", flexDirection: "column", borderRadius: 26, overflow: "hidden", ...(escritorio ? { position: "relative", left: 0, top: 0, bottom: 0, margin: 12 } : {}) }}>
+      <aside className="vidrio-menu" style={{ position: "fixed", left: menu ? 10 : -280, top: 10, bottom: 10, width: 240, color: "#fff", zIndex: 50, transition: "left 0.25s cubic-bezier(.2,.8,.2,1)", display: "flex", flexDirection: "column", borderRadius: 6, overflow: "hidden", ...(escritorio ? { position: "relative", left: 0, top: 0, bottom: 0, margin: 0, borderRadius: 0 } : {}) }}>
         <div style={{ padding: "20px 16px", borderBottom: "1px solid rgba(255,255,255,.08)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-          <div style={{ background: "#fff", borderRadius: 22, padding: 8, boxShadow: "0 6px 18px rgba(249,115,22,.15)" }}><img src={LOGO_SEEDS} alt="Seeds" style={{ width: 96, height: 96, objectFit: "contain" }} /></div>
+          <div style={{ background: "#fff", borderRadius: 4, padding: 6 }}><img src={LOGO_SEEDS} alt="Seeds" style={{ width: 88, height: 88, objectFit: "contain" }} /></div>
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: "#F97316" }}>Seeds English</div>
-            <div style={{ fontSize: 11, color: "#94A3B8" }}>Portal docente</div>
+            <div className="titulo-marca" style={{ fontWeight: 700, fontSize: 17, color: "#fff", letterSpacing: .3 }}>Seeds English</div>
+            <div style={{ fontSize: 10.5, color: "#F0A46A", textTransform: "uppercase", letterSpacing: 1.4, marginTop: 3, fontWeight: 600 }}>Portal docente</div>
           </div>
         </div>
         <nav style={{ flex: 1, padding: "10px 10px", overflowY: "auto" }}>
           {NAV.map((n) => { const Icon = n.icon; const a = page === n.id; return (
-            <button key={n.id} data-tour={"n-" + n.id} className={"menu-item"+(a?" activo":"")} onClick={() => { setPage(n.id); setMenu(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", marginBottom: 2, border: "none", borderRadius: 14, cursor: "pointer", background: a ? "linear-gradient(135deg,#FB923C,#EA580C)" : "transparent", color: a ? "#fff" : "#CBD5E1", boxShadow: a ? "0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)" : "none", fontSize: 13, fontWeight: a ? 700 : 500, fontFamily: "inherit", borderLeft: a ? "3px solid #F97316" : "3px solid transparent", textAlign: "left" }}><Icon size={17} />{n.label}</button>
+            <button key={n.id} data-tour={"n-" + n.id} className={"menu-item"+(a?" activo":"")} onClick={() => { setPage(n.id); setMenu(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", marginBottom: 2, border: "none", borderRadius: 3, cursor: "pointer", background: a ? "rgba(255,255,255,.09)" : "transparent", color: a ? "#fff" : "#B8C2D3", fontSize: 13, fontWeight: a ? 600 : 400, fontFamily: "inherit", borderLeft: a ? "3px solid #D9641E" : "3px solid transparent", textAlign: "left" }}><Icon size={17} />{n.label}</button>
           ); })}
         </nav>
         {onVolver && <button onClick={onVolver} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", border: "none", borderTop: "1px solid rgba(255,255,255,.08)", background: "transparent", color: "#FDBA74", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}><RefreshCw size={16} />Volver a administración</button>}
         <button onClick={salir} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", border: "none", borderTop: "1px solid rgba(255,255,255,.08)", background: "transparent", color: "#FCA5A5", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}><LogOut size={16} />Cerrar sesión</button>
       </aside>
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <header className="vidrio-barra" style={{ padding: "10px 18px", margin: escritorio ? "12px 12px 0 0" : "10px 10px 0", borderRadius: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
+        <header className="vidrio-barra" style={{ padding: "10px 20px", margin: 0, borderRadius: 0, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
             {!escritorio && page !== "inicio" && <button onClick={() => history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20} /></button>}
             {!escritorio && <button onClick={() => setMenu(true)} aria-label="Menú" style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Menu size={22} color="#475569" /></button>}
-            <h1 className="titulo-barra" style={{ fontSize: 17, fontWeight: 700, color: "#1E293B", margin: 0 }}>{NAV.find((n) => n.id === page)?.label}</h1>
+            <h1 className="titulo-barra" style={{ fontSize: 18, fontWeight: 600, color: "#1B2A4A", margin: 0 }}>{NAV.find((n) => n.id === page)?.label}</h1>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {onVolver && <button onClick={onVolver} title="Volver a administración" style={{ ...btnO, padding: "5px 10px", fontSize: 12, color: NAR, borderColor: "#FED7AA" }}>Administración</button>}
             <BotonAyuda onClick={recorrido.abrir} />
-            <button onClick={cargar} title="Actualizar" style={{ background: "rgba(255,255,255,.6)", border: "1px solid rgba(255,255,255,.85)", borderRadius: 999, cursor: "pointer", padding: "5px 8px", display: "flex" }}><RefreshCw size={14} color="#64748B" /></button>
+            <button onClick={cargar} title="Actualizar" style={{ background: "#fff", border: "1px solid #CDD3DC", borderRadius: 4, cursor: "pointer", padding: "5px 8px", display: "flex" }}><RefreshCw size={14} color="#64748B" /></button>
             <div className="hide-mobile" style={{ fontSize: 12, color: "#64748B", textAlign: "right" }}><div style={{ fontWeight: 700, color: "#1E293B" }}>{datos.maestro?.nombre || ""}</div><div>{session.user.email}</div></div>
           </div>
         </header>
@@ -211,7 +211,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
 
 export function PantallaMensaje({ titulo, texto, onSalir }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F1F5F9", fontFamily: "'Segoe UI',system-ui,sans-serif", padding: 20 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F1F5F9", padding: 20 }}>
       <div style={{ ...card, maxWidth: 420, textAlign: "center" }}>
         <img src={LOGO_SEEDS} alt="Seeds" style={{ width: 90, height: 90, objectFit: "contain" }} />
         <h2 style={{ fontSize: 17, color: "#1E293B", margin: "10px 0 6px" }}>{titulo}</h2>
@@ -234,7 +234,7 @@ function InicioDocente({ datos, setPage }) {
     { id: "solicitudes", t: "Hacer una solicitud", d: "Pide algo a administración", icon: Inbox },
   ];
   return (<div>
-    <div style={{ ...card, background: "linear-gradient(135deg,#1E293B,#334155)", color: "#fff", border: "none" }}>
+    <div style={{ ...card, background: "#1B2A4A", color: "#fff", border: "none", borderTop: "3px solid #D9641E" }}>
       <div style={{ fontSize: 12, color: "#FDBA74", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>Bienvenido</div>
       <div style={{ fontSize: 22, fontWeight: 800, marginTop: 2 }}>{datos.maestro?.nombre}</div>
       <div style={{ fontSize: 13, color: "#CBD5E1", marginTop: 4 }}>{datos.secciones.length} {datos.secciones.length === 1 ? "grupo" : "grupos"} · {activos.length} alumnos activos</div>

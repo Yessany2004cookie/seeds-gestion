@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
-import { card, input, btn, btnO, label, badge } from "./estilo";
+import { card, input, btn, btnO, label, badge, tono, AZUL as AZUL_MARCA, NARANJA as NARANJA_MARCA } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
 import { SELLO_SEEDS, FIRMA_ADMIN } from "./sello";
 import { AlertasFinanzasPage } from "./alertasFinanzas";
@@ -751,7 +751,7 @@ export default function App() {
 
   if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC"}}><div style={{textAlign:"center"}}><img src={LOGO_SEEDS} alt="Seeds" style={{width:80,height:80,objectFit:"contain",marginBottom:12}}/><p style={{color:"#64748B"}}>Cargando Seeds...</p></div></div>;
   if (!session) return <LoginPage showToast={showToast} toast={toast} />;
-  if (rol.estado === "cargando") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC",fontFamily:"'Segoe UI',system-ui,sans-serif",color:"#64748B",fontSize:14}}>Cargando…</div>;
+  if (rol.estado === "cargando") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC",color:"#64748B",fontSize:14}}>Cargando…</div>;
   if (rol.estado === "docente") return <DocenteApp session={session} perfil={rol.perfil} />;
   if (rol.estado === "admin" && rol.perfil?.maestro_id && vistaDocente) return <DocenteApp session={session} perfil={rol.perfil} onVolver={()=>cambiarVista(false)} />;
   if (rol.estado === "sin_acceso") return <PantallaMensaje titulo="Tu usuario no tiene acceso" texto="Pide a administración de Seeds que te dé acceso al sistema." onSalir={logout} />;
@@ -835,12 +835,12 @@ export default function App() {
   return (
     <div style={{display:"flex",height:"100vh",background:"transparent"}}>
       {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.25)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",zIndex:40}}/>}
-      <aside className="vidrio-menu" style={{position:"fixed",left:sidebarOpen?10:-280,top:10,bottom:10,width:240,color:"#fff",zIndex:50,transition:"left 0.25s cubic-bezier(.2,.8,.2,1)",display:"flex",flexDirection:"column",borderRadius:26,overflow:"hidden",...(window.innerWidth>768?{position:"relative",left:0,top:0,bottom:0,margin:12}:{})}}>
+      <aside className="vidrio-menu" style={{position:"fixed",left:sidebarOpen?10:-280,top:10,bottom:10,width:240,color:"#fff",zIndex:50,transition:"left 0.25s cubic-bezier(.2,.8,.2,1)",display:"flex",flexDirection:"column",borderRadius:6,overflow:"hidden",...(window.innerWidth>768?{position:"relative",left:0,top:0,bottom:0,margin:0,borderRadius:0}:{})}}>
         <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,.08)",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-          <div style={{background:"#fff",borderRadius:22,padding:8,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 6px 18px rgba(249,115,22,.15)"}}>
-            <img src={LOGO_SEEDS} alt="Seeds" style={{width:110,height:110,objectFit:"contain"}}/>
+          <div style={{background:"#fff",borderRadius:4,padding:6,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <img src={LOGO_SEEDS} alt="Seeds" style={{width:96,height:96,objectFit:"contain"}}/>
           </div>
-          <div style={{textAlign:"center"}}><div style={{fontWeight:800,fontSize:16,background:"linear-gradient(90deg,#F97316,#EA580C)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Seeds English</div><div style={{fontSize:11,color:"#94A3B8"}}>Sistema de Gestión</div></div>
+          <div style={{textAlign:"center"}}><div className="titulo-marca" style={{fontWeight:700,fontSize:17,color:"#fff",letterSpacing:.3}}>Seeds English</div><div style={{fontSize:10.5,color:"#F0A46A",textTransform:"uppercase",letterSpacing:1.4,marginTop:3,fontWeight:600}}>Sistema de Gestión</div></div>
         </div>
         <nav style={{flex:1,padding:"10px 10px",overflowY:"auto"}}>
           {GRUPOS.map(g=>{
@@ -848,9 +848,9 @@ export default function App() {
             const abierto=!g.label||activoAqui||gruposAbiertos[g.id];
             const GIcon=g.icon;
             return(<div key={g.id} style={{marginBottom:4}}>
-              {g.label&&<button data-tour={"g-"+g.id} onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",borderRadius:12,cursor:"pointer",background:"transparent",color:activoAqui?"#FDBA74":"#E2E8F0",fontSize:12.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16}/><span style={{flex:1}}>{g.label}</span><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>}
+              {g.label&&<button data-tour={"g-"+g.id} onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui?"#F0A46A":"#C9D2E0",fontSize:11.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16}/><span style={{flex:1}}>{g.label}</span><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>}
               {abierto&&g.items.map(n=>{const Icon=n.icon;const a=page===n.id;return(
-                <button key={n.id} data-tour={"n-"+n.id} className={"menu-item"+(a?" activo":"")} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:g.label?"8px 14px 8px 30px":"10px 14px",marginBottom:2,border:"none",borderRadius:14,cursor:"pointer",background:a?"linear-gradient(135deg,#FB923C,#EA580C)":"transparent",color:a?"#fff":"#CBD5E1",fontSize:13,fontWeight:a?700:500,textAlign:"left",boxShadow:a?"0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)":"none",fontFamily:"inherit"}}><Icon size={15}/>{n.label}</button>
+                <button key={n.id} data-tour={"n-"+n.id} className={"menu-item"+(a?" activo":"")} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:g.label?"8px 14px 8px 30px":"10px 14px",marginBottom:2,border:"none",borderLeft:a?"3px solid #D9641E":"3px solid transparent",borderRadius:3,cursor:"pointer",background:a?"rgba(255,255,255,.09)":"transparent",color:a?"#fff":"#B8C2D3",fontSize:13,fontWeight:a?600:400,textAlign:"left",fontFamily:"inherit"}}><Icon size={15}/>{n.label}</button>
               );})}
             </div>);
           })}
@@ -858,23 +858,23 @@ export default function App() {
         <button onClick={logout} style={{display:"flex",alignItems:"center",gap:8,padding:"14px 20px",border:"none",borderTop:"1px solid rgba(255,255,255,.08)",background:"transparent",color:"#FCA5A5",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}><LogOut size={16}/>Cerrar sesión</button>
       </aside>
       <main style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
-        <header className="vidrio-barra" style={{padding:"10px 18px",margin:window.innerWidth>768?"12px 12px 0 0":"10px 10px 0",borderRadius:20,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <header className="vidrio-barra" style={{padding:"10px 20px",margin:0,borderRadius:0,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             {window.innerWidth<=768&&page!=="dashboard"&&<button onClick={()=>history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20}/></button>}
             {window.innerWidth<=768&&<button onClick={()=>setSidebarOpen(true)} aria-label="Menú" style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Menu size={22} color="#475569"/></button>}
-            <h1 className="titulo-barra" style={{fontSize:17,fontWeight:700,color:"#1E293B",margin:0}}>{(()=>{const n=NAV.find(x=>x.id===page);return n?(n.grupo?`${n.grupo} · ${n.label}`:n.label):"";})()}</h1>
+            <h1 className="titulo-barra" style={{fontSize:18,fontWeight:600,color:"#1B2A4A",margin:0}}>{(()=>{const n=NAV.find(x=>x.id===page);return n?(n.grupo?`${n.grupo} · ${n.label}`:n.label):"";})()}</h1>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            {data.sucursales.length>0&&<div data-tour="sucursal" className="selector-sucursal" style={{display:"flex",alignItems:"center",gap:6,background:"rgba(245,243,255,.8)",border:"1px solid #DDD6FE",borderRadius:999,padding:"4px 10px",minWidth:0}}>
-              <BookOpen size={14} color="#7C3AED"/>
-              <select value={sucursalActiva||""} onChange={e=>{setSucursalActiva(e.target.value);try{localStorage.setItem("seeds_sucursal",e.target.value);}catch(x){}}} style={{border:"none",background:"transparent",fontSize:13,fontWeight:700,color:"#6D28D9",cursor:"pointer",outline:"none",fontFamily:"inherit",maxWidth:160}}>
+            {data.sucursales.length>0&&<div data-tour="sucursal" className="selector-sucursal" style={{display:"flex",alignItems:"center",gap:6,background:"#F5F7FA",border:"1px solid #CDD3DC",borderRadius:4,padding:"4px 10px",minWidth:0}}>
+              <BookOpen size={14} color="#1B2A4A"/>
+              <select value={sucursalActiva||""} onChange={e=>{setSucursalActiva(e.target.value);try{localStorage.setItem("seeds_sucursal",e.target.value);}catch(x){}}} style={{border:"none",background:"transparent",fontSize:13,fontWeight:600,color:"#1B2A4A",cursor:"pointer",outline:"none",fontFamily:"inherit",maxWidth:160}}>
                 {data.sucursales.filter(s=>s.activa!==false).map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
             </div>}
-            {rol.perfil?.maestro_id&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:8,cursor:"pointer",padding:"5px 10px",color:"#EA580C",fontSize:12,fontWeight:700,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
+            {rol.perfil?.maestro_id&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1px solid #E7B48F",borderRadius:4,cursor:"pointer",padding:"5px 10px",color:"#C2571A",fontSize:12,fontWeight:600,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
             <ContadorVisible/>
             <BotonAyuda onClick={recorrido.abrir}/>
-            <button data-tour="refrescar" onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"rgba(255,255,255,.6)",border:"1px solid rgba(255,255,255,.85)",borderRadius:999,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
+            <button data-tour="refrescar" onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"#fff",border:"1px solid #CDD3DC",borderRadius:4,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
             <div style={{fontSize:12,color:"#64748B"}} className="hide-mobile">{session.user.email}</div>
           </div>
         </header>
@@ -1116,9 +1116,9 @@ function LoginPage({showToast,toast}){
     if(error)setError("Credenciales incorrectas o usuario no existe");
   };
   return(
-    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1E293B,#0F172A)",padding:20,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
-      <div style={{background:"#fff",borderRadius:16,padding:"40px 36px",width:"100%",maxWidth:380,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
-        <div style={{textAlign:"center",marginBottom:28}}><img src={LOGO_SEEDS} alt="Seeds English School" style={{width:190,height:190,objectFit:"contain",marginBottom:4}}/><h1 style={{fontSize:22,fontWeight:800,color:"#1E293B",margin:0}}>Seeds English School</h1><p style={{fontSize:13,color:"#64748B",margin:"6px 0 0"}}>Sistema de Gestión Escolar</p></div>
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:AZUL_MARCA,padding:20}}>
+      <div style={{background:"#fff",borderRadius:6,borderTop:"4px solid #D9641E",padding:"40px 36px",width:"100%",maxWidth:380,boxShadow:"0 20px 50px rgba(0,0,0,0.3)"}}>
+        <div style={{textAlign:"center",marginBottom:28}}><img src={LOGO_SEEDS} alt="Seeds English School" style={{width:190,height:190,objectFit:"contain",marginBottom:4}}/><h1 style={{fontSize:23,fontWeight:700,color:"#1B2A4A",margin:0}}>Seeds English School</h1><p style={{fontSize:13,color:"#64748B",margin:"6px 0 0"}}>Sistema de Gestión Escolar</p></div>
         <div style={{marginBottom:16}}><label style={label}>Correo electrónico</label><div style={{position:"relative"}}><Mail size={16} style={{position:"absolute",left:10,top:11,color:"#94A3B8"}}/><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@correo.com" type="email" style={{...input,paddingLeft:34}} onKeyDown={e=>e.key==="Enter"&&go()}/></div></div>
         <div style={{marginBottom:20}}><label style={label}>Contraseña</label><div style={{position:"relative"}}><LogIn size={16} style={{position:"absolute",left:10,top:11,color:"#94A3B8"}}/><input value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" type={show?"text":"password"} style={{...input,paddingLeft:34}} onKeyDown={e=>e.key==="Enter"&&go()}/><button onClick={()=>setShow(!show)} style={{position:"absolute",right:8,top:7,background:"none",border:"none",cursor:"pointer",color:"#94A3B8"}}><Eye size={16}/></button></div></div>
         {error&&<div style={{padding:"8px 12px",background:"#FEF2F2",color:"#DC2626",borderRadius:6,fontSize:12,marginBottom:14,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={14}/>{error}</div>}
@@ -1154,7 +1154,7 @@ function Dashboard({data,setPage,loadData,showToast}){
   return(<div>
     <AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
-      {stats.map((s,i)=>{const Icon=s.i;return(<div key={i} onClick={()=>setPage(s.p)} style={{...card,cursor:"pointer",padding:18,display:"flex",alignItems:"center",gap:14}}><div style={{background:`linear-gradient(145deg, ${s.c}CC, ${s.c})`,borderRadius:16,padding:11,boxShadow:`0 8px 18px ${s.c}40, inset 0 1px 0 rgba(255,255,255,.45)`}}><Icon size={22} color="#fff"/></div><div><div style={{fontSize:20,fontWeight:800,color:"#1E293B"}}>{s.v}</div><div style={{fontSize:12,color:"#64748B"}}>{s.l}</div></div></div>);})}
+      {stats.map((s,i)=>{const Icon=s.i;return(<div key={i} className="tarjeta-kpi" onClick={()=>setPage(s.p)} style={{...card,cursor:"pointer",padding:"16px 18px",display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${tono(s.c)}`}}><div style={{background:tono(s.c)+"12",border:`1px solid ${tono(s.c)}30`,borderRadius:4,padding:10,display:"flex"}}><Icon size={20} color={tono(s.c)}/></div><div style={{minWidth:0}}><div style={{fontSize:11,color:"#5B6576",textTransform:"uppercase",letterSpacing:.6,fontWeight:600}}>{s.l}</div><div className="cifra" style={{fontSize:22,fontWeight:700,color:"#1B2A4A",marginTop:2}}>{s.v}</div></div></div>);})}
     </div>
     <ResumenFinanciero data={data}/>
     <div style={card}><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Acciones rápidas</h3><div style={{display:"flex",flexWrap:"wrap",gap:10}}><button onClick={()=>setPage("alumnos")} style={btn("#2563EB")}><UserPlus size={15}/>Nueva matrícula</button><button onClick={()=>setPage("facturas")} style={btn("#059669")}><FileText size={15}/>Crear cobros</button><button onClick={()=>setPage("recordatorios")} style={btn("#7C3AED")}><Bell size={15}/>Recordatorios</button></div></div>
@@ -1194,11 +1194,11 @@ function ResumenFinanciero({data}){
   const L=(v)=>`L ${Math.round(v).toLocaleString()}`;
 
   const barras=[
-    {k:"ing",l:"Ingresos",v:ingresos,c1:"#34D399",c2:"#059669",sub:"100% base"},
-    {k:"pla",l:"Planilla",v:planilla,c1:"#FDBA74",c2:"#EA580C",sub:`${pagosPlanilla.length} ${pagosPlanilla.length===1?"pago":"pagos"} · ${personasPlanilla} ${personasPlanilla===1?"persona":"personas"}`},
-    {k:"otr",l:"Otros gastos",v:otrosGastos,c1:"#FCA5A5",c2:"#DC2626",sub:"Renta y otros"},
-    ...(costoVentas>0?[{k:"cos",l:"Costo ventas",v:costoVentas,c1:"#C4B5FD",c2:"#7C3AED",sub:"Materiales y graduación"}]:[]),
-    {k:"gan",l:ganancia>=0?"Ganancia":"Pérdida",v:Math.abs(ganancia),c1:ganancia>=0?"#60A5FA":"#F87171",c2:ganancia>=0?"#2563EB":"#B91C1C",sub:ganancia>=0?"Lo que queda":"Gastos superan ingresos",neg:ganancia<0},
+    {k:"ing",l:"Ingresos",v:ingresos,c1:"#2F6B4F",c2:"#2F6B4F",sub:"100% base"},
+    {k:"pla",l:"Planilla",v:planilla,c1:"#D9641E",c2:"#D9641E",sub:`${pagosPlanilla.length} ${pagosPlanilla.length===1?"pago":"pagos"} · ${personasPlanilla} ${personasPlanilla===1?"persona":"personas"}`},
+    {k:"otr",l:"Otros gastos",v:otrosGastos,c1:"#A33A3A",c2:"#A33A3A",sub:"Renta y otros"},
+    ...(costoVentas>0?[{k:"cos",l:"Costo ventas",v:costoVentas,c1:"#4E4A7E",c2:"#4E4A7E",sub:"Materiales y graduación"}]:[]),
+    {k:"gan",l:ganancia>=0?"Ganancia":"Pérdida",v:Math.abs(ganancia),c1:ganancia>=0?"#2B4C7E":"#8E3131",c2:ganancia>=0?"#2B4C7E":"#8E3131",sub:ganancia>=0?"Lo que queda":"Gastos superan ingresos",neg:ganancia<0},
   ];
   const max=Math.max(...barras.map(b=>b.v),1);
   const H=220;
@@ -1213,7 +1213,7 @@ function ResumenFinanciero({data}){
       .rf-col:hover .rf-val{opacity:1;transform:translateY(0)}
     `}</style>
     {/* Encabezado */}
-    <div style={{padding:"18px 22px",background:"linear-gradient(135deg,#1E293B 0%,#334155 100%)",color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+    <div style={{padding:"18px 22px",background:AZUL_MARCA,borderBottom:`3px solid ${NARANJA_MARCA}`,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
       <div>
         <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:"#FDBA74",fontWeight:700}}>Resumen financiero</div>
         <div style={{fontSize:20,fontWeight:800,marginTop:2}}>{mes}</div>
@@ -1239,8 +1239,8 @@ function ResumenFinanciero({data}){
             <div style={{fontSize:12,fontWeight:800,color:b.c2,background:b.c2+"14",padding:"2px 9px",borderRadius:20,marginBottom:6,whiteSpace:"nowrap"}}>{b.k==="ing"?"100%":(b.neg?"-":"")+fmtPct(b.v)}</div>
             <div className="rf-val" style={{fontSize:13,fontWeight:700,color:"#1E293B",marginBottom:6,whiteSpace:"nowrap"}}>{b.neg?"-":""}{L(b.v)}</div>
             </div>
-            <div className={"rf-bar"+(anim?"":" rf-load")} style={{animationDelay:`${-i*0.23}s`,width:"100%",maxWidth:78,height:h,borderRadius:"10px 10px 4px 4px",background:`linear-gradient(180deg,${b.c1} 0%,${b.c2} 100%)`,boxShadow:`0 8px 20px -8px ${b.c2}90`,position:"relative",overflow:"hidden"}}>
-              <div style={{position:"absolute",inset:0,background:"linear-gradient(90deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,0) 45%)"}}/>
+            <div className={"rf-bar"+(anim?"":" rf-load")} style={{animationDelay:`${-i*0.23}s`,width:"100%",maxWidth:78,height:h,borderRadius:"2px 2px 0 0",background:b.c2,position:"relative",overflow:"hidden"}}>
+              
             </div>
           </div>);})}
       </div>
@@ -1304,7 +1304,7 @@ function EstadoPadres({data,fSec,fMes}){
   const grupos=mesesPeriodo.map(m=>{const g=agrupar(cobrosDe([m]));const d=g.filter(p=>p.deudor).length;return{m,alDia:g.length-d,deudores:d,total:g.length};});
   const max=Math.max(...grupos.flatMap(g=>[g.alDia,g.deudores]),1);
   const H=190;
-  const VERDE=["#34D399","#059669"],ROJO=["#FCA5A5","#DC2626"];
+  const VERDE=["#2F6B4F","#2F6B4F"],ROJO=["#A33A3A","#A33A3A"];
   const sel={...input,width:"auto",padding:"7px 10px",cursor:"pointer"};
   const tabModo=(v,t)=><button onClick={()=>setModo(v)} style={{padding:"6px 14px",border:"none",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit",background:modo===v?"#fff":"transparent",color:modo===v?"#1E293B":"#64748B",boxShadow:modo===v?"0 1px 3px rgba(0,0,0,.12)":"none"}}>{t}</button>;
   const barra=(n,t,c,i,ancho)=>{const h=anim?Math.max(n/max*H,n>0?6:2):H*0.3;return(
@@ -1313,8 +1313,8 @@ function EstadoPadres({data,fSec,fMes}){
         <div style={{fontSize:11,fontWeight:800,color:c[1],background:c[1]+"14",padding:"1px 8px",borderRadius:20,marginBottom:4,whiteSpace:"nowrap"}}>{t>0?`${pct(n,t).toFixed(0)}%`:"—"}</div>
         <div style={{fontSize:12,fontWeight:700,color:"#1E293B",marginBottom:5}}>{n}</div>
       </div>
-      <div className={"ep-bar"+(anim?"":" ep-load")} style={{animationDelay:`${-i*0.19}s`,width:"100%",height:h,borderRadius:"8px 8px 3px 3px",background:`linear-gradient(180deg,${c[0]},${c[1]})`,boxShadow:`0 8px 18px -8px ${c[1]}90`,position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",inset:0,background:"linear-gradient(90deg,rgba(255,255,255,.28),rgba(255,255,255,0) 45%)"}}/>
+      <div className={"ep-bar"+(anim?"":" ep-load")} style={{animationDelay:`${-i*0.19}s`,width:"100%",height:h,borderRadius:"2px 2px 0 0",background:c[1],position:"relative",overflow:"hidden"}}>
+        
       </div>
     </div>);};
   const unMes=grupos.length===1;
@@ -1327,7 +1327,7 @@ function EstadoPadres({data,fSec,fMes}){
       .ep-col:hover .ep-bar{filter:brightness(1.08) saturate(1.1)}
     `}</style>
     {/* Encabezado con selector de periodo */}
-    <div style={{padding:"16px 20px",background:"linear-gradient(135deg,#1E293B 0%,#334155 100%)",color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+    <div style={{padding:"16px 20px",background:AZUL_MARCA,borderBottom:`3px solid ${NARANJA_MARCA}`,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
       <div>
         <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:"#FDBA74",fontWeight:700}}>Estado de padres</div>
         <div style={{fontSize:18,fontWeight:800,marginTop:2}}>{modo==="mes"?mes:`${mesesPeriodo[0]} – ${mesesPeriodo[mesesPeriodo.length-1]}`}{sec?<span style={{fontSize:12,fontWeight:500,color:"#CBD5E1"}}> · {data.secciones.find(s=>s.id===sec)?.nombre}</span>:null}</div>

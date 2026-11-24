@@ -1,140 +1,129 @@
 /* ════════════════════════════════════════════════════════════
-   Fondo y detalles del estilo de vidrio (tipo iOS)
+   ESTILO EJECUTIVO: fondo sobrio, superficies blancas sólidas, bordes finos,
+   esquinas casi rectas, tipografía serif y paleta de la escuela
+   (azul marino y naranja) en tonos profesionales.
    ════════════════════════════════════════════════════════════ */
-:root { color-scheme: light; }
+:root {
+  color-scheme: light;
+  --azul: #1B2A4A; --azul-2: #24365C; --naranja: #D9641E; --naranja-claro: #F0A46A;
+  --texto: #1F2937; --suave: #5B6576; --borde: #DCE1E8; --fondo: #F3F4F7;
+  --sombra: 0 1px 2px rgba(16, 24, 40, .05);
+  --letra-texto: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --letra-titulo: "Lora", Georgia, "Times New Roman", serif;
+}
 html, body { min-height: 100%; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  font-family: var(--letra-texto);
+  font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
-  color: #1E293B;
-  background:
-    radial-gradient(at 8% 8%, #FFD6B0 0, transparent 42%),
-    radial-gradient(at 92% 4%, #E9D5FF 0, transparent 40%),
-    radial-gradient(at 85% 88%, #BAE6FD 0, transparent 44%),
-    radial-gradient(at 6% 95%, #FBCFE8 0, transparent 40%),
-    radial-gradient(at 50% 50%, #FFF7ED 0, transparent 60%),
-    #F5F3FA;
-  background-attachment: fixed;
+  color: var(--texto);
+  background: var(--fondo);
+  font-variant-numeric: lining-nums;
 }
-/* Burbujas de color que flotan detrás del vidrio */
-body::before, body::after {
-  content: ""; position: fixed; z-index: 0; pointer-events: none; border-radius: 50%; filter: blur(60px); opacity: .55;
-}
-body::before { width: 420px; height: 420px; left: -80px; top: 30%; background: radial-gradient(circle, #FDBA74, transparent 70%); animation: burbuja1 22s ease-in-out infinite alternate; }
-body::after { width: 380px; height: 380px; right: -60px; top: 8%; background: radial-gradient(circle, #C4B5FD, transparent 70%); animation: burbuja2 26s ease-in-out infinite alternate; }
-@keyframes burbuja1 { to { transform: translate(140px, -120px) scale(1.15); } }
-@keyframes burbuja2 { to { transform: translate(-160px, 220px) scale(.9); } }
 #root { position: relative; z-index: 1; }
 
-/* Las superficies blancas se vuelven vidrio */
-div[style*="background: rgb(255, 255, 255)"], div[style*="background-color: rgb(255, 255, 255)"] {
-  background: rgba(255, 255, 255, .6) !important;
-  backdrop-filter: blur(18px) saturate(175%); -webkit-backdrop-filter: blur(18px) saturate(175%);
-}
-div[style*="background: rgb(248, 250, 252)"], div[style*="background: rgb(241, 245, 249)"] {
-  background: rgba(255, 255, 255, .42) !important;
-}
-div[style*="border-radius: 10px"][style*="border: 1px solid rgb(226, 232, 240)"],
-div[style*="border-radius: 12px"][style*="border: 1px solid rgb(226, 232, 240)"] {
-  border-radius: 20px !important; border-color: rgba(255, 255, 255, .75) !important;
-  box-shadow: 0 10px 30px rgba(30, 41, 59, .07), inset 0 1px 0 rgba(255, 255, 255, .9);
-}
-table tr { border-color: rgba(15, 23, 42, .06) !important; }
+/* Títulos con Lora; el resto del texto con Source Serif 4 */
+h1, h2, h3, h4, .titulo-marca, .cifra { font-family: var(--letra-titulo); letter-spacing: .1px; }
+h1, h2, h3, h4 { color: var(--azul); }
+table { font-variant-numeric: lining-nums tabular-nums; }
+th { letter-spacing: .4px; }
+button, input, select, textarea { font-family: inherit; }
 
-/* Campos: brillo naranja al escribir */
+/* Iconos con trazo más fino */
+svg.lucide { stroke-width: 1.75; }
+
+/* Sin desenfoques de vidrio */
+*, *::before, *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+
+/* Superficies translúcidas → blanco sólido */
+div[style*="background: rgba(255, 255, 255, 0.4"], div[style*="background: rgba(255, 255, 255, 0.5"],
+div[style*="background: rgba(255, 255, 255, 0.6"], div[style*="background: rgba(255, 255, 255, 0.7"],
+div[style*="background: rgba(255, 255, 255, 0.8"], div[style*="background: rgba(255, 255, 255, 0.9"] { background: #fff !important; }
+.vidrio-menu div[style*="background: rgba(255, 255, 255"] { background: rgba(255, 255, 255, .06) !important; }
+
+/* Esquinas: casi rectas en todo el sistema */
+[style*="border-radius: 30px;"], [style*="border-radius: 28px;"], [style*="border-radius: 26px;"], [style*="border-radius: 24px;"],
+[style*="border-radius: 22px;"], [style*="border-radius: 20px;"], [style*="border-radius: 18px;"], [style*="border-radius: 17px;"],
+[style*="border-radius: 16px;"], [style*="border-radius: 15px;"], [style*="border-radius: 14px;"] { border-radius: 6px !important; }
+[style*="border-radius: 12px;"], [style*="border-radius: 10px;"] { border-radius: 5px !important; }
+[style*="border-radius: 8px;"] { border-radius: 4px !important; }
+[style*="border-radius: 999px;"], [style*="border-radius: 99px;"] { border-radius: 3px !important; }
+/* Los puntos e indicadores pequeños siguen redondos */
+span[style*="border-radius: 999px;"][style*="width: 8px"], span[style*="border-radius: 999px;"][style*="width: 10px"],
+div[style*="border-radius: 999px;"][style*="height: 6px"], div[style*="border-radius: 999px;"][style*="height: 8px"] { border-radius: 999px !important; }
+
+/* Colores vivos escritos directo en las pantallas → su versión sobria */
+[style^="color: rgb(37, 99, 235)"], [style*="; color: rgb(37, 99, 235)"] { color: #2B4C7E !important; }
+[style^="color: rgb(124, 58, 237)"], [style*="; color: rgb(124, 58, 237)"], [style^="color: rgb(109, 40, 217)"], [style*="; color: rgb(109, 40, 217)"] { color: #4E4A7E !important; }
+[style^="color: rgb(5, 150, 105)"], [style*="; color: rgb(5, 150, 105)"], [style^="color: rgb(22, 163, 74)"], [style*="; color: rgb(22, 163, 74)"] { color: #2F6B4F !important; }
+[style^="color: rgb(220, 38, 38)"], [style*="; color: rgb(220, 38, 38)"] { color: #A33A3A !important; }
+[style^="color: rgb(249, 115, 22)"], [style*="; color: rgb(249, 115, 22)"] { color: #D9641E !important; }
+[style^="color: rgb(234, 88, 12)"], [style*="; color: rgb(234, 88, 12)"] { color: #C2571A !important; }
+[style^="color: rgb(30, 41, 59)"], [style*="; color: rgb(30, 41, 59)"], [style^="color: rgb(15, 23, 42)"], [style*="; color: rgb(15, 23, 42)"] { color: var(--azul) !important; }
+svg[color="#2563EB"] { color: #2B4C7E; } svg[color="#7C3AED"] { color: #4E4A7E; } svg[color="#059669"] { color: #2F6B4F; }
+svg[color="#DC2626"] { color: #A33A3A; } svg[color="#F97316"] { color: #D9641E; }
+/* Fondos de color sólido vivos (botones hechos a mano) */
+[style^="background: rgb(37, 99, 235)"], [style*="; background: rgb(37, 99, 235)"] { background: #2B4C7E !important; }
+[style^="background: rgb(124, 58, 237)"], [style*="; background: rgb(124, 58, 237)"] { background: #4E4A7E !important; }
+[style^="background: rgb(5, 150, 105)"], [style*="; background: rgb(5, 150, 105)"] { background: #2F6B4F !important; }
+[style^="background: rgb(220, 38, 38)"], [style*="; background: rgb(220, 38, 38)"] { background: #A33A3A !important; }
+[style^="background: rgb(249, 115, 22)"], [style*="; background: rgb(249, 115, 22)"] { background: #D9641E !important; }
+/* Fondos pastel → tonos neutros y cálidos */
+[style^="background: rgb(245, 243, 255)"], [style*="; background: rgb(245, 243, 255)"], [style^="background: rgb(237, 233, 254)"], [style*="; background: rgb(237, 233, 254)"] { background: #F1F1F6 !important; }
+[style^="background: rgb(239, 246, 255)"], [style*="; background: rgb(239, 246, 255)"], [style^="background: rgb(219, 234, 254)"], [style*="; background: rgb(219, 234, 254)"] { background: #EEF2F7 !important; }
+
+/* Tablas: encabezado azul marino tenue y filas con línea fina */
+table thead th { background: #F5F7FA; color: var(--azul) !important; font-weight: 600; text-transform: uppercase; font-size: 11px !important; border-bottom: 1px solid var(--borde) !important; }
+table tr { border-color: #E7EAF0 !important; }
+table tbody tr:hover > td { background: #FAFBFC; }
+
+/* Campos: borde azul marino al escribir */
 input:focus, select:focus, textarea:focus {
-  border-color: #FDBA74 !important;
-  box-shadow: 0 0 0 4px rgba(249, 115, 22, .16), inset 0 1px 3px rgba(15, 23, 42, .05) !important;
+  border-color: var(--azul) !important;
+  box-shadow: 0 0 0 3px rgba(27, 42, 74, .12) !important;
 }
-select { border-radius: 14px; }
+select { border-radius: 4px; }
 
-/* Botones: se levantan un poco al pasar y se hunden al tocarlos */
-button { transition: transform .18s ease, box-shadow .2s ease, background .2s ease, filter .2s ease; }
-button:not(:disabled):hover { filter: brightness(1.04); }
-button:not(:disabled):active { transform: scale(.97); }
-button[style*="border-radius: 999px"]:not(:disabled):hover { transform: translateY(-1px); }
-button[style*="border-radius: 999px"]:not(:disabled):active { transform: scale(.97); }
+/* Botones: sin saltos, solo un leve oscurecido */
+button { transition: background .15s ease, filter .15s ease, border-color .15s ease; }
+button:not(:disabled):hover { filter: brightness(.94); }
+button:not(:disabled):active { filter: brightness(.88); }
 
-/* Borde de luz de las tarjetas de vidrio (como el vidrio líquido de iOS) */
-div[style*="border-radius: 22px"][style*="blur(22px)"] { position: relative; }
-div[style*="border-radius: 22px"][style*="blur(22px)"]::before {
-  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
-  background: linear-gradient(135deg, rgba(255, 255, 255, .95), rgba(255, 255, 255, .15) 35%, rgba(255, 255, 255, .05) 60%, rgba(255, 255, 255, .7));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-}
+/* Tarjetas de indicadores del inicio */
+.tarjeta-kpi { transition: border-color .15s ease, box-shadow .15s ease; }
+.tarjeta-kpi:hover { box-shadow: 0 4px 12px rgba(16, 24, 40, .08) !important; }
 
-/* Burbujas de vidrio que suben despacio en el fondo */
-.burbujas { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
-.burbujas .burbuja {
-  position: absolute; bottom: -160px; border-radius: 50%;
-  background:
-    radial-gradient(circle at 30% 28%, rgba(255, 255, 255, .95) 0, rgba(255, 255, 255, .35) 12%, transparent 30%),
-    radial-gradient(circle at 70% 78%, rgba(255, 255, 255, .35) 0, transparent 35%),
-    radial-gradient(circle at 50% 50%, transparent 55%, var(--tono, rgba(249, 115, 22, .22)) 72%, rgba(255, 255, 255, .55) 100%);
-  box-shadow: inset 0 0 18px rgba(255, 255, 255, .5), 0 8px 24px rgba(30, 41, 59, .06);
-  animation: subir var(--t, 30s) linear infinite; animation-delay: var(--d, 0s);
-}
-/* Pulpi: nada despacio por el fondo, tenue como las burbujas */
-.pulpi { position: absolute; width: 150px; height: 158px; left: 0; top: 0; opacity: .32; filter: drop-shadow(0 10px 20px rgba(234, 88, 12, .15));
-  animation: pulpiNada 70s ease-in-out infinite; }
-.pulpi-flota { position: relative; width: 100%; height: 100%; animation: pulpiFlota 5s ease-in-out infinite; }
-.pulpi-pata { transform-origin: 0 0; animation: pulpiPata 2.6s ease-in-out infinite alternate; }
-.pulpi-burbuja { position: absolute; top: 4px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .9);
-  background: radial-gradient(circle at 32% 30%, rgba(255, 255, 255, .95), rgba(253, 186, 116, .25) 60%, transparent 70%);
-  animation: pulpiBurbuja 4.8s ease-in infinite; opacity: 0; }
-@keyframes pulpiNada {
-  0% { transform: translate(6vw, 72vh) rotate(-6deg); }
-  25% { transform: translate(38vw, 46vh) rotate(4deg); }
-  50% { transform: translate(78vw, 64vh) rotate(-4deg); }
-  75% { transform: translate(60vw, 18vh) rotate(6deg); }
-  100% { transform: translate(6vw, 72vh) rotate(-6deg); }
-}
-@keyframes pulpiFlota { 0%, 100% { transform: translateY(0) scale(1, 1); } 45% { transform: translateY(-14px) scale(.97, 1.04); } 70% { transform: translateY(-6px) scale(1.03, .97); } }
-@keyframes pulpiPata { from { transform: rotate(-9deg); } to { transform: rotate(9deg); } }
-@keyframes pulpiBurbuja { 0% { transform: translateY(0) scale(.6); opacity: 0; } 15% { opacity: .9; } 100% { transform: translate(10px, -90px) scale(1.15); opacity: 0; } }
-@media (max-width: 768px) { .pulpi { width: 96px; height: 101px; } }
-
-@keyframes subir {
-  0% { transform: translate(0, 0) scale(1); opacity: 0; }
-  8% { opacity: 1; }
-  50% { transform: translate(var(--dx, 40px), -55vh) scale(1.05); }
-  92% { opacity: 1; }
-  100% { transform: translate(0, -115vh) scale(.95); opacity: 0; }
-}
+/* Fondo decorativo (burbujas y Pulpi) apagado en el estilo ejecutivo */
+.burbujas { display: none; }
 
 /* Barras de desplazamiento finas */
-* { scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, .35) transparent; }
+* { scrollbar-width: thin; scrollbar-color: rgba(91, 101, 118, .35) transparent; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, .35); border-radius: 99px; }
+::-webkit-scrollbar-thumb { background: rgba(91, 101, 118, .35); border-radius: 2px; }
 
-@media (prefers-reduced-motion: reduce) { body::before, body::after { animation: none; } .burbujas { display: none; } }
-@media print { body { background: #fff !important; } body::before, body::after, .burbujas { display: none; } }
+@media print { body { background: #fff !important; } .burbujas { display: none; } }
 
-/* Menú lateral: vidrio azul oscuro con naranja */
+/* Menú lateral: azul marino sólido con acento naranja */
 .vidrio-menu {
-  background: linear-gradient(180deg, rgba(30, 41, 59, .86) 0%, rgba(15, 23, 42, .9) 100%);
-  backdrop-filter: blur(26px) saturate(170%); -webkit-backdrop-filter: blur(26px) saturate(170%);
-  border: 1px solid rgba(255, 255, 255, .12);
-  box-shadow: 0 20px 50px rgba(15, 23, 42, .35), inset 0 1px 0 rgba(255, 255, 255, .12);
+  background: var(--azul);
+  border-right: 1px solid #142039;
+  box-shadow: 2px 0 10px rgba(16, 24, 40, .12);
 }
 .menu-item { position: relative; }
-.menu-item:not(.activo):hover { background: rgba(255, 255, 255, .08) !important; color: #fff !important; }
-.menu-item.activo { animation: burbujaEntra .45s cubic-bezier(.34, 1.56, .64, 1); }
-@keyframes burbujaEntra { 0% { transform: scale(.9); } 100% { transform: scale(1); } }
+.menu-item:not(.activo):hover { background: rgba(255, 255, 255, .06) !important; color: #fff !important; }
+.vidrio-menu nav button:not(.menu-item):hover { color: #fff !important; }
 
-/* Barra superior de vidrio claro */
+/* Barra superior: blanca con línea inferior */
 .vidrio-barra {
-  background: rgba(255, 255, 255, .55);
-  backdrop-filter: blur(26px) saturate(190%); -webkit-backdrop-filter: blur(26px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, .8);
-  box-shadow: 0 16px 40px rgba(30, 41, 59, .10), inset 0 1px 0 rgba(255, 255, 255, .95);
+  background: #fff;
+  border-bottom: 1px solid var(--borde);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
 }
 
 @media (max-width: 768px) { .hide-mobile { display: none !important; } }
 
 /* El logo del menú se queda sobre blanco sólido */
-.vidrio-menu div[style*="background: rgb(255, 255, 255)"] { background: #fff !important; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.vidrio-menu div[style*="background: rgb(255, 255, 255)"] { background: #fff !important; }
 
 /* En celular, con el menú abierto se esconde el botón del asistente */
 body:has(.vidrio-menu[style*="left: 10px"]) button[title="Asistente financiero con IA"] { display: none !important; }
@@ -172,9 +161,9 @@ header.vidrio-barra > div:last-child { flex: 0 1 auto; }
   table.tabla-tarjetas, table.tabla-tarjetas > tbody { display: block; width: 100% !important; min-width: 0 !important; }
   table.tabla-tarjetas > thead { display: none; }
   table.tabla-tarjetas > tbody > tr {
-    display: block; margin-bottom: 10px; padding: 10px 14px; border-radius: 18px;
-    background: rgba(255, 255, 255, .62); border: 1px solid rgba(255, 255, 255, .85) !important;
-    box-shadow: 0 6px 18px rgba(30, 41, 59, .07), inset 0 1px 0 rgba(255, 255, 255, .9);
+    display: block; margin-bottom: 10px; padding: 10px 14px; border-radius: 6px;
+    background: #fff; border: 1px solid var(--borde) !important; border-left: 3px solid var(--azul) !important;
+    box-shadow: var(--sombra);
   }
   table.tabla-tarjetas > tbody > tr > td {
     display: flex; justify-content: space-between; align-items: center; gap: 12px;
@@ -206,7 +195,7 @@ header.vidrio-barra > div:last-child { flex: 0 1 auto; }
   }
   main div[style*="flex-wrap: wrap"] > div[style*="position: relative"]:has(> input) > input { width: 100% !important; }
   /* Tarjetas con menos relleno para aprovechar la pantalla */
-  div[style*="border-radius: 22px"][style*="blur(22px)"] { padding: 14px !important; }
+  div[style*="border-radius: 6px"][style*="padding: 20px"] { padding: 14px !important; }
   /* Formularios de dos columnas pasan a una (los contadores pequeños no) */
   div[style*="grid-template-columns: 1fr 1fr"]:has(> div > label), div[style*="grid-template-columns: 1fr 1fr"]:has(> div > input) { grid-template-columns: 1fr !important; }
   /* Si la primera columna es solo el número, el título de la tarjeta es la segunda */
@@ -218,45 +207,39 @@ header.vidrio-barra > div:last-child { flex: 0 1 auto; }
   table.tabla-num > tbody > tr > td:nth-child(2)::before { content: none; }
 }
 
-/* Ventanas emergentes: vidrio casi sólido para que se lean bien */
+/* Ventanas emergentes: blancas, con sombra marcada */
 div[style*="position: fixed"] > div[style*="background: rgb(255, 255, 255)"] {
-  background: rgba(255, 255, 255, .93) !important;
-  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
-  box-shadow: 0 30px 70px rgba(15, 23, 42, .28), inset 0 1px 0 rgba(255, 255, 255, .95);
+  background: #fff !important;
+  box-shadow: 0 24px 60px rgba(16, 24, 40, .28);
 }
 
-/* ════════════════════════════════════════════════════════════
-   VIDRIO AHUMADO (como las notificaciones del iPhone): para lo que flota
-   encima del contenido — avisos, botón del asistente, botón atrás.
-   ════════════════════════════════════════════════════════════ */
+/* Elementos que flotan encima del contenido: avisos, botón del asistente, botón atrás */
 .vidrio-ahumado {
-  background: rgba(38, 38, 42, .58) !important;
-  backdrop-filter: blur(28px) saturate(170%); -webkit-backdrop-filter: blur(28px) saturate(170%);
-  border: 1px solid rgba(255, 255, 255, .20) !important;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .14) !important;
+  background: var(--azul) !important;
+  border: 1px solid #2D4069 !important;
+  box-shadow: 0 10px 28px rgba(16, 24, 40, .25) !important;
   color: #fff;
 }
-button.vidrio-ahumado svg { color: #FDBA74; }
+button.vidrio-ahumado svg { color: var(--naranja-claro); }
 
-/* Aviso tipo notificación: baja desde arriba, como en el iPhone */
+/* Aviso tipo notificación: baja desde arriba */
 .aviso-flotante, .aviso-flotante.centrado {
   position: fixed; z-index: 999; top: 14px; left: 50%; right: auto; bottom: auto; transform: translateX(-50%);
   width: max-content; max-width: min(420px, calc(100vw - 24px));
-  display: flex; align-items: center; gap: 12px; padding: 12px 18px 12px 12px; border-radius: 22px;
-  font-size: 14px; font-weight: 600; line-height: 1.35; animation: avisoBaja .4s cubic-bezier(.2, .9, .3, 1.15);
+  display: flex; align-items: center; gap: 12px; padding: 12px 18px 12px 12px; border-radius: 6px;
+  border-left: 3px solid var(--naranja) !important;
+  font-size: 14px; font-weight: 600; line-height: 1.35; animation: avisoBaja .3s ease-out;
 }
-.aviso-icono { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; color: #fff; }
-@keyframes avisoBaja { from { opacity: 0; transform: translate(-50%, -24px) scale(.96); } to { opacity: 1; transform: translateX(-50%); } }
+.aviso-icono { width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; color: #fff; }
+@keyframes avisoBaja { from { opacity: 0; transform: translate(-50%, -16px); } to { opacity: 1; transform: translateX(-50%); } }
 
-/* Fondo de las ventanas emergentes: oscuro y desenfocado */
-div[style*="position: fixed"][style*="inset: 0px"][style*="background: rgba(0, 0, 0"] {
-  backdrop-filter: blur(6px) saturate(120%); -webkit-backdrop-filter: blur(6px) saturate(120%);
-}
+/* Fondo de las ventanas emergentes: oscuro */
+div[style*="position: fixed"][style*="inset: 0px"][style*="background: rgba(0, 0, 0"] { background: rgba(16, 24, 40, .55) !important; }
 
 /* Botón atrás (celular) */
 .boton-atras {
-  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; cursor: pointer; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center; color: #EA580C;
-  background: rgba(255, 255, 255, .8); border: 1px solid rgba(15, 23, 42, .10); box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+  width: 34px; height: 34px; border-radius: 4px; flex-shrink: 0; cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--azul);
+  background: #fff; border: 1px solid #CDD3DC;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
