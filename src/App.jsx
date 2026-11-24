@@ -9,7 +9,8 @@ import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
 import { SelectorFondo } from "./fondo";
 import { useModulos, ModulosPanel } from "./modulos";
-import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
+import { useMarca, LogoEditable, TextoEditable, guardarMarca, guardarEtiqueta, mostrarPestana, ocultarPestana, ConfirmarConClave, PersonalizarPanel, ClaveSeguridadPanel, PESTANAS_FIJAS } from "./marca";
+import { DocenteApp, PESTANAS_DOCENTE, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
   Plus, Trash2, Edit, Search, Calendar, X, Eye,
@@ -691,6 +692,11 @@ export default function App() {
   // Recorrido guiado y novedades de administración
   // Módulos activos de esta institución (Configuración → Sistema y respaldos)
   const modulos = useModulos(session);
+  // Plantilla personalizable: logo, nombre y nombres de pestañas (Configuración → Sistema y respaldos)
+  const marca = useMarca();
+  const [personalizando, setPersonalizando] = useState(false);
+  const [ocultarPest, setOcultarPest] = useState(null);
+  useEffect(() => { document.title = marca.nombreO("Seeds English School") + " · " + marca.subtituloO("Sistema de Gestión"); }, [marca.nombre, marca.subtitulo]);
   const recorrido = useRecorrido(rol.estado==="admin"&&!vistaDocente&&modulos.listo?session:null, "admin", (n)=>modulos.activo(n.modulo));
   const cambiarVista = (docente) => { setVistaDocente(docente); try{localStorage.setItem("seeds_vista",docente?"docente":"admin");}catch(e){} };
 
@@ -753,17 +759,17 @@ export default function App() {
 
   const logout = async () => { await supabase.auth.signOut(); setSession(null); };
 
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC"}}><div style={{textAlign:"center"}}><img src={LOGO_SEEDS} alt="Seeds" style={{width:80,height:80,objectFit:"contain",marginBottom:12}}/><p style={{color:"#64748B"}}>Cargando Seeds...</p></div></div>;
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC"}}><div style={{textAlign:"center"}}><img src={marca.logoSrc} alt="" style={{width:80,height:80,objectFit:"contain",marginBottom:12}}/><p style={{color:"#64748B"}}>Cargando…</p></div></div>;
   if (!session) return <LoginPage showToast={showToast} toast={toast} />;
   if (rol.estado === "cargando") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC",color:"#64748B",fontSize:14}}>Cargando…</div>;
   if (rol.estado === "docente" && !modulos.listo) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC",color:"#64748B",fontSize:14}}>Cargando…</div>;
   if (rol.estado === "docente" && !modulos.activo("docentes")) return <PantallaMensaje titulo="El portal docente no está activo" texto="Administración desactivó el portal docente en esta institución." onSalir={logout} />;
   if (rol.estado === "docente") return <DocenteApp session={session} perfil={rol.perfil} />;
   if (rol.estado === "admin" && rol.perfil?.maestro_id && vistaDocente && modulos.activo("docentes")) return <DocenteApp session={session} perfil={rol.perfil} onVolver={()=>cambiarVista(false)} />;
-  if (rol.estado === "sin_acceso") return <PantallaMensaje titulo="Tu usuario no tiene acceso" texto="Pide a administración de Seeds que te dé acceso al sistema." onSalir={logout} />;
+  if (rol.estado === "sin_acceso") return <PantallaMensaje titulo="Tu usuario no tiene acceso" texto="Pide a administración que te dé acceso al sistema." onSalir={logout} />;
 
   // Menú agrupado: cada grupo es un submenú que se abre y se cierra
-  const GRUPOS = [
+  const GRUPOS_TODOS = [
     {id:"inicio",label:null,items:[{id:"dashboard",label:"Inicio",icon:Home}]},
     {id:"escuela",label:"Escuela y alumnado",icon:GraduationCap,items:[
       {id:"secciones",label:"Secciones",icon:BookOpen},{id:"maestros",label:"Maestros",icon:GraduationCap},
@@ -782,8 +788,10 @@ export default function App() {
       {id:"c_apertura",label:"Apertura",icon:Edit},{id:"c_catalogo",label:"Catálogo de cuentas",icon:ClipboardList}]},
     {id:"sistema_g",label:"Configuración",icon:Edit,items:[
       {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema y respaldos",icon:LogIn}]},
-  ].map(g=>modulos.activo(g.modulo)?{...g,items:g.items.filter(it=>modulos.activo(it.modulo))}:null).filter(g=>g&&g.items.length);
-  const NAV = GRUPOS.flatMap(g=>g.items.map(it=>({...it,grupo:g.label})));
+  ].map(g=>modulos.activo(g.modulo)?{...g,label:g.label&&marca.etiqueta("g:"+g.id,g.label),items:g.items.filter(it=>modulos.activo(it.modulo)).map(it=>({...it,labelOriginal:it.label,label:marca.etiqueta("n:"+it.id,it.label),grupoId:g.id}))}:null).filter(g=>g&&g.items.length);
+  // Pestañas ocultas: no se ven en el menú (al personalizar se ven en gris para poder mostrarlas)
+  const GRUPOS = GRUPOS_TODOS.map(g=>({...g,items:g.items.filter(it=>personalizando||!marca.oculta(it.id))})).filter(g=>g.items.length);
+  const NAV = GRUPOS_TODOS.flatMap(g=>g.items.filter(it=>!marca.oculta(it.id)).map(it=>({...it,grupo:g.label})));
   // Si la página abierta es de un módulo que se apagó, se muestra Inicio
   const pageVisible = NAV.some(n=>n.id===page) ? page : "dashboard";
 
@@ -837,27 +845,42 @@ export default function App() {
     reportes:<>{modulos.activo("contador")&&<UsoSistemaPanel secciones={NAV} showToast={showToast}/>}<ReportesPage {...propsSuc}/></>,
     docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
     config:<ConfiguracionPage {...props}/>,
-    sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}/>,
+    sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}
+      personalizar={{grupos:GRUPOS_TODOS.filter(g=>g.label),pestanas:GRUPOS_TODOS.flatMap(g=>g.items),pestanasDocente:modulos.activo("docentes")?PESTANAS_DOCENTE.filter(n=>modulos.activo(n.modulo)):[],onEditarMenu:()=>{setPersonalizando(true);setSidebarOpen(true);}}}/>,
   };
 
   return (
     <div style={{display:"flex",height:"100vh",background:"transparent"}}>
       {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.25)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",zIndex:40}}/>}
       <aside className="vidrio-menu" style={{position:"fixed",left:sidebarOpen?10:-280,top:10,bottom:10,width:240,color:"#fff",zIndex:50,transition:"left 0.25s cubic-bezier(.2,.8,.2,1)",display:"flex",flexDirection:"column",borderRadius:6,overflow:"hidden",...(window.innerWidth>768?{position:"relative",left:0,top:0,bottom:0,margin:0,borderRadius:0}:{})}}>
-        <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,.08)",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-          <div style={{background:"#fff",borderRadius:4,padding:6,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <img src={LOGO_SEEDS} alt="Seeds" style={{width:96,height:96,objectFit:"contain"}}/>
+        <div style={{position:"relative",padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,.08)",display:"flex",flexDirection:"column",alignItems:"center",gap:8,background:personalizando?"rgba(217,100,30,.12)":"transparent"}}>
+          {!personalizando&&<button onClick={()=>setPersonalizando(true)} title="Personalizar logo, nombre y pestañas" aria-label="Personalizar" style={{position:"absolute",top:8,right:8,background:"rgba(255,255,255,.08)",border:"1px solid rgba(255,255,255,.15)",borderRadius:3,color:"#C9D2E0",cursor:"pointer",fontSize:11,padding:"3px 7px",fontFamily:"inherit"}}>✏️</button>}
+          <LogoEditable src={marca.logoSrc} editando={personalizando} tam={96} showToast={showToast}/>
+          <div style={{textAlign:"center",width:"100%"}}>
+            <div className="titulo-marca" style={{fontWeight:700,fontSize:17,color:"#fff",letterSpacing:.3}}><TextoEditable oscuro editando={personalizando} valor={marca.nombreO("Seeds English")} max={50} titulo="Cambiar nombre de la institución" onGuardar={t=>guardarMarca({nombre:t.trim()||null},showToast,"Nombre actualizado")} estilo={{color:"#fff"}}/></div>
+            <div style={{fontSize:10.5,color:"#F0A46A",textTransform:"uppercase",letterSpacing:1.4,marginTop:3,fontWeight:600}}><TextoEditable oscuro editando={personalizando} valor={marca.subtituloO("Sistema de Gestión")} max={40} titulo="Cambiar subtítulo" onGuardar={t=>guardarMarca({subtitulo:t.trim()||null},showToast,"Subtítulo actualizado")} estilo={{color:"#F0A46A"}}/></div>
           </div>
-          <div style={{textAlign:"center"}}><div className="titulo-marca" style={{fontWeight:700,fontSize:17,color:"#fff",letterSpacing:.3}}>Seeds English</div><div style={{fontSize:10.5,color:"#F0A46A",textTransform:"uppercase",letterSpacing:1.4,marginTop:3,fontWeight:600}}>Sistema de Gestión</div></div>
+          {personalizando&&<div style={{fontSize:11.5,color:"#F6D3B8",textAlign:"center",lineHeight:1.4}}>Toque la foto o cualquier nombre con ✏️ para cambiarlo.</div>}
+          {personalizando&&<button onClick={()=>setPersonalizando(false)} style={{...btn(),padding:"6px 16px",fontSize:12.5}}>✓ Listo</button>}
         </div>
         <nav style={{flex:1,padding:"10px 10px",overflowY:"auto"}}>
           {GRUPOS.map(g=>{
             const activoAqui=g.items.some(it=>it.id===page);
-            const abierto=!g.label||activoAqui||gruposAbiertos[g.id];
+            const abierto=!g.label||activoAqui||gruposAbiertos[g.id]||personalizando;
             const GIcon=g.icon;
             return(<div key={g.id} style={{marginBottom:4}}>
-              {g.label&&<button data-tour={"g-"+g.id} onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui?"#F0A46A":"#C9D2E0",fontSize:11.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16}/><span style={{flex:1}}>{g.label}</span><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>}
-              {abierto&&g.items.map(n=>{const Icon=n.icon;const a=page===n.id;return(
+              {g.label&&personalizando&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",color:"#F0A46A",fontSize:11.5,fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16} style={{flexShrink:0}}/><span style={{flex:1,minWidth:0}}><TextoEditable oscuro editando valor={g.label} max={30} titulo="Cambiar nombre del grupo" onGuardar={t=>guardarEtiqueta("g:"+g.id,t,showToast)} estilo={{color:"inherit"}}/></span></div>}
+              {g.label&&!personalizando&&<button data-tour={"g-"+g.id} onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui?"#F0A46A":"#C9D2E0",fontSize:11.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16}/><span style={{flex:1}}>{g.label}</span><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>}
+              {abierto&&g.items.map(n=>{const Icon=n.icon;const a=page===n.id;
+                if(personalizando){const oculta=marca.oculta(n.id);return(
+                <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:g.label?"6px 8px 6px 30px":"8px 8px 8px 14px",marginBottom:2,color:"#C9D2E0",fontSize:13,opacity:oculta?.45:1}}>
+                  <Icon size={15} style={{flexShrink:0}}/>
+                  <span style={{flex:1,minWidth:0}}><TextoEditable oscuro editando valor={n.label} max={40} titulo="Cambiar nombre de la pestaña" onGuardar={t=>guardarEtiqueta("n:"+n.id,t,showToast)} estilo={{color:"inherit"}}/></span>
+                  {PESTANAS_FIJAS.includes(n.id)?null:oculta
+                    ?<button onClick={async()=>{const e=await mostrarPestana(n.id);showToast(e||`${n.label}: visible otra vez`,e?"error":"success");}} title="Volver a mostrar" aria-label={"Mostrar "+n.label} style={{flexShrink:0,background:"none",border:"1px solid rgba(255,255,255,.25)",borderRadius:3,color:"#fff",cursor:"pointer",fontSize:11,padding:"2px 6px",fontFamily:"inherit"}}>Mostrar</button>
+                    :<button onClick={()=>setOcultarPest(n)} title="Ocultar esta pestaña (pide clave)" aria-label={"Ocultar "+n.label} style={{flexShrink:0,background:"none",border:"none",color:"#FCA5A5",cursor:"pointer",padding:2,display:"flex"}}><Trash2 size={14}/></button>}
+                </div>);}
+                return(
                 <button key={n.id} data-tour={"n-"+n.id} className={"menu-item"+(a?" activo":"")} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:g.label?"8px 14px 8px 30px":"10px 14px",marginBottom:2,border:"none",borderLeft:a?"3px solid #D9641E":"3px solid transparent",borderRadius:3,cursor:"pointer",background:a?"rgba(255,255,255,.09)":"transparent",color:a?"#fff":"#B8C2D3",fontSize:13,fontWeight:a?600:400,textAlign:"left",fontFamily:"inherit"}}><Icon size={15}/>{n.label}</button>
               );})}
             </div>);
@@ -891,6 +914,9 @@ export default function App() {
       </main>
       {modulos.activo("asistente")&&<AsistenteIA data={dataSuc} session={session} nombreSucursal={data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||""}/>}
       <Recorrido estado={recorrido} pasos={PASOS_ADMIN.filter(p=>modulos.activo(p.modulo))} abrirMenu={setSidebarOpen} irA={setPage}/>
+      {ocultarPest&&<ConfirmarConClave titulo={`Ocultar «${ocultarPest.label}»`} que="ocultar una pestaña"
+        consecuencia={<>La pestaña <strong>{ocultarPest.label}</strong> dejará de verse en el menú para todos. <strong>No se borra ningún dato</strong>: puede volver a mostrarla al personalizar o en Configuración → Sistema y respaldos.</>}
+        textoBoton="Ocultar pestaña" accion={c=>ocultarPestana(ocultarPest.id,c)} onCerrar={()=>setOcultarPest(null)} onListo={()=>showToast(`${ocultarPest.label}: oculta`)}/>}
       {toast&&<div className="vidrio-ahumado aviso-flotante" role="status">
         <span className="aviso-icono" style={{background:toast.type==="success"?"#10B981":"#EF4444"}}>{toast.type==="success"?"✓":"!"}</span>
         <span>{toast.msg}</span>
@@ -1116,6 +1142,7 @@ function AsistenteIA({data,session,nombreSucursal}){
 
 // ── LOGIN (Supabase Auth) ──
 function LoginPage({showToast,toast}){
+  const marca=useMarca();
   const[email,setEmail]=useState("");const[pass,setPass]=useState("");const[error,setError]=useState("");const[show,setShow]=useState(false);const[busy,setBusy]=useState(false);
   const go=async()=>{
     if(!email||!pass){setError("Completa todos los campos");return;}
@@ -1127,7 +1154,7 @@ function LoginPage({showToast,toast}){
   return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:AZUL_MARCA,padding:20}}>
       <div style={{background:"#fff",borderRadius:6,borderTop:"4px solid #D9641E",padding:"40px 36px",width:"100%",maxWidth:380,boxShadow:"0 20px 50px rgba(0,0,0,0.3)"}}>
-        <div style={{textAlign:"center",marginBottom:28}}><img src={LOGO_SEEDS} alt="Seeds English School" style={{width:190,height:190,objectFit:"contain",marginBottom:4}}/><h1 style={{fontSize:23,fontWeight:700,color:"#1B2A4A",margin:0}}>Seeds English School</h1><p style={{fontSize:13,color:"#64748B",margin:"6px 0 0"}}>Sistema de Gestión Escolar</p></div>
+        <div style={{textAlign:"center",marginBottom:28}}><img src={marca.logoSrc} alt={marca.nombreO("Seeds English School")} style={{width:190,height:190,objectFit:"contain",marginBottom:4}}/><h1 style={{fontSize:23,fontWeight:700,color:"#1B2A4A",margin:0}}>{marca.nombreO("Seeds English School")}</h1><p style={{fontSize:13,color:"#64748B",margin:"6px 0 0"}}>{marca.subtituloO("Sistema de Gestión Escolar")}</p></div>
         <div style={{marginBottom:16}}><label style={label}>Correo electrónico</label><div style={{position:"relative"}}><Mail size={16} style={{position:"absolute",left:10,top:11,color:"#94A3B8"}}/><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@correo.com" type="email" style={{...input,paddingLeft:34}} onKeyDown={e=>e.key==="Enter"&&go()}/></div></div>
         <div style={{marginBottom:20}}><label style={label}>Contraseña</label><div style={{position:"relative"}}><LogIn size={16} style={{position:"absolute",left:10,top:11,color:"#94A3B8"}}/><input value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" type={show?"text":"password"} style={{...input,paddingLeft:34}} onKeyDown={e=>e.key==="Enter"&&go()}/><button onClick={()=>setShow(!show)} style={{position:"absolute",right:8,top:7,background:"none",border:"none",cursor:"pointer",color:"#94A3B8"}}><Eye size={16}/></button></div></div>
         {error&&<div style={{padding:"8px 12px",background:"#FEF2F2",color:"#DC2626",borderRadius:6,fontSize:12,marginBottom:14,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={14}/>{error}</div>}
@@ -2824,7 +2851,7 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
 }
 
 // ── SISTEMA (usuarios, respaldos) ──
-function SistemaPage({data,loadData,showToast,session}){
+function SistemaPage({data,loadData,showToast,session,personalizar}){
   const exportar=()=>{
     const backup={fecha:new Date().toISOString(),version:5,...data};
     const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
@@ -2846,6 +2873,8 @@ function SistemaPage({data,loadData,showToast,session}){
     e.target.value="";
   };
   return(<div>
+    <PersonalizarPanel showToast={showToast} {...personalizar}/>
+    <ClaveSeguridadPanel showToast={showToast}/>
     <ModulosPanel showToast={showToast}/>
     <div style={card}>
       <h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 10px"}}>👤 Tu cuenta</h3>
