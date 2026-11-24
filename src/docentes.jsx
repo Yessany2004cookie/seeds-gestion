@@ -3,6 +3,7 @@
 // seguridad de la base de datos: supabase/roles_docentes.sql).
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { supabase } from "./supabaseClient";
+import { cargarIgnorados, ignorarAlerta } from "./ajustes";
 import { card, input, btn, btnO, label, badge } from "./estilo";
 import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
 import { FormularioClase, AdminChecklist } from "./formulario";
@@ -970,11 +971,13 @@ export function AccesoDocente({ maestro, perfiles, recargar, showToast }) {
 // ════════════════════════════════════════════════════════════
 const DIAS_SIN_ASISTENCIA = 60;
 const leerIgnorados = () => { try { return JSON.parse(localStorage.getItem("seeds_inactividad_ignorados")) || {}; } catch (e) { return {}; } };
+// Lo que se ignora se guarda en la base de datos (alertas_ignoradas): lo ven todas las cuentas de administración
 
 export function AlertasInactividad({ data, loadData, showToast }) {
   const [regs, setRegs] = useState(null); // null = sin datos (módulo no activo o cargando)
   const [ultimas, setUltimas] = useState({}); // alumno_id -> última fecha que asistió (de cualquier época)
   const [ignorados, setIgnorados] = useState(leerIgnorados);
+  useEffect(() => { cargarIgnorados().then(setIgnorados); }, []);
   const [ocupado, setOcupado] = useState(null);
   const desde = new Date(Date.now() - DIAS_SIN_ASISTENCIA * 86400000).toLocaleDateString("en-CA");
 
@@ -1029,9 +1032,9 @@ export function AlertasInactividad({ data, loadData, showToast }) {
     loadData();
   };
   const ignorar = (a) => {
-    const n = { ...leerIgnorados(), [a.id]: hoyMs + 30 * 86400000 };
-    try { localStorage.setItem("seeds_inactividad_ignorados", JSON.stringify(n)); } catch (e) { /* sin almacenamiento */ }
-    setIgnorados(n);
+    const hasta = hoyMs + 30 * 86400000;
+    setIgnorados((p) => ({ ...p, [a.id]: hasta }));
+    ignorarAlerta(a.id, hasta).then((err) => { if (err) showToast("No se pudo guardar en la base de datos; solo quedó en este navegador", "error"); });
   };
   const th = { textAlign: "left", padding: "8px 10px", fontSize: 11, color: "#9A3412", textTransform: "uppercase", letterSpacing: 0.4, borderBottom: "1px solid #FED7AA" };
   const td = { padding: "10px", borderBottom: "1px solid #FFEDD5", fontSize: 13, verticalAlign: "middle" };

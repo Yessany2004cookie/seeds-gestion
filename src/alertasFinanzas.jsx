@@ -7,6 +7,7 @@
 // ════════════════════════════════════════════════════════════
 import { useState, useMemo } from "react";
 import { input, label, btn, btnO } from "./estilo";
+import { useAjuste } from "./ajustes";
 import { useMarca } from "./marca";
 import { Phone, Info, FileSpreadsheet, FileText, Download, Eye, X } from "lucide-react";
 import "./alertasFinanzas.css";
@@ -23,8 +24,6 @@ const telWA = (tel) => {
   if (d.length === 8) d = "504" + d;
   return d;
 };
-const leerNum = (k, def) => { try { const v = localStorage.getItem(k); return v === null ? def : Number(v); } catch (e) { return def; } };
-const guardarNum = (k, v) => { try { localStorage.setItem(k, String(v)); } catch (e) {} };
 
 // Año de un cobro: el guardado o el de su fecha de emisión
 const anioDe = (f) => Number(f.anio_correspondiente) || Number(String(f.fecha_emision || "").slice(0, 4)) || new Date().getFullYear();
@@ -92,11 +91,12 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
   const [tab, setTab] = useState("deudores");
   const [filtro, setFiltro] = useState("todos"); // todos | rojo | retirados
   const sugeridoFijos = useMemo(() => gastosFijosSugeridos(data), [data]);
-  const [fijos, setFijosRaw] = useState(() => leerNum("seeds_gastos_fijos", 0));
+  // Guardados en la base de datos (tabla ajustes_sistema), no solo en este navegador
+  const [fijos, setFijosRaw] = useAjuste("gastos_fijos", 0);
   const fijosMes = fijos > 0 ? fijos : sugeridoFijos;
-  const setFijos = (v) => { const n = Math.max(0, Number(v) || 0); setFijosRaw(n); guardarNum("seeds_gastos_fijos", n); };
-  const [margenMin, setMargenRaw] = useState(() => leerNum("seeds_margen_min", 15));
-  const setMargen = (v) => { const n = Math.min(90, Math.max(0, Number(v) || 0)); setMargenRaw(n); guardarNum("seeds_margen_min", n); };
+  const setFijos = (v) => setFijosRaw(Math.max(0, Number(v) || 0));
+  const [margenMin, setMargenRaw] = useAjuste("margen_min", 15);
+  const setMargen = (v) => setMargenRaw(Math.min(90, Math.max(0, Number(v) || 0)));
   // Mes para medir la cobranza: el mes anterior (ya vencido)
   const mesPrevIdx = (hoy.getMonth() + 11) % 12;
   const [mesCob, setMesCob] = useState(MESES[mesPrevIdx]);
