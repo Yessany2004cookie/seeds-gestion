@@ -64,7 +64,7 @@ function saldosSugeridos(data) {
 
 // ── Cobrado (facturado) vs. pagado de las mensualidades de un mes ──
 // Igual que la contabilidad: un cobro por alumno, mes y año. Solo lectura: no cambia nada.
-function cobranzaDelMes(facturas, anio, mes) {
+export function cobranzaDelMes(facturas, anio, mes) {
   const anioF = (f) => Number(f.anio_correspondiente) || Number(String(f.fecha_emision || "").slice(0, 4));
   const grupos = {};
   (facturas || []).filter((f) => (f.tipo_factura || "cobro") === "cobro" && f.estado !== "anulada" && MESES.indexOf(f.mes_correspondiente) + 1 === mes && anioF(f) === anio)

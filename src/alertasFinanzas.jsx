@@ -10,6 +10,7 @@ import { input, label, btn, btnO } from "./estilo";
 import { useMarca } from "./marca";
 import { Phone, Info, FileSpreadsheet, FileText, Download, Eye, X } from "lucide-react";
 import "./alertasFinanzas.css";
+import { alertasDelSistema } from "./resumenMes";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const L = (n) => `L ${Math.round(Number(n) || 0).toLocaleString("es-HN")}`;
@@ -39,7 +40,7 @@ const cuotaDe = (al, sec) => (al.beca === true ? 0 : (Number(al.monto_personaliz
 const esActivo = (al) => (al.estado || "activo") === "activo";
 
 // Gastos fijos del mes: la última renta + la última luz + el último internet/agua registrados
-function gastosFijosSugeridos(data) {
+export function gastosFijosSugeridos(data) {
   const regs = [
     ...(data.gastos || []).map((g) => ({ t: g.tipo, d: g.descripcion, m: Number(g.monto) || 0, f: g.fecha || g.created_at || "" })),
     ...(data.cuentas_por_pagar || []).map((c) => ({ t: c.tipo, d: c.descripcion, m: Number(c.monto) || 0, f: c.created_at || "" })),
@@ -181,7 +182,9 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
     (data.facturas || []).filter((f) => f.tipo_factura === "comprobante" && f.cobro_id && f.estado !== "anulada").forEach((f) => m.set(f.cobro_id, [...(m.get(f.cobro_id) || []), f]));
     return [...m.values()].filter((v) => v.length > 1);
   }, [data.facturas]);
-  const nOtras = cxpAtrasadas.length + repetidos.length + compRepetidos.length;
+  // Alertas del mes (planilla, servicios, cobranza) y revisión de datos del sistema
+  const { alertas: delSistema, resumen: resMes } = useMemo(() => alertasDelSistema(data), [data]); // eslint-disable-line
+  const nOtras = cxpAtrasadas.length + repetidos.length + compRepetidos.length + delSistema.length;
 
   const totDeuda = deudores.reduce((s, d) => s + d.monto, 0);
   const rojosDeu = deudores.filter((d) => d.nivel === "rojo").length;
@@ -198,6 +201,7 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
     const otras = [
       ...cxpAtrasadas.map((c) => ({ tipo: "Cuenta por pagar atrasada", quien: c.descripcion, mes: `${c.mes_correspondiente || ""} ${c.anio_correspondiente || ""}`.trim(), doc: "", monto: Number(c.monto) || 0, accion: "Pagar desde Finanzas → Cuentas por pagar. El gasto sigue contando en su mes.", grave: false })),
       ...repetidos.map(({ f }) => ({ tipo: "Cobro repetido", quien: alPorId[f.alumno_id]?.nombre || "—", mes: `${f.mes_correspondiente} ${anioDe(f)}`, doc: f.numero_factura || "", monto: Number(f.monto_total) || 0, accion: "Anular la copia. No se cuenta dos veces en «Quién debe».", grave: true })),
+      ...delSistema,
       ...compRepetidos.map((v) => ({ tipo: `Pago guardado ${v.length} veces`, quien: alPorId[v[0].alumno_id]?.nombre || "—", mes: v[0].mes_correspondiente || "", doc: v[0].numero_factura || "", monto: (Number(v[0].monto_total) || 0) * (v.length - 1), accion: `Anular ${v.length - 1} copia${v.length > 2 ? "s" : ""}. El monto es lo que sobra.`, grave: true })),
     ];
     const datos = {
@@ -264,7 +268,7 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
       <Kpi c={deudores.length ? "var(--af-rojo)" : "var(--af-verde)"} t="Padres con deuda vencida" v={deudores.length} s={`${rojosDeu} urgentes (2+ meses o retirados)`} />
       <Kpi c={totDeuda ? "var(--af-ambar)" : "var(--af-verde)"} t="Total vencido por cobrar" v={L(totDeuda)} s="Sin contar cobros repetidos" />
       <Kpi c={gruposRojo ? "var(--af-rojo)" : "var(--af-verde)"} t="Grupos que pierden dinero" v={`${gruposRojo} de ${grupos.length}`} s={`${gruposAmarillo} más en riesgo`} />
-      <Kpi c={nOtras ? "var(--af-ambar)" : "var(--af-verde)"} t="Otras alertas" v={nOtras} s="Pagos atrasados y registros repetidos" />
+      <Kpi c={nOtras ? "var(--af-ambar)" : "var(--af-verde)"} t="Otras alertas" v={nOtras} s="Del mes, pagos atrasados y datos por revisar" />
     </div>
 
     <div className="af-barra">
@@ -365,8 +369,31 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
     </section>}
 
     {tab === "otras" && <section className="af-panel">
-      <div className="af-panel-cab"><div><h3 className="af-h">Otras alertas</h3><div className="af-sub">Pagos atrasados de la escuela y registros guardados dos veces</div></div></div>
+      <div className="af-panel-cab"><div><h3 className="af-h">Otras alertas</h3><div className="af-sub">El mes en curso, pagos atrasados de la escuela y datos por revisar</div></div></div>
       {nOtras === 0 && <p className="af-vacio">✓ Sin alertas</p>}
+      <div className="af-bloque">
+        <div className="af-lista-t"><span>{resMes.mes} {resMes.anio}: ¿alcanza para cubrir el mes?</span></div>
+        <div className="af-tabla-caja"><table>
+          <thead><tr><th>Planilla</th><th>Servicios</th><th>Debe generar</th><th>Cobrado</th><th>Ya entró</th><th>Falta</th></tr></thead>
+          <tbody><tr>
+            <td className="nowrap">{L(resMes.planilla.mes)}</td><td className="nowrap">{L(resMes.servicios.mes)}</td><td className="nowrap fuerte">{L(resMes.meta)}</td>
+            <td className="nowrap">{L(resMes.cobrado)}</td><td className="nowrap verde fuerte">{L(resMes.entro)}</td><td className={`nowrap fuerte ${resMes.falta > 0 ? "rojo" : ""}`}>{L(resMes.falta)}</td>
+          </tr></tbody>
+        </table></div>
+      </div>
+      {delSistema.length > 0 && <div className="af-bloque">
+        <div className="af-lista-t"><span>Del mes y revisión de datos</span><span className="nowrap">{delSistema.length}</span></div>
+        <div className="af-tabla-caja"><table>
+          <thead><tr><th>Alerta</th><th>Detalle</th><th>Mes</th><th className="der">Monto</th><th>Qué hacer</th></tr></thead>
+          <tbody>{delSistema.map((a, i) => <tr key={i}>
+            <td><Estado nivel={a.grave ? "rojo" : "amarillo"} txt={a.tipo} /></td>
+            <td className="af-corto" title={a.quien + (a.doc ? ` · ${a.doc}` : "")}>{a.quien}{a.doc && <div className="chico">{a.doc}</div>}</td>
+            <td className="nowrap">{a.mes || "—"}</td>
+            <td className="der nowrap">{a.monto ? L(a.monto) : "—"}</td>
+            <td className="chico" style={{ minWidth: 220 }}>{a.accion}</td>
+          </tr>)}</tbody>
+        </table></div>
+      </div>}
       {cxpAtrasadas.length > 0 && <div className="af-bloque">
         <div className="af-lista-t"><span>Cuentas por pagar de meses anteriores sin pagar</span><span className="ambar nowrap">{L(totCxp)}</span></div>
         <div className="af-tabla-caja"><table>
