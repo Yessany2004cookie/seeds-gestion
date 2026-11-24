@@ -29,7 +29,7 @@ const archivoTxt = (r) => `${r.titulo}${r.periodo ? " " + r.periodo : ""}`.repla
 // ── Encabezado del Excel ──
 // "A" membrete centrado: nombre y título centrados sobre toda la tabla, franja gris fina con periodo y fecha.
 // "B" ejecutivo a dos lados: logo y nombre a la izquierda, periodo y fecha a la derecha, línea azul fina.
-function encabezadoExcel(estilo, { ancho, logo, nombre, sub, titulo, periodo, generado }) {
+export function encabezadoExcel(estilo, { ancho, logo, nombre, sub, titulo, periodo, generado }) {
   const vacia = (alto) => { const f = Array(ancho).fill(null); f[0] = { value: null, height: alto }; return f; };
   const conAlto = (f, alto) => { f[0] = { ...(f[0] || { value: null }), height: alto }; return f; };
   const fechaCorta = new Date().toLocaleDateString("es-HN", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -55,7 +55,7 @@ function encabezadoExcel(estilo, { ancho, logo, nombre, sub, titulo, periodo, ge
   ];
 }
 
-export async function crearExcelFormal(writeExcelFile, extraHoja, reporte, marca, logo, estilo = "B") {
+export async function crearExcelFormal(writeExcelFile, extraHoja, reporte, marca, logo, estilo = "A") {
   const generado = generadoTxt();
   const libro = reporte.hojas.map((h) => {
     const ancho = h.columnas.length;
