@@ -1,0 +1,113 @@
+/* ════════════════════════════════════════════════════════════
+   FINANZAS → ALERTAS
+   Estilos propios de esta pantalla (solo afectan a .af).
+   Usan las variables del tema (--sup, --borde, --texto, --suave)
+   con su valor claro de respaldo, así el modo oscuro gris se aplica solo.
+   ════════════════════════════════════════════════════════════ */
+.af {
+  --af-sup: var(--sup, #FFFFFF);
+  --af-sup-2: var(--sup-2, #F6F7F9);
+  --af-borde: var(--borde, #DCE1E8);
+  --af-linea: #EDF0F4;
+  --af-texto: var(--texto, #1F2937);
+  --af-suave: var(--suave, #5B6576);
+  --af-azul: #1B2A4A;
+  --af-rojo: #A33A3A;  --af-rojo-f: #F8EDED;
+  --af-ambar: #9A6A1F; --af-ambar-f: #F8F1E6;
+  --af-verde: #2F6B4F; --af-verde-f: #EAF3EE;
+  --af-barra: #E6E9EE;
+  color: var(--af-texto);
+}
+html[data-fondo="oscuro"] .af {
+  --af-linea: #2A2C2C;
+  --af-azul: #E9EDEF;
+  --af-rojo: #E29A9A;  --af-rojo-f: #3A2526;
+  --af-ambar: #D9B072; --af-ambar-f: #382E20;
+  --af-verde: #8FC7A8; --af-verde-f: #1D3328;
+  --af-barra: #333535;
+}
+
+/* Aviso inicial */
+.af-aviso { display: flex; gap: 10px; align-items: flex-start; padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--af-borde); border-left: 3px solid var(--af-azul); border-radius: 6px; background: var(--af-sup); font-size: 12.5px; line-height: 1.55; color: var(--af-suave); }
+.af-aviso b { color: var(--af-texto); }
+
+/* Indicadores */
+.af-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+@media (max-width: 1000px) { .af-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .af-kpis { grid-template-columns: 1fr; } }
+.af-kpi { background: var(--af-sup); border: 1px solid var(--af-borde); border-radius: 6px; padding: 14px 16px; position: relative; overflow: hidden; }
+.af-kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--af-c, var(--af-suave)); }
+.af-kpi-t { font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: var(--af-suave); }
+.af-kpi-v { font-size: 24px; font-weight: 700; margin-top: 6px; color: var(--af-c, var(--af-texto)); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.af-kpi-s { font-size: 11.5px; color: var(--af-suave); margin-top: 4px; }
+
+/* Barra de pestañas + botón Excel */
+.af-barra { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.af-tabs { display: inline-flex; border: 1px solid var(--af-borde); border-radius: 6px; overflow: hidden; background: var(--af-sup); flex-wrap: wrap; }
+.af-tab { border: 0; border-right: 1px solid var(--af-borde); background: transparent; color: var(--af-suave); padding: 9px 16px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.af-tab:last-child { border-right: 0; }
+.af-tab[aria-selected="true"] { background: var(--af-sup-2); color: var(--af-texto); box-shadow: inset 0 -2px 0 #D9641E; }
+.af-num { min-width: 20px; padding: 1px 6px; border-radius: 10px; font-size: 11px; font-weight: 700; text-align: center; background: var(--af-barra); color: var(--af-texto); font-variant-numeric: tabular-nums; }
+.af-acciones { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Panel */
+.af-panel { background: var(--af-sup); border: 1px solid var(--af-borde); border-radius: 6px; padding: 18px 20px; margin-bottom: 16px; }
+.af-panel-cab { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.af-h { font-size: 15px; font-weight: 700; margin: 0; color: var(--af-azul); }
+.af-sub { font-size: 12px; color: var(--af-suave); margin-top: 3px; }
+.af-nota { font-size: 11.5px; color: var(--af-suave); line-height: 1.6; margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--af-linea); }
+.af-nota b { color: var(--af-texto); }
+.af-vacio { text-align: center; padding: 28px 10px; color: var(--af-verde); font-size: 13px; }
+
+/* Parámetros del cálculo */
+.af-param { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 14px; margin-bottom: 16px; background: var(--af-sup-2); border: 1px solid var(--af-linea); border-radius: 6px; }
+@media (max-width: 760px) { .af-param { grid-template-columns: 1fr; } }
+.af-ayuda { font-size: 11px; color: var(--af-suave); margin-top: 4px; line-height: 1.4; }
+
+/* Tablas */
+.af-tabla-caja { overflow-x: auto; border: 1px solid var(--af-linea); border-radius: 6px; }
+.af table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.af table thead th { position: sticky; top: 0; padding: 10px 12px; text-align: left; white-space: nowrap; letter-spacing: .4px; z-index: 1; }
+.af table td { padding: 11px 12px; border-bottom: 1px solid var(--af-linea); vertical-align: top; }
+.af table tr.af-sinlinea td { border-bottom: 0; padding-bottom: 4px; }
+.af table tr.af-motivo td { padding-top: 0; padding-bottom: 12px; }
+.af table tfoot td { font-weight: 700; background: var(--af-sup-2); border-top: 1px solid var(--af-borde); border-bottom: 0; }
+.af .der { text-align: right !important; }
+.af .cen { text-align: center !important; }
+.af .fuerte { font-weight: 700; }
+.af .chico { font-size: 11.5px; color: var(--af-suave); margin-top: 2px; font-weight: 400; }
+.af .rojo { color: var(--af-rojo); } .af .ambar { color: var(--af-ambar); } .af .verde { color: var(--af-verde); }
+.af .nowrap { white-space: nowrap; }
+
+/* Etiquetas de estado */
+.af-est { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 12px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.af-est::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.af-est.rojo { background: var(--af-rojo-f); } .af-est.ambar { background: var(--af-ambar-f); } .af-est.verde { background: var(--af-verde-f); }
+.af-chip { display: inline-block; padding: 1px 7px; margin: 0 4px 4px 0; border: 1px solid var(--af-borde); border-radius: 4px; font-size: 11.5px; color: var(--af-suave); white-space: nowrap; }
+.af-motivos { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; }
+.af-motivos span::before { content: "• "; }
+
+/* Barra de cobranza */
+.af-cob { min-width: 120px; }
+.af-cob-barra { height: 5px; border-radius: 3px; background: var(--af-barra); margin-top: 5px; overflow: hidden; }
+.af-cob-barra i { display: block; height: 100%; border-radius: 3px; background: var(--af-verde); }
+.af-cob-barra i.bajo { background: var(--af-rojo); }
+
+/* WhatsApp */
+.af-wa { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--af-borde); color: #1F8A4C; background: var(--af-sup); }
+.af-wa:hover { background: var(--af-sup-2); }
+
+/* Listas de "Otras alertas" */
+.af-lista-t { font-size: 13px; font-weight: 700; margin: 4px 0 8px; display: flex; justify-content: space-between; gap: 10px; }
+.af-bloque + .af-bloque { margin-top: 20px; }
+
+/* En pantallas chicas, cada grupo se ve como tarjeta en vez de tabla */
+.af-tarjetas { display: none; }
+@media (max-width: 820px) {
+  .af-solo-ancho { display: none; }
+  .af-tarjetas { display: grid; gap: 10px; }
+  .af-tg { border: 1px solid var(--af-linea); border-radius: 6px; padding: 12px 14px; }
+  .af-tg-cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+  .af-tg-dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 12.5px; }
+  .af-tg-dl dt { color: var(--af-suave); } .af-tg-dl dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+}

@@ -832,7 +832,7 @@ export default function App() {
     historial:<HistorialPage {...propsSuc}/>,
     recordatorios:<RecordatoriosPage {...propsSuc}/>,
     ingresos:<IngresosPage {...propsSuc}/>,
-    alertas:<AlertasFinanzasPage data={dataSuc}/>,
+    alertas:<AlertasFinanzasPage data={dataSuc} showToast={showToast} sucursalActiva={sucursalActiva}/>,
     finanzas:<FinanzasPage {...propsSuc}/>,
     c_resultados:<ContabilidadPage key="resultados" data={data} showToast={showToast} tabFijo="resultados"/>,
     c_balance:<ContabilidadPage key="balance" data={data} showToast={showToast} tabFijo="balance"/>,
