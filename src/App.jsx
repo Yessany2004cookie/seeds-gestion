@@ -248,7 +248,7 @@ const dibujarImagen = (c, img, x, y, w, h, alpha=1, rot=0) => {
   } catch(e){}
 };
 
-// ── Mensajes formales para WhatsApp ──
+// ── Mensajes formales y amables para WhatsApp ──
 // Saludo según la hora: días hasta 11:59, tardes hasta 6:59 p. m., noches después.
 const saludoHora = (d = new Date()) => {
   const h = d.getHours();
@@ -257,21 +257,32 @@ const saludoHora = (d = new Date()) => {
   return "Buenas noches";
 };
 const lempiras = (n) => `L ${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-const FIRMA_MENSAJE = "Atentamente,\nAdministración, Seeds English School";
+const FIRMA_MENSAJE = "Con aprecio,\nAdministración, Seeds English School";
+// Despedida según la hora, para que el mensaje suene más cercano.
+const despedidaHora = (d = new Date()) => {
+  const h = d.getHours();
+  if (h >= 5 && h < 12) return "Que tenga un excelente día";
+  if (h >= 12 && h < 19) return "Que tenga una linda tarde";
+  return "Que tenga una linda noche";
+};
 
 // Texto que acompaña la factura de cobro o el comprobante de pago.
+// Tono formal pero cálido y amable con las familias.
 const mensajeFactura = (f, al, padre, sec, mora, tipo) => {
   const esPago = tipo === "comprobante";
-  const quien = padre?.nombre ? `estimado(a) ${padre.nombre}` : "estimado padre de familia";
+  const quien = padre?.nombre ? `estimado(a) ${padre.nombre}` : "estimada familia";
   const mes = String(f.mes_correspondiente||"").toLowerCase();
   const alumno = al?.nombre ? ` de ${al.nombre}` : "";
+  const nombreCorto = al?.nombre ? String(al.nombre).trim().split(/\s+/)[0] : "";
   const total = lempiras((Number(f.monto_total)||0) + (Number(mora)||0));
-  const saludo = `${saludoHora()}, ${quien}.\n\nReciba un cordial saludo de parte de Seeds English School.`;
+  const saludo = `${saludoHora()}, ${quien}.\n\nEsperamos que usted y su familia se encuentren muy bien. Es un gusto saludarle de parte de Seeds English School.`;
   if (esPago) {
-    return `${saludo} Confirmamos que recibimos su pago de ${total} por la mensualidad de ${mes}${alumno}. Le adjuntamos su comprobante N.º ${f.numero_factura}.\n\nAgradecemos su confianza y puntualidad. Que tenga un excelente día.\n\n${FIRMA_MENSAJE}`;
+    const acompanar = nombreCorto ? `Es un privilegio acompañar a ${nombreCorto} en su aprendizaje.` : "Es un privilegio acompañarles en este camino de aprendizaje.";
+    return `${saludo}\n\nCon mucho gusto le confirmamos que recibimos su pago de ${total} de la mensualidad de ${mes}${alumno}. Le adjuntamos su comprobante N.º ${f.numero_factura}.\n\nMuchas gracias por su puntualidad y por confiar en nosotros. ${acompanar}\n\n${despedidaHora()}.\n\n${FIRMA_MENSAJE}`;
   }
   const dia = Math.min(Math.max(Number(sec?.dia_vencimiento)||28,1),31);
-  return `${saludo} Le compartimos la factura de cobro N.º ${f.numero_factura}, que corresponde a la mensualidad de ${mes}${alumno}, por un monto de ${total}, con fecha límite el ${dia} de ${mes}.\n\nAgradecemos de antemano su puntualidad. Quedamos a su disposición para cualquier consulta.\n\n${FIRMA_MENSAJE}`;
+  const gracias = nombreCorto ? `Gracias por confiarnos la formación de ${nombreCorto}.` : "Gracias por confiar en nosotros.";
+  return `${saludo} ${gracias}\n\nLe compartimos la factura de cobro N.º ${f.numero_factura} de la mensualidad de ${mes}${alumno}, por ${total}. La fecha límite de pago es el ${dia} de ${mes}.\n\nSi tiene alguna duda o necesita apoyo, con gusto le atendemos. ¡Gracias por ser parte de la familia Seeds!\n\n${despedidaHora()}.\n\n${FIRMA_MENSAJE}`;
 };
 
 // ── Imagen de factura formal (Canvas) ──
