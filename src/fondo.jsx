@@ -44,7 +44,7 @@ export function SelectorFondo() {
     return () => document.removeEventListener("mousedown", fuera);
   }, [abierto]);
   return (
-    <div ref={caja} style={{ position: "relative", flexShrink: 0 }}>
+    <div ref={caja} data-tour="fondo" style={{ position: "relative", flexShrink: 0 }}>
       <button className="boton-fondo" onClick={() => setAbierto((a) => !a)} title="Cambiar fondo" aria-label="Cambiar fondo"
         style={{ background: "#fff", border: "1px solid #CDD3DC", borderRadius: 4, cursor: "pointer", padding: "5px 8px", display: "flex", alignItems: "center" }}>
         <Palette size={14} color="#5B6576" />
