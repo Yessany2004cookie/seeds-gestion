@@ -68,7 +68,7 @@ html[data-fondo="oscuro"] .af {
 .af-tabla-caja { overflow-x: auto; border: 1px solid var(--af-linea); border-radius: 6px; }
 .af table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 .af table thead th { position: sticky; top: 0; padding: 10px 12px; text-align: left; white-space: nowrap; letter-spacing: .4px; z-index: 1; }
-.af table td { padding: 11px 12px; border-bottom: 1px solid var(--af-linea); vertical-align: top; }
+.af table td { padding: 10px 12px; border-bottom: 1px solid var(--af-linea); vertical-align: top; }
 .af table tr.af-sinlinea td { border-bottom: 0; padding-bottom: 4px; }
 .af table tr.af-motivo td { padding-top: 0; padding-bottom: 12px; }
 .af table tfoot td { font-weight: 700; background: var(--af-sup-2); border-top: 1px solid var(--af-borde); border-bottom: 0; }
@@ -111,3 +111,8 @@ html[data-fondo="oscuro"] .af {
   .af-tg-dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 12.5px; }
   .af-tg-dl dt { color: var(--af-suave); } .af-tg-dl dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 }
+
+/* Textos largos (nombres) en una sola línea, con el completo al pasar el mouse */
+.af td.af-corto { max-width: 240px; }
+.af td.af-corto, .af td.af-corto > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.af .af-aviso { padding: 9px 14px; font-size: 12px; align-items: center; }

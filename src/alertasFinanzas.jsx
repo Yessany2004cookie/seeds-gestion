@@ -8,7 +8,7 @@
 import { useState, useMemo } from "react";
 import { input, label, btn, btnO } from "./estilo";
 import { useMarca } from "./marca";
-import { Phone, Info, FileSpreadsheet, Download } from "lucide-react";
+import { Phone, Info, FileSpreadsheet, FileText, Download } from "lucide-react";
 import "./alertasFinanzas.css";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -193,33 +193,51 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
   const totCxp = cxpAtrasadas.reduce((s, c) => s + (Number(c.monto) || 0), 0);
   const tot = (k) => grupos.reduce((s, g) => s + (Number(g[k]) || 0), 0);
 
-  // ── Excel: arma los datos con lo que ya está calculado en pantalla ──
-  const [generando, setGenerando] = useState(false);
-  const [xls, setXls] = useState(null);
+  // ── Datos para exportar (Excel y PDF): lo mismo que ya se ve en pantalla ──
+  const armarDatos = () => {
+    const otras = [
+      ...cxpAtrasadas.map((c) => ({ tipo: "Cuenta por pagar atrasada", quien: c.descripcion, mes: `${c.mes_correspondiente || ""} ${c.anio_correspondiente || ""}`.trim(), doc: "", monto: Number(c.monto) || 0, accion: "Pagar desde Finanzas → Cuentas por pagar. El gasto sigue contando en su mes.", grave: false })),
+      ...repetidos.map(({ f }) => ({ tipo: "Cobro repetido", quien: alPorId[f.alumno_id]?.nombre || "—", mes: `${f.mes_correspondiente} ${anioDe(f)}`, doc: f.numero_factura || "", monto: Number(f.monto_total) || 0, accion: "Anular la copia. No se cuenta dos veces en «Quién debe».", grave: true })),
+      ...compRepetidos.map((v) => ({ tipo: `Pago guardado ${v.length} veces`, quien: alPorId[v[0].alumno_id]?.nombre || "—", mes: v[0].mes_correspondiente || "", doc: v[0].numero_factura || "", monto: (Number(v[0].monto_total) || 0) * (v.length - 1), accion: `Anular ${v.length - 1} copia${v.length > 2 ? "s" : ""}. El monto es lo que sobra.`, grave: true })),
+    ];
+    const datos = {
+      nombre: nombreInst, sede, generado: hoy.toLocaleString("es-HN", { dateStyle: "long", timeStyle: "short" }),
+      parametros: { fijos: fijosMes, margen: margenMin, mes: mesCob, anio: anioCob },
+      kpis: { deudores: deudores.length, urgentes: rojosDeu, totalDeuda: totDeuda, gruposRojo, gruposAmarillo, resultadoTotal: tot("resultado"), cxpN: cxpAtrasadas.length, cxpMonto: totCxp, repetidos: repetidos.length + compRepetidos.length },
+      deudores: deudores.map((d) => ({ nivel: d.nivel, alumno: d.al.nombre, grupo: d.sec?.nombre || "", padre: d.padre?.nombre || "", telefono: d.padre?.telefono || d.al.telefono || "", meses: d.meses.length, detalleMeses: d.meses.join(", "), dias: d.dias, monto: d.monto, observacion: [d.retirado && "Alumno retirado", d.revisar && `Revisar: ${d.meses.length} meses`].filter(Boolean).join(" · ") })),
+      grupos: grupos.map((g) => ({ nivel: g.nivel, grupo: g.s.nombre, alumnos: g.n, becas: g.becas, esperado: g.esperado, costoMaestro: g.costoMaestro, fijo: g.fijo, resultado: g.resultado, margen: g.margen, facturado: g.facturado, cobrado: g.cobrado, pctCob: g.pctCob, equilibrio: g.equilibrio, maestros: g.maestros.map((m) => m.nombre).join(", ") || "Sin maestro asignado", motivos: g.motivos.join(" · ") })),
+      otras,
+    };
+    return datos;
+  };
+  const rangoMeses = (m) => (m.length === 1 ? m[0] : `${m[0]} – ${m[m.length - 1]}`);
+
+  const [generando, setGenerando] = useState("");
+  const [archivo, setArchivo] = useState(null);
+  const listo = (blob, ext, tipo) => {
+    if (archivo) URL.revokeObjectURL(archivo.url);
+    setArchivo({ url: URL.createObjectURL(blob), nombre: `Alertas de finanzas ${hoy.toISOString().slice(0, 10)}.${ext}`, tipo });
+  };
   const descargarExcel = async () => {
-    if (generando) return; setGenerando(true);
+    if (generando) return; setGenerando("excel");
     try {
       const [{ default: writeExcelFile }, { crearExcelAlertas }] = await Promise.all([import("write-excel-file/browser"), import("./alertasExcel")]);
-      const otras = [
-        ...cxpAtrasadas.map((c) => ({ tipo: "Cuenta por pagar atrasada", quien: c.descripcion, mes: `${c.mes_correspondiente || ""} ${c.anio_correspondiente || ""}`.trim(), doc: "", monto: Number(c.monto) || 0, accion: "Pagar desde Finanzas → Cuentas por pagar. El gasto sigue contando en su mes.", grave: false })),
-        ...repetidos.map(({ f }) => ({ tipo: "Cobro repetido", quien: alPorId[f.alumno_id]?.nombre || "—", mes: `${f.mes_correspondiente} ${anioDe(f)}`, doc: f.numero_factura || "", monto: Number(f.monto_total) || 0, accion: "Anular la copia. No se cuenta dos veces en «Quién debe».", grave: true })),
-        ...compRepetidos.map((v) => ({ tipo: `Pago guardado ${v.length} veces`, quien: alPorId[v[0].alumno_id]?.nombre || "—", mes: v[0].mes_correspondiente || "", doc: v[0].numero_factura || "", monto: (Number(v[0].monto_total) || 0) * (v.length - 1), accion: `Anular ${v.length - 1} copia${v.length > 2 ? "s" : ""}. El monto es lo que sobra.`, grave: true })),
-      ];
-      const datos = {
-        nombre: nombreInst, sede, generado: hoy.toLocaleString("es-HN", { dateStyle: "long", timeStyle: "short" }),
-        parametros: { fijos: fijosMes, margen: margenMin, mes: mesCob, anio: anioCob },
-        kpis: { deudores: deudores.length, urgentes: rojosDeu, totalDeuda: totDeuda, gruposRojo, gruposAmarillo, resultadoTotal: tot("resultado"), cxpN: cxpAtrasadas.length, cxpMonto: totCxp, repetidos: repetidos.length + compRepetidos.length },
-        deudores: deudores.map((d) => ({ nivel: d.nivel, alumno: d.al.nombre, grupo: d.sec?.nombre || "", padre: d.padre?.nombre || "", telefono: d.padre?.telefono || d.al.telefono || "", meses: d.meses.length, detalleMeses: d.meses.join(", "), dias: d.dias, monto: d.monto, observacion: [d.retirado && "Alumno retirado", d.revisar && `Revisar: ${d.meses.length} meses`].filter(Boolean).join(" · ") })),
-        grupos: grupos.map((g) => ({ nivel: g.nivel, grupo: g.s.nombre, alumnos: g.n, becas: g.becas, esperado: g.esperado, costoMaestro: g.costoMaestro, fijo: g.fijo, resultado: g.resultado, margen: g.margen, facturado: g.facturado, cobrado: g.cobrado, pctCob: g.pctCob, equilibrio: g.equilibrio, maestros: g.maestros.map((m) => m.nombre).join(", ") || "Sin maestro asignado", motivos: g.motivos.join(" · ") })),
-        otras,
-      };
       const logo = await logoParaExcel(marca.logoSrc);
-      const blob = await (await crearExcelAlertas(writeExcelFile, datos, logo)).toBlob();
-      const nombre = `Alertas de finanzas ${hoy.toISOString().slice(0, 10)}.xlsx`;
-      if (xls) URL.revokeObjectURL(xls.url);
-      setXls({ url: URL.createObjectURL(blob), nombre });
+      listo(await (await crearExcelAlertas(writeExcelFile, armarDatos(), logo)).toBlob(), "xlsx", "Excel");
     } catch (e) { showToast ? showToast("No se pudo crear el Excel: " + e.message, "error") : console.error(e); }
-    finally { setGenerando(false); }
+    finally { setGenerando(""); }
+  };
+  const descargarPDF = async () => {
+    if (generando) return; setGenerando("pdf");
+    try {
+      const [{ default: html2pdf }, { documentoAlertas, OPCIONES_PDF }] = await Promise.all([import("html2pdf.js"), import("./alertasPdf")]);
+      const pdf = await html2pdf().set(OPCIONES_PDF).from(documentoAlertas(armarDatos(), marca.logoSrc), "string").toPdf().get("pdf");
+      // Número de página al pie de cada hoja
+      const total = pdf.internal.getNumberOfPages(), an = pdf.internal.pageSize.getWidth(), al = pdf.internal.pageSize.getHeight();
+      for (let i = 1; i <= total; i++) { pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(91, 101, 118); pdf.text(`Página ${i} de ${total}`, an - 9, al - 5, { align: "right" }); }
+      listo(new Blob([pdf.output("blob")], { type: "application/pdf" }), "pdf", "PDF");
+    } catch (e) { showToast ? showToast("No se pudo crear el PDF: " + e.message, "error") : console.error(e); }
+    finally { setGenerando(""); }
   };
 
   const Estado = ({ nivel, txt }) => <span className={`af-est ${CLASE[nivel]}`}>{txt}</span>;
@@ -236,9 +254,8 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
 
   return (<div className="af">
     <div className="af-aviso">
-      <Info size={17} style={{ flexShrink: 0, marginTop: 2 }} />
-      <div><b>Finanzas</b> sirve para decidir y actuar: quién debe, qué grupo no se sostiene y qué hay que pagar. Esta pantalla solo lee datos; no cambia nada.
-        Las cifras contables oficiales (ganancia, balance) salen del módulo de <b>Contabilidad</b>.</div>
+      <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+      <div>Quién debe, qué grupo no se sostiene y qué hay que pagar. <b>Solo lectura</b>: esta pantalla no cambia datos.</div>
     </div>
 
     <div className="af-kpis">
@@ -255,8 +272,9 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
         <Pest id="otras" txt="Otras alertas" n={nOtras} />
       </div>
       <div className="af-acciones">
-        <button type="button" onClick={descargarExcel} disabled={generando} style={{ ...btnO, opacity: generando ? 0.7 : 1, cursor: generando ? "wait" : "pointer" }}><FileSpreadsheet size={15} />{generando ? "Preparando Excel…" : "Exportar a Excel"}</button>
-        {xls && <a href={xls.url} download={xls.nombre} onClick={() => setTimeout(() => setXls(null), 500)} style={{ ...btn("#15803D"), textDecoration: "none" }}><Download size={14} />Guardar Excel</a>}
+        <button type="button" onClick={descargarPDF} disabled={!!generando} style={{ ...btnO, opacity: generando ? 0.7 : 1, cursor: generando ? "wait" : "pointer" }}><FileText size={15} />{generando === "pdf" ? "Preparando PDF…" : "PDF"}</button>
+        <button type="button" onClick={descargarExcel} disabled={!!generando} style={{ ...btnO, opacity: generando ? 0.7 : 1, cursor: generando ? "wait" : "pointer" }}><FileSpreadsheet size={15} />{generando === "excel" ? "Preparando Excel…" : "Excel"}</button>
+        {archivo && <a href={archivo.url} download={archivo.nombre} onClick={() => setTimeout(() => setArchivo(null), 500)} style={{ ...btn("#15803D"), textDecoration: "none" }}><Download size={14} />Guardar {archivo.tipo}</a>}
       </div>
     </div>
 
@@ -271,20 +289,20 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
       </div>
       {verDeudores.length === 0 ? <p className="af-vacio">✓ Nadie en esta lista</p> :
         <div className="af-tabla-caja"><table>
-          <thead><tr><th>Estado</th><th>Alumno</th><th>Meses vencidos</th><th className="der">Atraso</th><th className="der">Debe</th><th>Padre o encargado</th><th className="cen">Avisar</th></tr></thead>
+          <thead><tr><th>Estado</th><th>Alumno</th><th>Meses vencidos</th><th className="der">Atraso</th><th className="der">Debe</th><th>Encargado</th><th className="cen" aria-label="WhatsApp"></th></tr></thead>
           <tbody>{verDeudores.map((d) => {
             const tel = telWA(d.padre?.telefono || d.al.telefono);
             return (<tr key={d.al.id}>
               <td><Estado nivel={d.nivel} txt={d.nivel === "rojo" ? "Urgente" : "Vencido"} /></td>
-              <td><div className="fuerte">{d.al.nombre}</div><div className="chico">{d.sec?.nombre || "Sin grupo"}{d.retirado && <span className="rojo"> · Retirado</span>}{d.revisar && <span className="ambar"> · Revisar</span>}</div></td>
-              <td style={{ minWidth: 150 }}><div className="fuerte" style={{ marginBottom: 3 }}>{d.meses.length} {d.meses.length === 1 ? "mes" : "meses"}</div>{(d.meses.length <= 4 ? d.meses : [...d.meses.slice(0, 2), "…", d.meses[d.meses.length - 1]]).map((m, i) => <span key={i} className="af-chip">{m}</span>)}</td>
+              <td className="af-corto"><div className="fuerte" title={d.al.nombre}>{d.al.nombre}</div><div className="chico">{d.sec?.nombre || "Sin grupo"}{d.retirado && <span className="rojo"> · Retirado</span>}{d.revisar && <span className="ambar"> · Revisar</span>}</div></td>
+              <td className="nowrap" title={d.meses.join(", ")}><b>{d.meses.length}</b> <span className="chico" style={{ display: "inline" }}>· {rangoMeses(d.meses)}</span></td>
               <td className={`der nowrap ${d.dias > 60 ? "rojo fuerte" : d.dias > 30 ? "ambar" : ""}`}>{d.dias} días</td>
               <td className="der fuerte nowrap">{L(d.monto)}</td>
-              <td>{d.padre?.nombre || "—"}{(d.padre?.telefono || d.al.telefono) && <div className="chico">{d.padre?.telefono || d.al.telefono}</div>}</td>
-              <td className="cen">{tel ? <a className="af-wa" href={`https://wa.me/${tel}?text=${encodeURIComponent(msgWA(d))}`} target="_blank" rel="noreferrer" title="Enviar recordatorio por WhatsApp"><Phone size={14} /></a> : <span className="chico rojo">Sin tel.</span>}</td>
+              <td className="af-corto" title={[d.padre?.nombre, d.padre?.telefono || d.al.telefono].filter(Boolean).join(" · ")}>{d.padre?.nombre || "—"}</td>
+              <td className="cen">{tel ? <a className="af-wa" href={`https://wa.me/${tel}?text=${encodeURIComponent(msgWA(d))}`} target="_blank" rel="noreferrer" title="Enviar recordatorio por WhatsApp"><Phone size={14} /></a> : <span className="chico" title="Sin teléfono registrado">—</span>}</td>
             </tr>);
           })}</tbody>
-          <tfoot><tr><td colSpan={2}>Total ({verDeudores.length})</td><td>{verDeudores.reduce((s, d) => s + d.meses.length, 0)} meses</td><td /><td className="der nowrap">{L(verDeudores.reduce((s, d) => s + d.monto, 0))}</td><td colSpan={2} /></tr></tfoot>
+          <tfoot><tr><td colSpan={2}>Total ({verDeudores.length})</td><td className="nowrap">{verDeudores.reduce((s, d) => s + d.meses.length, 0)} meses</td><td /><td className="der nowrap">{L(verDeudores.reduce((s, d) => s + d.monto, 0))}</td><td colSpan={2} /></tr></tfoot>
         </table></div>}
       <p className="af-nota">Solo cuenta mensualidades que ya pasaron su fecha límite. <b>Urgente:</b> 2 o más meses, o alumno retirado. <b>Vencido:</b> 1 mes. <b>Revisar</b> marca 6 meses o más, que puede ser un cobro cargado por error.</p>
     </section>}
