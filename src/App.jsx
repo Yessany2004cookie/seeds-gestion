@@ -4159,7 +4159,9 @@ function ReportesPage({data,showToast}){
   const fTotal=(label,total,cls="tot",neg=false)=>`<tr class="${cls}"><td>${label}</td><td></td><td class="num">${neg?Mneg(total):M(total)}</td><td class="pct">${P(total)}</td></tr>`;
 
   const avisoPend=porPagar.length?`<div class="aviso">⚠ <strong>Gastos pendientes de pago en ${mesSel}:</strong> ${porPagar.map(x=>`${esc(x.label)} (${M(x.monto)})`).join(", ")}. Total pendiente: <strong>${M(totPorPagar)}</strong>.</div>`:"";
-  const estadoHTML=`${avisoPend}
+  // El reporte contable se arma por hojas (como un libro de Excel): en pantalla se ve una a la vez,
+  // en el PDF van todas seguidas y al descargar Excel cada una es una hoja del archivo.
+  const hResultados=`${avisoPend}
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <thead><tr><th>Concepto</th><th class="num">Parcial</th><th class="num">Total</th><th class="pct">% ingr.</th></tr></thead>
       <tbody>
@@ -4182,9 +4184,8 @@ function ReportesPage({data,showToast}){
 
         <tr class="${resultado>=0?"neta":"neta perdida"}"><td>${resultado>=0?"Utilidad neta del mes":"Pérdida neta del mes"} (bruta − III)</td><td></td><td class="num">${resultado>=0?M(resultado):Mneg(Math.abs(resultado))}</td><td class="pct">${margen}</td></tr>
       </tbody>
-    </table>
-
-    <h3 class="tit">IV. Cuentas pendientes <span class="nota">(no afectan la utilidad del mes hasta que se paguen o cobren)</span></h3>
+    </table>`;
+  const hPendientes=`<h3 class="tit">IV. Cuentas pendientes <span class="nota">(no afectan la utilidad del mes hasta que se paguen o cobren)</span></h3>
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <tbody>
         ${fSec("Cuentas por pagar")}
@@ -4195,9 +4196,8 @@ function ReportesPage({data,showToast}){
         ${fTotal("Total por cobrar",totPorCobrar)}
         ${totPorPagar>0?`<tr class="sub"><td>Utilidad ajustada (si se paga lo pendiente)</td><td></td><td class="num">${resultado-totPorPagar>=0?M(resultado-totPorPagar):Mneg(Math.abs(resultado-totPorPagar))}</td><td class="pct">${P(resultado-totPorPagar)}</td></tr>`:""}
       </tbody>
-    </table>
-
-    <h3 class="tit">Flujo de caja del mes <span class="nota">(dinero que realmente entró y salió, por fecha de pago)</span></h3>
+    </table>`;
+  const hFlujo=`<h3 class="tit">Flujo de caja del mes <span class="nota">(dinero que realmente entró y salió, por fecha de pago)</span></h3>
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <tbody>
         <tr class="cta"><td>Saldo en caja al inicio del mes</td><td></td><td class="num">${cajaRep.saldo-cajaRep.neto>=0?M(cajaRep.saldo-cajaRep.neto):Mneg(Math.abs(cajaRep.saldo-cajaRep.neto))}</td><td></td></tr>
@@ -4210,9 +4210,8 @@ function ReportesPage({data,showToast}){
         ${fTotal("Saldo en caja al cierre del mes",Math.abs(cajaRep.saldo),"tot",cajaRep.saldo<0)}
       </tbody>
     </table>
-    <p class="pie">La utilidad del mes y el dinero en caja no son iguales: la utilidad resta cada gasto en el mes al que pertenece; la caja muestra cuándo salió el dinero (pagos atrasados, deudas). Las cuentas por pagar pendientes aparecen en la sección IV.</p>
-
-    ${(ingGraduacion>0||costoGraduacion>0)?`<h3 class="tit">Nota sobre el evento de graduación</h3>
+    <p class="pie">La utilidad del mes y el dinero en caja no son iguales: la utilidad resta cada gasto en el mes al que pertenece; la caja muestra cuándo salió el dinero (pagos atrasados, deudas). Las cuentas por pagar pendientes aparecen en la sección IV.</p>`;
+  const hGraduacion=(ingGraduacion>0||costoGraduacion>0)?`<h3 class="tit">Nota sobre el evento de graduación</h3>
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <tbody>
         ${fSec("En este mes")}
@@ -4229,12 +4228,10 @@ function ReportesPage({data,showToast}){
     </table>
     <p class="pie">${gradResMes<0
       ?`Los gastos del evento asignados a ${esc(mesSel)} superan lo cobrado de graduación en este mes por ${M(Math.abs(gradResMes))}. Esa diferencia se cubrió con los demás ingresos del mes (mensualidades). No es una pérdida del evento: la mayor parte de la graduación se cobró en meses anteriores, donde aparece como ingreso sin costo, y ese dinero se usó en esos meses. Sumando todos los meses, el evento deja la ganancia indicada arriba.`
-      :`Los ingresos de graduación se registran en el mes en que se cobran y sus gastos en el mes del evento al que corresponden. La ganancia real del evento es lo cobrado menos todo lo gastado.`}</p>`:""}
-
-    <h3 class="tit">V. Análisis gráfico</h3>
-    <div class="grafica">${svgGrafica}</div>
-
-    <h3 class="tit">Anexos</h3>
+      :`Los ingresos de graduación se registran en el mes en que se cobran y sus gastos en el mes del evento al que corresponden. La ganancia real del evento es lo cobrado menos todo lo gastado.`}</p>`:"";
+  const hGrafica=`<h3 class="tit">V. Análisis gráfico</h3>
+    <div class="grafica">${svgGrafica}</div>`;
+  const hAnexos=`<h3 class="tit">Anexos</h3>
     <table class="edo"><colgroup><col/><col style="width:130px"/><col style="width:130px"/><col style="width:64px"/></colgroup>
       <tbody>
         ${fSec("Anexo A — Materiales cobrados")}
@@ -4244,6 +4241,15 @@ function ReportesPage({data,showToast}){
       </tbody>
     </table>
     <p class="pie">Criterios: los ingresos cuentan en el mes al que se asignó el pago; los gastos en el mes al que se restan. En costo de ventas se resta lo que cuestan los materiales y los gastos reales registrados del evento de graduación. Las cifras entre paréntesis son restas.</p>`;
+  const hojas=[
+    {k:"resultados",t:"Estado de resultados",html:hResultados},
+    {k:"pendientes",t:"Pendientes",html:hPendientes},
+    {k:"flujo",t:"Flujo de caja",html:hFlujo},
+    ...(hGraduacion?[{k:"graduacion",t:"Graduación",html:hGraduacion}]:[]),
+    {k:"grafica",t:"Gráfica",html:hGrafica,sinExcel:true},
+    {k:"anexos",t:"Anexos",html:hAnexos},
+  ];
+  const estadoHTML=hojas.map(h=>h.html).join("\n");
 
   const EDO_CSS=`
     .edo,.tit,.pie,.aviso{font-family:Georgia,'Times New Roman',serif}
@@ -4469,6 +4475,94 @@ function ReportesPage({data,showToast}){
     setTimeout(()=>{w.focus();w.print();},400);
   };
 
+  // ── Vista tipo hoja de cálculo en pantalla ──
+  const[hojaSel,setHojaSel]=useState("resultados");
+  const hojaActiva=hojas.find(h=>h.k===hojaSel)||hojas[0];
+  // Agrega la columna de número de fila (como en Excel) a las tablas de la hoja
+  const comoHoja=(html)=>html.replace(/<colgroup>/g,'<colgroup><col style="width:38px"/>').replace(/<tr([^>]*)>\s*<th/g,'<tr$1><th class="rn"></th><th').replace(/<tr([^>]*)>(?!\s*<th)/g,'<tr$1><td class="rn"></td>');
+  const HOJA_CSS=`
+    .hojaW{counter-reset:fila}
+    .hojaW .edo{border:1px solid #C9D1DC;margin-bottom:4px}
+    .hojaW .edo td,.hojaW .edo th{border:1px solid #DCE1E8 !important;padding:5px 8px}
+    .hojaW .edo th{background:#EEF1F5;color:#3F4A5A}
+    .hojaW .edo tr{counter-increment:fila}
+    .hojaW .edo .rn{background:#EEF1F5;color:#7A8597;font-size:10.5px;text-align:center;padding:5px 2px !important;font-family:Calibri,Arial,sans-serif}
+    .hojaW .edo td.rn::before,.hojaW .edo th.rn::before{content:counter(fila)}
+    .hojaW .edo .sec td{background:#F3F5F8;padding-top:7px}
+    .hojaW .edo .sec td.rn{background:#EEF1F5}
+    .hojaW .edo .cta td:nth-child(2){padding-left:14px}
+    .hojaW .edo .det td:nth-child(2){padding-left:28px}
+    .hojaW .edo .pend td:nth-child(2){padding-left:28px}
+    .hojaW .edo .pend td:first-child{border-left:1px solid #DCE1E8 !important}
+    .hojaW .tit{margin:14px 0 6px}
+    .hojaW .tit:first-child{margin-top:0}
+    .pestanas{display:flex;gap:2px;flex-wrap:wrap;border-bottom:2px solid #1B2A4A;margin-bottom:12px}
+    .pestanas button{padding:7px 14px;border:1px solid #CDD3DC;border-bottom:none;border-radius:4px 4px 0 0;background:#F3F5F8;color:#3F4A5A;font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
+    .pestanas button[aria-selected="true"]{background:#1B2A4A;color:#fff;border-color:#1B2A4A}
+    html[data-fondo="oscuro"] .hojaW .edo,html[data-fondo="oscuro"] .hojaW .edo td,html[data-fondo="oscuro"] .hojaW .edo th{border-color:#2F3E5C !important}
+    html[data-fondo="oscuro"] .hojaW .edo th,html[data-fondo="oscuro"] .hojaW .edo .rn,html[data-fondo="oscuro"] .hojaW .edo .sec td{background:#1D2A44 !important}
+    html[data-fondo="oscuro"] .hojaW .edo .rn{color:#8E9AB0 !important}
+    html[data-fondo="oscuro"] .pestanas{border-color:#D9641E}
+    html[data-fondo="oscuro"] .pestanas button{background:#1D2A44;color:#C9D2E0;border-color:#2F3E5C}
+    html[data-fondo="oscuro"] .pestanas button[aria-selected="true"]{background:#D9641E;color:#fff;border-color:#D9641E}`;
+
+  // ── Descargar Excel: una hoja por cada parte del reporte ──
+  const[generandoXls,setGenerandoXls]=useState(false);
+  const aNumero=(t)=>{const s=String(t).trim();if(!/^\(?L\s?-?[\d,]+(\.\d+)?\)?$/.test(s))return null;const v=parseFloat(s.replace(/[^\d.\-]/g,""));return s.startsWith("(")?-v:v;};
+  const FMT_L='"L "#,##0.00;("L "#,##0.00)';
+  const hojaAFilas=(html)=>{
+    const raiz=new DOMParser().parseFromString(`<div>${html}</div>`,"text/html").body.firstChild;
+    const filas=[];
+    const texto=(el)=>(el?.textContent||"").replace(/\s+/g," ").trim();
+    raiz.childNodes.forEach(n=>{
+      if(n.nodeType!==1)return;
+      if(n.matches("h3.tit")){if(filas.length)filas.push([]);filas.push([{value:texto(n),fontWeight:"bold",fontSize:12,textColor:"#1B2A4A"}]);return;}
+      if(n.matches("p.pie,div.aviso")){filas.push([{value:texto(n),textColor:n.matches(".aviso")?"#8E3131":"#5B6576",columnSpan:5},null,null,null,null]);return;}
+      if(!n.matches("table"))return;
+      n.querySelectorAll("tr").forEach(tr=>{
+        const cls=tr.className||"";
+        const celdas=[...tr.children];
+        if(celdas[0]?.tagName==="TH"){filas.push(["Concepto","Parcial","Total","% ingr.","Detalle"].map(v=>({value:v,fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:v==="Concepto"||v==="Detalle"?"left":"right"})));return;}
+        const c0=celdas[0]?.cloneNode(true);const notas=c0?[...c0.querySelectorAll(".nota")].map(x=>texto(x)).join(" · "):"";
+        c0&&c0.querySelectorAll(".nota").forEach(x=>x.remove());
+        const negrita=/\b(sec|tot|sub|neta)\b/.test(cls);
+        const base={fontWeight:negrita?"bold":undefined,backgroundColor:/\bsec\b/.test(cls)?"#E8ECF2":/\b(sub|neta)\b/.test(cls)?"#F3F5F8":undefined,
+          textColor:/\bpend\b|perdida/.test(cls)?"#8E3131":/\bneta\b/.test(cls)?"#2A5E45":undefined,topBorderStyle:/\b(tot|sub|neta)\b/.test(cls)?"thin":undefined};
+        let concepto=texto(c0),detalle=notas;if(!concepto&&detalle){concepto=detalle;detalle="";}
+        const fila=[{...base,value:concepto,indent:/\bdet\b|\bpend\b/.test(cls)?2:/\bcta\b/.test(cls)?1:0}];
+        [1,2,3].forEach(i=>{const t=texto(celdas[i]);const v=aNumero(t);const pct=/^-?[\d.]+%$/.test(t)?parseFloat(t)/100:null;
+          fila.push(v!==null?{...base,value:v,type:Number,format:FMT_L}:pct!==null?{...base,value:pct,type:Number,format:"0.0%"}:{...base,value:t||null,align:"right"});});
+        fila.push({...base,value:detalle||null,textColor:"#5B6576",fontWeight:undefined});
+        filas.push(fila);
+      });
+    });
+    return filas;
+  };
+  const descargarExcel=async()=>{
+    if(generandoXls)return;setGenerandoXls(true);
+    try{
+      const writeExcelFile=(await import("write-excel-file/browser")).default;
+      const encabezado=(t)=>[[{value:"Seeds English School",fontWeight:"bold",fontSize:14,textColor:"#1B2A4A"}],[{value:`${t} — ${mesSel} ${anioSel}`,fontWeight:"bold",fontSize:12}],[{value:`Cifras en Lempiras · Generado el ${hoyTxt}`,textColor:"#5B6576"}],[]];
+      const cols=[{width:46},{width:16},{width:16},{width:10},{width:60}];
+      const resumen=[...encabezado("Resumen del mes"),
+        [{value:"Concepto",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF"},{value:"Monto",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:"right"},{value:"%",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:"right"},null,{value:"Qué es",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF"}],
+        [{value:"Dinero que entró",fontWeight:"bold",backgroundColor:"#E8ECF2"},{value:ingresoTotal,type:Number,format:FMT_L,fontWeight:"bold",backgroundColor:"#E8ECF2"},{value:1,type:Number,format:"0%",backgroundColor:"#E8ECF2"},null,null],
+        ...fuentes.map(x=>[{value:x.t,indent:1},{value:x.v,type:Number,format:FMT_L},{value:ingresoTotal?x.v/ingresoTotal:0,type:Number,format:"0.0%"},null,{value:x.e,textColor:"#5B6576"}]),
+        [{value:"Dinero que se gastó",fontWeight:"bold",backgroundColor:"#E8ECF2"},{value:totalEgresos,type:Number,format:FMT_L,fontWeight:"bold",backgroundColor:"#E8ECF2"},{value:ingresoTotal?totalEgresos/ingresoTotal:0,type:Number,format:"0.0%",backgroundColor:"#E8ECF2"},null,null],
+        ...usos.map(x=>[{value:x.t,indent:1},{value:x.v,type:Number,format:FMT_L},{value:ingresoTotal?x.v/ingresoTotal:0,type:Number,format:"0.0%"},null,{value:x.e,textColor:"#5B6576"}]),
+        [{value:resultado>=0?"Lo que quedó (ganancia)":"Lo que faltó (pérdida)",fontWeight:"bold",topBorderStyle:"thin",textColor:resultado>=0?"#2A5E45":"#8E3131"},{value:resultado,type:Number,format:FMT_L,fontWeight:"bold",topBorderStyle:"thin",textColor:resultado>=0?"#2A5E45":"#8E3131"},{value:ingresoTotal?resultado/ingresoTotal:0,type:Number,format:"0.0%",topBorderStyle:"thin"},null,null],
+        [],[{value:"Falta pagar de este mes"},{value:totPorPagar,type:Number,format:FMT_L}],[{value:"Le deben a la escuela de este mes"},{value:totPorCobrar,type:Number,format:FMT_L}],[{value:"Dinero en caja al cierre"},{value:cajaRep.saldo,type:Number,format:FMT_L}],
+      ];
+      const libro=[{data:resumen,sheet:"Resumen",columns:cols},
+        ...hojas.filter(h=>!h.sinExcel).map(h=>({data:[...encabezado(h.t),...hojaAFilas(h.html)],sheet:h.t.slice(0,31),columns:cols}))];
+      const blob=await writeExcelFile(libro,{fontFamily:"Calibri",fontSize:11}).toBlob();
+      const nombre=`Reportes ${mesSel} ${anioSel}.xlsx`;
+      if(pdfListo)URL.revokeObjectURL(pdfListo.url);
+      setPdfListo({url:URL.createObjectURL(blob),nombre,blob,tipo:"Excel"});
+    }catch(e){showToast&&showToast("No se pudo crear el Excel: "+e.message,"error");}
+    finally{setGenerandoXls(false);}
+  };
+
   const tarjeta=(t,v,c,sub)=>(<div style={{...card,borderLeft:`3px solid ${c}`,margin:0}}><div style={{fontSize:11,color:"#555555",textTransform:"uppercase",letterSpacing:.4}}>{t}</div><div style={{fontSize:21,fontWeight:800,color:c}}>{v}</div>{sub&&<div style={{fontSize:11,color:"#888888"}}>{sub}</div>}</div>);
 
   return(<div>
@@ -4480,6 +4574,7 @@ function ReportesPage({data,showToast}){
         </select>
         <select value={anioSel} onChange={e=>setAnioSel(Number(e.target.value))} style={{...input,width:100,cursor:"pointer"}}>{[ANIO_ACTUAL,ANIO_ACTUAL-1,ANIO_ACTUAL-2].map(y=><option key={y} value={y}>{y}</option>)}</select>
         <button onClick={descargarPDF} disabled={generando} style={{...btn("#000000"),opacity:generando?.7:1,cursor:generando?"wait":"pointer"}}><Download size={15}/>{generando?"Generando PDF…":"Descargar PDF"}</button>
+        <button onClick={descargarExcel} disabled={generandoXls} style={{...btn("#15803D"),opacity:generandoXls?.7:1,cursor:generandoXls?"wait":"pointer"}}><Download size={15}/>{generandoXls?"Generando Excel…":"Descargar Excel"}</button>
         <button onClick={imprimir} style={btnO}><FileText size={15}/>Imprimir</button>
       </div>
     </div>
@@ -4525,7 +4620,10 @@ function ReportesPage({data,showToast}){
           <div style={{fontSize:12,color:"#555555"}}>Del 1 al {new Date(anioSel,MESES.indexOf(mesSel)+1,0).getDate()} de {mesSel} de {anioSel} · Cifras en Lempiras</div>
         </div>
       </div>
-      <div style={{overflowX:"auto"}}><div style={{minWidth:520,fontFamily:"Georgia,'Times New Roman',serif"}} dangerouslySetInnerHTML={{__html:estadoHTML}}/></div>
+      <style>{HOJA_CSS}</style>
+      <div className="pestanas" role="tablist">{hojas.map(h=><button key={h.k} role="tab" aria-selected={hojaActiva.k===h.k} onClick={()=>setHojaSel(h.k)}>{h.t}</button>)}</div>
+      <div style={{overflowX:"auto"}}><div className="hojaW" style={{minWidth:560,fontFamily:"Georgia,'Times New Roman',serif"}} dangerouslySetInnerHTML={{__html:hojaActiva.sinExcel?hojaActiva.html:comoHoja(hojaActiva.html)}}/></div>
+      <div style={{fontSize:11,color:"#5B6576",marginTop:8}}>El PDF y la impresión traen todas las hojas juntas. «Descargar Excel» crea un archivo con una hoja por pestaña, más un resumen.</div>
     </div>
     </>}
 
@@ -4533,12 +4631,12 @@ function ReportesPage({data,showToast}){
     {pdfListo&&<div onClick={cerrarPdf} style={{position:"fixed",inset:0,background:"rgba(15,23,42,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#F2F2F2",borderRadius:14,padding:24,width:"100%",maxWidth:400,textAlign:"center",boxShadow:"0 20px 50px rgba(0,0,0,.25)"}}>
         <div style={{fontSize:40,lineHeight:1}}>📄</div>
-        <h3 style={{fontSize:17,fontWeight:800,color:"#000000",margin:"10px 0 4px"}}>Tu PDF está listo</h3>
+        <h3 style={{fontSize:17,fontWeight:800,color:"#000000",margin:"10px 0 4px"}}>Tu {pdfListo.tipo||"PDF"} está listo</h3>
         <p style={{fontSize:12,color:"#555555",margin:"0 0 18px",wordBreak:"break-word"}}>{pdfListo.nombre}</p>
-        <a href={pdfListo.url} download={pdfListo.nombre} style={{...btn("#000000"),width:"100%",justifyContent:"center",textDecoration:"none",boxSizing:"border-box",padding:"12px 18px",fontSize:14}}><Download size={16}/>Guardar PDF</a>
+        <a href={pdfListo.url} download={pdfListo.nombre} style={{...btn("#000000"),width:"100%",justifyContent:"center",textDecoration:"none",boxSizing:"border-box",padding:"12px 18px",fontSize:14}}><Download size={16}/>Guardar {pdfListo.tipo||"PDF"}</a>
         <div style={{display:"flex",gap:8,marginTop:10}}>
-          <a href={pdfListo.url} target="_blank" rel="noopener" style={{...btnO,flex:1,justifyContent:"center",textDecoration:"none"}}><Eye size={14}/>Abrir PDF</a>
-          {typeof navigator!=="undefined"&&navigator.canShare&&navigator.canShare({files:[new File([pdfListo.blob],pdfListo.nombre,{type:"application/pdf"})]})&&<button onClick={()=>navigator.share({files:[new File([pdfListo.blob],pdfListo.nombre,{type:"application/pdf"})],title:pdfListo.nombre}).catch(()=>{})} style={{...btnO,flex:1,justifyContent:"center"}}><Send size={14}/>Compartir</button>}
+          {!pdfListo.tipo&&<a href={pdfListo.url} target="_blank" rel="noopener" style={{...btnO,flex:1,justifyContent:"center",textDecoration:"none"}}><Eye size={14}/>Abrir PDF</a>}
+          {typeof navigator!=="undefined"&&navigator.canShare&&navigator.canShare({files:[new File([pdfListo.blob],pdfListo.nombre,{type:pdfListo.blob.type||"application/pdf"})]})&&<button onClick={()=>navigator.share({files:[new File([pdfListo.blob],pdfListo.nombre,{type:pdfListo.blob.type||"application/pdf"})],title:pdfListo.nombre}).catch(()=>{})} style={{...btnO,flex:1,justifyContent:"center"}}><Send size={14}/>Compartir</button>}
         </div>
         <button onClick={cerrarPdf} style={{marginTop:14,background:"none",border:"none",color:"#555555",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cerrar</button>
       </div>

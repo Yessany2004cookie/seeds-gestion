@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, label, badge, btn, btnO } from "./estilo";
-import { BookOpen, Lock, Unlock, RefreshCw, Info, CheckCircle, AlertTriangle } from "lucide-react";
+import { BookOpen, Lock, Unlock, RefreshCw, Info, CheckCircle, AlertTriangle, Download } from "lucide-react";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const ARRANQUE = { anio: 2026, mes: 11 };
@@ -145,6 +145,35 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
   const totEnt = flujo.ent.reduce((t, c) => t + c.v, 0), totSal = flujo.sal.reduce((t, c) => t + c.v, 0);
   const dispIniFlujo = dispFinal - totEnt - totSal; // la apertura cuenta como saldo inicial, no como entrada
 
+  // Excel con una hoja por reporte: estado de resultados, balance general y flujo de efectivo
+  const [xls, setXls] = useState(null);
+  const descargarExcel = async () => {
+    try {
+      const writeExcelFile = (await import("write-excel-file/browser")).default;
+      const FMT = '"L "#,##0.00;("L "#,##0.00)';
+      const n = (v, o = {}) => ({ value: Math.round((Number(v) || 0) * 100) / 100, type: Number, format: FMT, ...o });
+      const enc = (t) => [[{ value: "Seeds English School", fontWeight: "bold", fontSize: 14, textColor: "#1B2A4A" }], [{ value: t, fontWeight: "bold", fontSize: 12 }], [{ value: "Cifras en Lempiras", textColor: "#5B6576" }], []];
+      const cab = (a, b = "Monto") => [{ value: a, fontWeight: "bold", backgroundColor: "#1B2A4A", textColor: "#FFFFFF" }, { value: b, fontWeight: "bold", backgroundColor: "#1B2A4A", textColor: "#FFFFFF", align: "right" }];
+      const sec = (t) => [{ value: t, fontWeight: "bold", backgroundColor: "#E8ECF2" }, { value: null, backgroundColor: "#E8ECF2" }];
+      const tot = (t, v, color) => [{ value: t, fontWeight: "bold", topBorderStyle: "thin", textColor: color }, n(v, { fontWeight: "bold", topBorderStyle: "thin", textColor: color })];
+      const it = (t, v) => [{ value: t, indent: 1 }, n(v)];
+      const mesTxt = `${MESES[sel.mes - 1]} ${sel.anio}`;
+      const hRes = [...enc(`Estado de resultados — ${mesTxt}`), cab("Concepto"), sec("Ingresos"), ...ingresos.map((x) => it(x.c.nombre, x.v)), tot("Total ingresos", totIng),
+        [], sec("Gastos y costos"), ...gastos.map((x) => it(x.c.nombre, x.v)), tot("Total gastos", totGas), [], tot(resultado >= 0 ? "Ganancia del mes" : "Pérdida del mes", resultado, resultado >= 0 ? "#2A5E45" : "#8E3131")];
+      const hBal = [...enc(`Balance general al ${new Date(sel.anio, sel.mes, 0).getDate()} de ${mesTxt}`), cab("Cuenta"), sec("Activos (lo que tengo)"), ...activos.map((x) => it(x.c.nombre, x.v)), tot("Total activos", totA),
+        [], sec("Pasivos (lo que debo)"), ...pasivos.map((x) => it(x.c.nombre, x.v)), tot("Total pasivos", totP),
+        [], sec("Patrimonio"), ...patrimonio.map((x) => it(x.c.nombre, x.v)), it("Resultados desde noviembre 2026", resAcum), tot("Total patrimonio", totPat), [], tot("Pasivos + patrimonio", totP + totPat)];
+      const hFlu = [...enc(`Flujo de efectivo — ${mesTxt}`), cab("Concepto"), it("Efectivo y bancos al iniciar el mes", dispIniFlujo), [], sec("Entradas de dinero"),
+        ...flujo.ent.flatMap((c) => [it(c.k, c.v), ...c.items.map((i) => [{ value: `${i.f || ""}  ${i.d || ""}`, indent: 2, textColor: "#5B6576" }, n(i.v, { textColor: "#5B6576" })])]), tot("Total entradas", totEnt),
+        [], sec("Salidas de dinero"), ...flujo.sal.flatMap((c) => [it(c.k, c.v), ...c.items.map((i) => [{ value: `${i.f || ""}  ${i.d || ""}`, indent: 2, textColor: "#5B6576" }, n(i.v, { textColor: "#5B6576" })])]), tot("Total salidas", totSal),
+        [], tot("Efectivo y bancos al cierre", dispFinal)];
+      const cols = [{ width: 58 }, { width: 18 }];
+      const blob = await writeExcelFile([{ data: hRes, sheet: "Estado de resultados", columns: cols }, { data: hBal, sheet: "Balance general", columns: cols }, { data: hFlu, sheet: "Flujo de efectivo", columns: cols }], { fontFamily: "Calibri", fontSize: 11 }).toBlob();
+      if (xls) URL.revokeObjectURL(xls.url);
+      setXls({ url: URL.createObjectURL(blob), nombre: `Contabilidad ${mesTxt}.xlsx` });
+    } catch (e) { showToast && showToast("No se pudo crear el Excel: " + e.message, "error"); }
+  };
+
   const Pest = ({ id, txt }) => <button onClick={() => setTab(id)} style={{ ...btnO, background: tab === id ? "#1E293B" : btnO.background, color: tab === id ? "#fff" : btnO.color, fontWeight: 700 }}>{txt}</button>;
 
   if (sinModulo) return <div style={card}><h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Falta activar la contabilidad</h3><p style={{ fontSize: 13, color: GRIS }}>Hay que correr <code>supabase/contabilidad.sql</code> en Supabase (SQL Editor). Solo crea tablas nuevas; no cambia nada de lo que ya existe.</p></div>;
@@ -166,6 +195,8 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       <span style={badge(cerrado ? GRIS : VERDE)}>{cerrado ? <><Lock size={11} /> Cerrado</> : "Abierto"}</span>
       {!cerrado && <button onClick={() => generar(true)} disabled={trabajando} style={{ ...btnO, opacity: trabajando ? 0.6 : 1 }}><RefreshCw size={14} />{trabajando ? "Actualizando…" : "Actualizar asientos"}</button>}
       {!hayApertura && <span style={{ ...badge(ROJO) }}>Falta el asiento de apertura</span>}
+      {!cargando && ["resultados", "balance", "flujo"].includes(tab) && <button onClick={descargarExcel} style={btnO}><Download size={14} />Descargar Excel</button>}
+      {xls && <a href={xls.url} download={xls.nombre} onClick={() => setTimeout(() => setXls(null), 500)} style={{ ...btn("#15803D"), textDecoration: "none" }}><Download size={14} />Guardar {xls.nombre}</a>}
     </div>
 
     {!tabFijo && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
