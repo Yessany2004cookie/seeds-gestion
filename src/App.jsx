@@ -4672,7 +4672,7 @@ function ReportesPage({data,showToast}){
         balance:{caja:cajaRep.saldo,porCobrar:calcularAntiguedad(data,finSel<hoyISO?finSel:hoyISO).totCxc,porPagar:(data.cuentas_por_pagar||[]).filter(c=>!c.pagada).reduce((t,c)=>t+(Number(c.monto)||0),0)+rentaPendiente}});
       const libro=[informe,{data:resumen,sheet:"Resumen",columns:cols,images:img,showGridLines:false},
         ...hojas.filter(h=>!h.sinExcel).map(h=>({data:[...encabezado(h.t),...hojaAFilas(h.html)],sheet:h.t.slice(0,31),columns:cols,images:img,showGridLines:false}))];
-      const blob=await writeExcelFile(libro,{fontFamily:"Cambria",fontSize:10,features:[extraHoja]}).toBlob();
+      const blob=await writeExcelFile(libro,{fontFamily:"IBM Plex Sans",fontSize:10,features:[extraHoja]}).toBlob();
       const nombre=`Reportes ${mesSel} ${anioSel}.xlsx`;
       if(pdfListo)URL.revokeObjectURL(pdfListo.url);
       setPdfListo({url:URL.createObjectURL(blob),nombre,blob,tipo:"Excel"});

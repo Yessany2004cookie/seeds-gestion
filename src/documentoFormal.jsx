@@ -20,6 +20,7 @@ import "./alertasFinanzas.css";
 
 const AZUL = "#1B2A4A", NARANJA = "#D9641E", GRIS = "#5B6576", BANDA = "#F4F6F9", LINEA = "#D5DAE1", TOTAL = "#E8ECF2";
 const FMT_L = '"L "#,##0.00;[Red]-"L "#,##0.00';
+const SANS = "IBM Plex Sans", MONO = "IBM Plex Mono"; // títulos y textos / cifras y %
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const Lh = (v) => { const n = Math.round((Number(v) || 0) * 100) / 100; const t = `L&nbsp;${Math.abs(n).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; return n < 0 ? `(${t})` : t; };
 const generadoTxt = () => new Date().toLocaleString("es-HN", { dateStyle: "long", timeStyle: "short" });
@@ -69,8 +70,8 @@ export async function crearExcelFormal(writeExcelFile, extraHoja, reporte, marca
       return h.columnas.map((c, i) => {
         const v = (f.c || [])[i];
         const base = { fontWeight: neg ? "bold" : undefined, backgroundColor: fondo, textColor: t === "det" ? GRIS : (c.num && f.color) || undefined, alignVertical: "top", indent: i === 0 && t === "det" ? 2 : i === 0 && t === "it" && h.sangria !== false ? 1 : undefined, ...lin };
-        if (c.num && typeof v === "number") return { ...base, value: Math.round(v * 100) / 100, type: Number, format: FMT_L };
-        if (c.pct && typeof v === "number") return { ...base, value: v / 100, type: Number, format: "0.0%", align: "right" };
+        if (c.num && typeof v === "number") return { ...base, value: Math.round(v * 100) / 100, type: Number, format: FMT_L, fontFamily: MONO };
+        if (c.pct && typeof v === "number") return { ...base, value: v / 100, type: Number, format: "0.0%", align: "right", fontFamily: MONO };
         return { ...base, value: v === undefined || v === null || v === "" ? null : String(v), type: String, wrap: i === 0 || !c.ancho };
       });
     });
@@ -84,24 +85,25 @@ export async function crearExcelFormal(writeExcelFile, extraHoja, reporte, marca
       images: logo ? [{ ...logo, dpi: 96, anchor: { row: 1, column: 1 }, offsetX: 4, offsetY: 4, title: marca.nombre }] : undefined,
     };
   });
-  return writeExcelFile(libro, { fontFamily: "Calibri", fontSize: 10, features: [extraHoja] });
+  return writeExcelFile(libro, { fontFamily: SANS, fontSize: 10, features: [extraHoja] });
 }
 
 // ── PDF (HTML que html2pdf convierte) ──
 const CSS = `
-.pf{width:100%;background:#fff;color:#1F2937;font-family:"Source Serif 4",Georgia,"Times New Roman",serif;font-size:10.5px;line-height:1.4}
+.pf{width:100%;background:#fff;color:#1F2937;font-family:"IBM Plex Sans","Segoe UI",Arial,sans-serif;font-size:10.5px;line-height:1.4}
+.pf td.der,.pf .p b{font-family:"IBM Plex Mono",Consolas,monospace;font-size:10px}
 .pf *{box-sizing:border-box}
 .pf .cab{display:flex;align-items:center;gap:16px;padding-bottom:11px;border-bottom:2px solid ${NARANJA}}
 .pf .cab img{width:60px;height:60px;object-fit:contain}
 .pf .cab .t{flex:1}
-.pf .cab .n{font-family:Lora,Georgia,serif;font-size:18px;font-weight:700;color:${AZUL}}
+.pf .cab .n{font-size:18px;font-weight:700;color:${AZUL}}
 .pf .cab .s{font-size:10.5px;color:${GRIS};margin-top:1px}
 .pf .cab .d{font-size:15px;font-weight:700;color:${AZUL};margin-top:5px}
 .pf .cab .p{text-align:right;font-size:9.5px;color:${GRIS};line-height:1.6}
 .pf .cab .p b{color:#1F2937}
 .pf .sec{margin-top:16px}
 .pf .salto{page-break-before:always;break-before:page;margin-top:0}
-.pf h2{font-family:Lora,Georgia,serif;font-size:13px;margin:0 0 6px;color:${AZUL}}
+.pf h2{font-size:13px;margin:0 0 6px;color:${AZUL}}
 .pf table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .pf th{background:${AZUL};color:#fff;font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:.3px;padding:6px 7px;text-align:left}
 .pf th.der{text-align:right}
