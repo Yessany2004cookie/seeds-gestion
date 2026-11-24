@@ -10,6 +10,7 @@ import { supabase } from "./supabaseClient";
 import { card, input, label, badge, btn, btnO } from "./estilo";
 import { BookOpen, Lock, Unlock, RefreshCw, Info, CheckCircle, AlertTriangle, Download } from "lucide-react";
 import { BarraDescargas } from "./documentoFormal";
+import { useMarca } from "./marca";
 import { Balanza, Ajustes, Antiguedad, calcularBalanza, calcularAntiguedad } from "./contabilidadExtra";
 import { useVista, SelectorVista, EstilosVistas, Titular, Kpis, Comparar, Desglose, Movimientos, Hoja, Lc, VERDE as VERDE_S, ROJO as ROJO_S, NARANJA, AZUL as AZUL_M } from "./vistas";
 import { fuentesExcel, EXCEL_TEXTO } from "./tipografia";
@@ -180,6 +181,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
 
   // ── Datos para las dos vistas (solo presentación) ──
   const [vista, setVista] = useVista();
+  const marcaC = useMarca();
   const mesTxt = `${MESES[sel.mes - 1]} ${sel.anio}`;
   const pctIng = (v) => (totIng ? Math.abs(v) / totIng * 100 : null);
   const dineroLibre = (saldos["1.1.01"] || 0) + (saldos["2.1.01"] || 0) + (saldos["2.1.02"] || 0);
@@ -256,11 +258,30 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
         [], [gris("Lo que debe la escuela")],
         ...ant.cxp.map((x) => [{ value: x.nombre }, { value: x.mes }, ...[0, 1, 2, 3].map((i) => (x.t === i ? n(x.monto) : null)), n(x.monto)]),
         [{ value: "Total", fontWeight: "bold", topBorderStyle: "thin" }, { value: "" }, ...ant.tramosCxp.map(totF), totF(ant.totCxp)]];
-      const blob = await writeExcelFile(fuentesExcel([{ data: hRes, sheet: "Estado de resultados", columns: cols }, { data: hBal, sheet: "Balance general", columns: cols }, { data: hFlu, sheet: "Flujo de efectivo", columns: cols },
+      // Hoja 1: Informe financiero (misma estructura que en Reportes), con las cifras contables
+      const [{ hojaInforme }, { extraHoja }, { logoParaExcel }] = await Promise.all([import("./informeExcel"), import("./alertasExcel"), import("./alertasFinanzas")]);
+      const mesCont = (k) => { const an = Math.floor((k - 1) / 12), me = ((k - 1) % 12) + 1; const ls = lineasDe(asientos.filter((x) => x.anio === an && x.mes === me && x.clase !== "apertura"));
+        const mv = (pre) => ls.filter((l) => l.cuenta.startsWith(pre)).reduce((t, l) => t + Number(l.haber) - Number(l.debe), 0); const g = (pre) => -mv(pre);
+        const hastaK = asientos.filter((x) => clave(x.anio, x.mes) <= k); const disp = lineasDe(hastaK).filter((l) => l.cuenta === "1.1.01").reduce((t, l) => t + Number(l.debe) - Number(l.haber), 0);
+        const dm = ls.filter((l) => l.cuenta === "1.1.01"); const ent = dm.reduce((t, l) => t + Number(l.debe), 0), sal = dm.reduce((t, l) => t + Number(l.haber), 0);
+        const r = { mensualidades: mv("4.1.01"), mora: mv("4.1.02"), materiales: mv("4.2.01"), graduacion: mv("4.2.02"), extra: mv("4.3"), costoMat: g("5.1"), costoGrad: 0,
+          salarios: g("5.2.01"), renta: g("5.2.02"), servicios: g("5.2.03"), comisiones: g("5.2.04"), otros: g("5.2.05") + g("5.3"), deudas: 0 };
+        r.ingresos = r.mensualidades + r.mora + r.materiales + r.graduacion + r.extra; r.costos = r.costoMat + r.costoGrad; r.utilBruta = r.ingresos - r.costos;
+        r.gastosOp = r.salarios + r.renta + r.servicios + r.otros; r.utilOp = r.utilBruta - r.gastosOp; r.otrosGastos = r.comisiones; r.neta = r.utilOp - r.otrosGastos;
+        const cb = cobranzaDelMes(data.facturas, an, me);
+        return { ...r, cajaInicio: disp - ent + sal, entradas: ent, salidas: sal, cajaFin: disp, facturado: cb.facturado, cobrado: cb.pagado, pendiente: cb.pendiente, etq: `${MESES[me - 1].slice(0, 3)} ${String(an).slice(2)}` }; };
+      const kIni = clave(ARRANQUE.anio, ARRANQUE.mes), kS = clave(sel.anio, sel.mes);
+      const serieC = []; for (let k = Math.max(kIni, kS - 4); k <= kS; k++) serieC.push(mesCont(k));
+      const kAnt = kS - 1, antC = kAnt >= kIni ? mesCont(kAnt) : { ...Object.fromEntries(Object.keys(serieC[serieC.length - 1]).map((x) => [x, 0])) };
+      const logoX = await logoParaExcel(marcaC.logoSrc);
+      const informe = await hojaInforme({ marca: { nombre: marcaC.nombreO("Seeds English School") }, logo: logoX, modulo: "Contabilidad", mesTxt, antTxt: `${MESES[((kAnt - 1) % 12)]} ${Math.floor((kAnt - 1) / 12)}`,
+        actual: serieC[serieC.length - 1], anterior: antC, serie: serieC, balance: { caja: saldos["1.1.01"] || 0, porCobrar: totA - (saldos["1.1.01"] || 0), porPagar: totP },
+        nota: "Cifras de la contabilidad (partida doble): ingresos cuando se cobran a los padres (facturado) y gastos del mes al que corresponden. La contabilidad arranca en noviembre de 2026, por eso los meses anteriores salen en cero. Cifras en Lempiras." });
+      const blob = await writeExcelFile(fuentesExcel([informe, { data: hRes, sheet: "Estado de resultados", columns: cols }, { data: hBal, sheet: "Balance general", columns: cols }, { data: hFlu, sheet: "Flujo de efectivo", columns: cols },
         { data: hBz, sheet: "Balanza de comprobación", columns: [{ width: 10 }, { width: 40 }, ...Array(6).fill({ width: 16 })] },
         { data: hDi, sheet: "Libro diario", columns: [{ width: 12 }, { width: 58 }, { width: 10 }, { width: 16 }, { width: 16 }] },
         { data: hMa, sheet: "Libro mayor", columns: [{ width: 12 }, { width: 58 }, { width: 16 }, { width: 16 }, { width: 16 }] },
-        { data: hAn, sheet: "Antigüedad de saldos", columns: [{ width: 40 }, { width: 14 }, ...Array(5).fill({ width: 16 })] }]), { fontFamily: EXCEL_TEXTO, fontSize: 11 }).toBlob();
+        { data: hAn, sheet: "Antigüedad de saldos", columns: [{ width: 40 }, { width: 14 }, ...Array(5).fill({ width: 16 })] }]), { fontFamily: EXCEL_TEXTO, fontSize: 10, features: [extraHoja] }).toBlob();
       if (xls) URL.revokeObjectURL(xls.url);
       setXls({ url: URL.createObjectURL(blob), nombre: `Contabilidad ${mesTxt}.xlsx` });
     } catch (e) { showToast && showToast("No se pudo crear el Excel: " + e.message, "error"); }

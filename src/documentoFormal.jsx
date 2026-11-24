@@ -21,6 +21,7 @@ import { fuentesExcel, EXCEL_TEXTO, cargarFuentesInforme } from "./tipografia";
 
 const AZUL = "#1B2A4A", NARANJA = "#D9641E", GRIS = "#5B6576", BANDA = "#F4F6F9", LINEA = "#D5DAE1", TOTAL = "#E8ECF2";
 const FMT_L = '"L "#,##0.00;[Red]-"L "#,##0.00';
+const SANS = "IBM Plex Sans", MONO = "IBM Plex Mono"; // títulos y textos / cifras y %
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const Lh = (v) => { const n = Math.round((Number(v) || 0) * 100) / 100; const t = `L&nbsp;${Math.abs(n).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; return n < 0 ? `(${t})` : t; };
 const generadoTxt = () => new Date().toLocaleString("es-HN", { dateStyle: "long", timeStyle: "short" });
@@ -70,8 +71,8 @@ export async function crearExcelFormal(writeExcelFile, extraHoja, reporte, marca
       return h.columnas.map((c, i) => {
         const v = (f.c || [])[i];
         const base = { fontWeight: neg ? "bold" : undefined, backgroundColor: fondo, textColor: t === "det" ? GRIS : (c.num && f.color) || undefined, alignVertical: "top", indent: i === 0 && t === "det" ? 2 : i === 0 && t === "it" && h.sangria !== false ? 1 : undefined, ...lin };
-        if (c.num && typeof v === "number") return { ...base, value: Math.round(v * 100) / 100, type: Number, format: FMT_L };
-        if (c.pct && typeof v === "number") return { ...base, value: v / 100, type: Number, format: "0.0%", align: "right" };
+        if (c.num && typeof v === "number") return { ...base, value: Math.round(v * 100) / 100, type: Number, format: FMT_L, fontFamily: MONO };
+        if (c.pct && typeof v === "number") return { ...base, value: v / 100, type: Number, format: "0.0%", align: "right", fontFamily: MONO };
         return { ...base, value: v === undefined || v === null || v === "" ? null : String(v), type: String, wrap: i === 0 || !c.ancho };
       });
     });
@@ -91,6 +92,7 @@ export async function crearExcelFormal(writeExcelFile, extraHoja, reporte, marca
 // ── PDF (HTML que html2pdf convierte) ──
 const CSS = `
 .pf{width:100%;background:#fff;color:#1F2937;font-family:"IBM Plex Sans",Arial,sans-serif;font-size:10.5px;line-height:1.4}
+.pf td.der,.pf .p b{font-family:"IBM Plex Mono",Consolas,monospace;font-size:10px}
 .pf *{box-sizing:border-box}
 .pf .cab{display:flex;align-items:center;gap:16px;padding-bottom:11px;border-bottom:2px solid ${NARANJA}}
 .pf .cab img{width:60px;height:60px;object-fit:contain}

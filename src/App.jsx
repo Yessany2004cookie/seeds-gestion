@@ -4125,6 +4125,31 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
 }
 
 // ── REPORTES (resumen económico mensual completo) ──
+// ── Cifras de un mes para el Informe financiero en Excel (mismas reglas que Reportes) ──
+export function calcularMesReporte(data,mes,anio){
+  const sum=(xs,f)=>xs.reduce((s,x)=>s+(Number(f(x))||0),0);
+  const comps=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,anio));
+  const mensualidades=sum(comps,f=>f.monto_total), mora=sum(comps,moraCobrada);
+  const ventas=data.ventas_material.filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,anio));
+  const materiales=sum(ventas,v=>v.precio_venta), costoMat=sum(ventas,v=>v.costo);
+  const grad=data.cobros_graduacion.filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,anio));
+  const graduacion=sum(grad,gradRecibido), costoGrad=sum(gastosGradDe(data,mes,anio),g=>g.monto);
+  const extra=sum((data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,anio)),i=>i.monto);
+  const gm=data.gastos.filter(g=>esGastoDe(g,mes,anio));
+  const salarios=sum(gm.filter(g=>g.tipo==="salario"),g=>g.monto), renta=sum(gm.filter(g=>g.tipo==="renta"),g=>g.monto);
+  const comisiones=sum(gm.filter(g=>g.tipo==="comision"),g=>g.monto), deudas=sum(gm.filter(g=>g.tipo==="deuda"),g=>g.monto);
+  const servicios=sum(gm.filter(g=>g.tipo==="otro"&&/(luz|energ|agua|internet|tel[eé]fono|cable)/i.test(g.descripcion||"")),g=>g.monto);
+  const otros=sum(gm.filter(g=>!["salario","renta","comision","deuda"].includes(g.tipo)),g=>g.monto)-servicios;
+  const ingresos=mensualidades+mora+materiales+graduacion+extra, costos=costoMat+costoGrad, utilBruta=ingresos-costos;
+  const gastosOp=salarios+renta+servicios+otros, utilOp=utilBruta-gastosOp, otrosGastos=comisiones+deudas, neta=utilOp-otrosGastos;
+  const caja=cajaDelMes(data,mes,anio);
+  // Cobranza del mes: cobros enviados (uno por alumno) contra los ya pagados
+  const cob={};data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada"&&f.mes_correspondiente===mes&&anioCobro(f)===anio).forEach(f=>{if(!cob[f.alumno_id]||String(f.created_at)<String(cob[f.alumno_id].created_at))cob[f.alumno_id]=f;});
+  const cobros=Object.values(cob), facturado=sum(cobros,f=>f.monto_total), pendiente=sum(cobros.filter(f=>f.estado==="pendiente"||f.estado==="parcial"),f=>Number(f.saldo)>0?f.saldo:f.monto_total);
+  return{mes,anio,mensualidades,mora,materiales,graduacion,extra,ingresos,costoMat,costoGrad,costos,utilBruta,salarios,renta,servicios,otros,gastosOp,utilOp,comisiones,deudas,otrosGastos,neta,
+    cajaInicio:caja.saldo-caja.neto,entradas:caja.entradas,salidas:caja.salidas,cajaFin:caja.saldo,facturado,cobrado:facturado-pendiente,pendiente,alumnos:cobros.length};
+}
+
 function ReportesPage({data,showToast}){
   const marcaRep=useMarca();
   const[mesSel,setMesSel]=useState(MESES[new Date().getMonth()]);
@@ -4678,9 +4703,20 @@ function ReportesPage({data,showToast}){
         [],[{value:"Falta pagar de este mes"},{value:totPorPagar,type:Number,format:FMT_L}],[{value:"Le deben a la escuela de este mes"},{value:totPorCobrar,type:Number,format:FMT_L}],[{value:"Dinero en caja al cierre"},{value:cajaRep.saldo,type:Number,format:FMT_L}],
       ];
       const img=logoXls?[{...logoXls,dpi:96,anchor:{row:1,column:1},offsetX:4,offsetY:2,title:"Logo"}]:undefined;
-      const libro=[{data:resumen,sheet:"Resumen",columns:cols,images:img,showGridLines:false},
+      // Hoja 1: Informe financiero tipo tablero (mes vs. mes anterior, bloques y gráficas)
+      const [{hojaInforme},{calcularAntiguedad},{extraHoja}]=await Promise.all([import("./informeExcel"),import("./contabilidadExtra"),import("./alertasExcel")]);
+      const kSel=anioSel*12+MESES.indexOf(mesSel);
+      const mesDe=(k)=>({mes:MESES[((k%12)+12)%12],anio:Math.floor(k/12)});
+      const serie=[4,3,2,1,0].map(d=>{const m=mesDe(kSel-d);return{...calcularMesReporte(data,m.mes,m.anio),etq:`${m.mes.slice(0,3)} ${String(m.anio).slice(2)}`};});
+      const ant=mesDe(kSel-1);
+      const finSel=`${anioSel}-${String(MESES.indexOf(mesSel)+1).padStart(2,"0")}-${String(new Date(anioSel,MESES.indexOf(mesSel)+1,0).getDate()).padStart(2,"0")}`;
+      const hoyISO=new Date().toISOString().slice(0,10);
+      const informe=await hojaInforme({marca:{nombre:marcaRep.nombreO("Seeds English School")},logo:logoXls,mesTxt:`${mesSel} ${anioSel}`,antTxt:`${ant.mes} ${ant.anio}`,
+        actual:serie[4],anterior:serie[3],serie,
+        balance:{caja:cajaRep.saldo,porCobrar:calcularAntiguedad(data,finSel<hoyISO?finSel:hoyISO).totCxc,porPagar:(data.cuentas_por_pagar||[]).filter(c=>!c.pagada).reduce((t,c)=>t+(Number(c.monto)||0),0)+rentaPendiente}});
+      const libro=[informe,{data:resumen,sheet:"Resumen",columns:cols,images:img,showGridLines:false},
         ...hojas.filter(h=>!h.sinExcel).map(h=>({data:[...encabezado(h.t),...hojaAFilas(h.html)],sheet:h.t.slice(0,31),columns:cols,images:img,showGridLines:false}))];
-      const blob=await writeExcelFile(fuentesExcel(libro),{fontFamily:EXCEL_TEXTO,fontSize:11}).toBlob();
+      const blob=await writeExcelFile(fuentesExcel(libro),{fontFamily:EXCEL_TEXTO,fontSize:10,features:[extraHoja]}).toBlob();
       const nombre=`Reportes ${mesSel} ${anioSel}.xlsx`;
       if(pdfListo)URL.revokeObjectURL(pdfListo.url);
       setPdfListo({url:URL.createObjectURL(blob),nombre,blob,tipo:"Excel"});
