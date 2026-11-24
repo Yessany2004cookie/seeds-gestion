@@ -41,7 +41,8 @@ const esLinkWhatsApp = (url) => /(^|\/\/|\.)wa\.me\b|whatsapp/i.test(String(url 
 // Pantallas donde se lee mucho (reportes, finanzas…): se da más tiempo de
 // lectura sin mover nada antes de pausar el contador.
 const SECCIONES_LECTURA = new Set(["dashboard", "reportes", "finanzas", "contabilidad", "alertas", "historial"]);
-const limiteDe = (sec) => (SECCIONES_LECTURA.has(sec) ? LECTURA_MS : INACTIVO_MS);
+const esLectura = (sec) => SECCIONES_LECTURA.has(sec) || String(sec || "").startsWith("c_");   // c_… = pantallas de Contabilidad
+const limiteDe = (sec) => (esLectura(sec) ? LECTURA_MS : INACTIVO_MS);
 const REPETIDOS_MAX = 6;     // 6 clics seguidos en lo mismo → los siguientes no cuentan
 const TECLA_REPETIDA_MAX = 15;
 
@@ -233,7 +234,7 @@ function agrupar(filas, nombreSeccion) {
     let u = usuarios.get(r.user_id);
     if (!u) { u = { id: r.user_id, email: r.email || "(sin correo)", seg: 0, desc: 0, rep: 0, lectura: 0, clics: 0, scrolls: 0, teclas: 0, wa: 0, compu: 0, celular: 0, dias: new Map() }; usuarios.set(r.user_id, u); }
     u.desc += r.descartados || 0; u.rep += r.repetidos || 0;
-    if (SECCIONES_LECTURA.has(r.seccion)) u.lectura += r.segundos;
+    if (esLectura(r.seccion)) u.lectura += r.segundos;
     u.seg += r.segundos; u.clics += r.clics; u.scrolls += r.scrolls; u.teclas += r.teclas; u.wa += r.whatsapp;
     u[r.dispositivo === "celular" ? "celular" : "compu"] += r.segundos;
     let d = u.dias.get(r.fecha);
