@@ -241,3 +241,6 @@ div[style*="position: fixed"][style*="inset: 0px"][style*="background: rgba(0, 0
   background: #fff; border: 1px solid #CDD3DC;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* El menú lateral nunca se encoge (antes, con pantallas angostas y tablas anchas, se cortaba a la izquierda) */
+.vidrio-menu { flex-shrink: 0; }
