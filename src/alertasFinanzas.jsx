@@ -183,7 +183,7 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
     return [...m.values()].filter((v) => v.length > 1);
   }, [data.facturas]);
   // Alertas del mes (planilla, servicios, cobranza) y revisión de datos del sistema
-  const { alertas: delSistema, resumen: resMes } = useMemo(() => alertasDelSistema(data), [data]); // eslint-disable-line
+  const { alertas: delSistema, resumen: resMes } = useMemo(() => alertasDelSistema(data, new Date(), fijos), [data, fijos]); // eslint-disable-line
   const nOtras = cxpAtrasadas.length + repetidos.length + compRepetidos.length + delSistema.length;
 
   const totDeuda = deudores.reduce((s, d) => s + d.monto, 0);

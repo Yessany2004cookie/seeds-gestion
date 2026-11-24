@@ -4,7 +4,8 @@
 //  Las cifras salen de resumenDelMes (src/resumenMes.js), las mismas de Alertas
 //  y Contabilidad.
 // ════════════════════════════════════════════════════════════
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { supabase } from "./supabaseClient";
 import { AlertTriangle, CheckCircle, Info } from "lucide-react";
 import { resumenDelMes, alertasDelSistema, MESES } from "./resumenMes";
 import "./resumenMes.css";
@@ -24,8 +25,17 @@ export function ResumenMesInicio({ data, setPage, verAlertas }) {
   const hoy = new Date();
   const anio = hoy.getFullYear();
   const [mi, setMi] = useState(hoy.getMonth());
-  const r = useMemo(() => resumenDelMes(data, anio, mi), [data, anio, mi]);
-  const nAlertas = useMemo(() => (verAlertas ? alertasDelSistema(data, hoy).alertas.length : 0), [data, verAlertas]); // eslint-disable-line
+  // Gastos fijos escritos en Alertas: se leen de la base de datos (ajustes_sistema).
+  // Si la tabla aún no existe o no hay valor, queda la copia del navegador / lo último registrado.
+  const [fijos, setFijos] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    supabase.from("ajustes_sistema").select("valor").eq("clave", "gastos_fijos").maybeSingle()
+      .then(({ data: fila, error }) => { if (vivo && !error && fila && Number.isFinite(Number(fila.valor))) setFijos(Number(fila.valor)); }, () => {});
+    return () => { vivo = false; };
+  }, []);
+  const r = useMemo(() => resumenDelMes(data, anio, mi, fijos), [data, anio, mi, fijos]);
+  const nAlertas = useMemo(() => (verAlertas ? alertasDelSistema(data, hoy, fijos).alertas.length : 0), [data, verAlertas, fijos]); // eslint-disable-line
   const esActual = mi === hoy.getMonth();
   const escala = Math.max(r.meta, r.cobrado, 1);
   const pct = (v) => `${Math.min(100, (v / escala) * 100)}%`;

@@ -41,9 +41,13 @@ const SERVICIOS = [
 const servicioDe = (r) => (r.tipo === "salario" ? null : SERVICIOS.find((s) => s.es(r))?.k || null);
 
 // Gastos fijos que la usuaria escribió en Alertas (si no, lo último registrado)
-const fijosGuardados = () => { try { return num(localStorage.getItem("seeds_gastos_fijos")); } catch (e) { return 0; } };
+// Gastos fijos que administración escribió en Alertas. Se guardan en la base de datos
+// (ajustes_sistema, clave "gastos_fijos"); el navegador solo guarda una copia.
+// Quien llama puede pasar el valor ya leído de la base de datos (parámetro fijos).
+const fijosLocal = () => { try { return num(localStorage.getItem("seeds_gastos_fijos")); } catch (e) { return 0; } };
 
-export function resumenDelMes(data, anio, mesIdx) {
+export function resumenDelMes(data, anio, mesIdx, fijos) {
+  const fijosEscritos = fijos === undefined || fijos === null ? fijosLocal() : num(fijos);
   const mes = MESES[mesIdx];
   const gastos = (data.gastos || []).filter((g) => gastoDe(g, mes, anio));
   const cxp = (data.cuentas_por_pagar || []).filter((c) => cxpDe(c, mes, anio));
@@ -65,7 +69,7 @@ export function resumenDelMes(data, anio, mesIdx) {
     return { ...s, registrado: suma(r, (x) => x.monto), pagado: suma(r.filter((x) => x.pagado), (x) => x.monto), hay: r.length > 0 };
   });
   const sugeridos = gastosFijosSugeridos(data);
-  const serviciosMes = fijosGuardados() || sugeridos;
+  const serviciosMes = fijosEscritos || sugeridos;
   const serviciosReg = suma(detalle, (d) => d.registrado);
   const otrosGastos = suma(regs.filter((x) => x.tipo !== "salario" && x.tipo !== "deuda" && !servicioDe(x)), (x) => x.monto);
 
@@ -76,7 +80,7 @@ export function resumenDelMes(data, anio, mesIdx) {
   return {
     mes, anio, mesIdx,
     planilla: { mes: planillaMes, pagada: planillaPagada, porPagar: planillaPorPagar, registrada: planillaPagada + planillaPorPagar, maestros: maestros.length, sinPago, sinGrupo: maestros.filter((m) => !Array.isArray(m.secciones_ids) || m.secciones_ids.length === 0) },
-    servicios: { mes: serviciosMes, registrado: serviciosReg, detalle, manual: fijosGuardados() > 0 },
+    servicios: { mes: serviciosMes, registrado: serviciosReg, detalle, manual: fijosEscritos > 0 },
     otrosGastos, meta,
     cobrado: cob.facturado, entro: cob.pagado, falta: cob.pendiente, alumnos: cob.alumnos, alumnosPagados: cob.alumnosPagados,
     // Si todos pagan: lo que sobra (+) o falta (−) después de planilla y servicios
@@ -88,10 +92,10 @@ export function resumenDelMes(data, anio, mesIdx) {
 
 // ── Alertas del mes y de datos (para Finanzas → Alertas, pestaña «Otras alertas») ──
 // Cada alerta: { tipo, quien, mes, doc, monto, accion, grave }  (mismo formato que el Excel/PDF)
-export function alertasDelSistema(data, hoy = new Date()) {
+export function alertasDelSistema(data, hoy = new Date(), fijos) {
   const anio = hoy.getFullYear(), mi = hoy.getMonth(), dia = hoy.getDate();
-  const r = resumenDelMes(data, anio, mi);
-  const ant = mi === 0 ? resumenDelMes(data, anio - 1, 11) : resumenDelMes(data, anio, mi - 1);
+  const r = resumenDelMes(data, anio, mi, fijos);
+  const ant = mi === 0 ? resumenDelMes(data, anio - 1, 11, fijos) : resumenDelMes(data, anio, mi - 1, fijos);
   const etq = (x) => `${x.mes} ${x.anio}`;
   const out = [];
   const add = (o) => out.push({ doc: "", monto: 0, grave: false, ...o });
