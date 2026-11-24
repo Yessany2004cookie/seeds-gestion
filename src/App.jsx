@@ -4,7 +4,7 @@ import { card, input, btn, btnO, label, badge } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
 import { AlertasFinanzasPage } from "./alertasFinanzas";
 import { ContabilidadPage } from "./contabilidad";
-import { useContadorUso, UsoSistemaPanel } from "./usoSistema";
+import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
@@ -649,7 +649,7 @@ export default function App() {
   useEffect(() => { if(session && rol.estado==="admin") loadData(); }, [session, rol.estado, loadData]);
 
   // Contador de tiempo de trabajo real (solo en el panel de administración)
-  useContadorUso({ activo: !!session && rol.estado==="admin" && !(rol.perfil?.maestro_id && vistaDocente), seccion: page });
+  useContadorUso({ activo: !!session && rol.estado==="admin" && !(rol.perfil?.maestro_id && vistaDocente), seccion: page, userId: session?.user?.id });
 
   const logout = async () => { await supabase.auth.signOut(); setSession(null); };
 
@@ -751,6 +751,7 @@ export default function App() {
               </select>
             </div>}
             {rol.perfil?.maestro_id&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:8,cursor:"pointer",padding:"5px 10px",color:"#EA580C",fontSize:12,fontWeight:700,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
+            <ContadorVisible/>
             <button onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"rgba(255,255,255,.6)",border:"1px solid rgba(255,255,255,.85)",borderRadius:999,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
             <div style={{fontSize:12,color:"#64748B"}} className="hide-mobile">{session.user.email}</div>
           </div>

@@ -4,9 +4,13 @@
 //  1) useContadorUso: escucha la actividad REAL en el panel de administración
 //     (mover el mouse, clics, scroll, teclado, toques en el celular y envíos
 //     por WhatsApp). Solo suma el tiempo entre una acción y la siguiente si no
-//     pasaron más de 2 minutos; si alguien deja la pestaña abierta sin usarla,
-//     ese tiempo NO cuenta. Al enviar por WhatsApp se esperan hasta 5 minutos,
-//     porque la persona sale un momento a la app de WhatsApp y vuelve.
+//     pasaron más de 2 minutos (5 en pantallas de lectura como Reportes o
+//     Finanzas); si alguien deja la pestaña abierta sin usarla, NO cuenta.
+//     Al enviar por WhatsApp se esperan hasta 5 minutos, porque la persona sale
+//     un momento a la app de WhatsApp y vuelve.
+//     Para que no se infle el tiempo: mover el mouse sin hacer nada más no
+//     cuenta pasado ese límite, y los clics seguidos en el mismo lugar (más de
+//     6) o teclas sostenidas tampoco. Ese tiempo queda como "descartado".
 //     Cada minuto guarda lo acumulado en la tabla uso_sistema (por usuario,
 //     día, hora, sección y dispositivo).
 //
@@ -19,6 +23,7 @@ import { card, input, btn, btnO } from "./estilo";
 import { Clock, FileSpreadsheet, Download, X, ChevronDown, ChevronRight, Monitor, Smartphone, RefreshCw } from "lucide-react";
 
 const INACTIVO_MS = 2 * 60 * 1000;     // sin actividad por 2 min → deja de contar
+const LECTURA_MS = 5 * 60 * 1000;      // en pantallas de lectura (reportes, finanzas…) se espera hasta 5 min
 const ESPERA_WA_MS = 5 * 60 * 1000;    // después de enviar por WhatsApp se espera hasta 5 min
 const GUARDAR_CADA_MS = 60 * 1000;     // se guarda cada minuto
 
@@ -33,51 +38,100 @@ const esCelular = () => {
 const esLinkWhatsApp = (url) => /(^|\/\/|\.)wa\.me\b|whatsapp/i.test(String(url || ""));
 
 // ── 1) Contador ──────────────────────────────────────────────
-export function useContadorUso({ activo, seccion }) {
+// Pantallas donde se lee mucho (reportes, finanzas…): se da más tiempo de
+// lectura sin mover nada antes de pausar el contador.
+const SECCIONES_LECTURA = new Set(["dashboard", "reportes", "finanzas", "contabilidad", "alertas", "historial"]);
+const limiteDe = (sec) => (SECCIONES_LECTURA.has(sec) ? LECTURA_MS : INACTIVO_MS);
+const REPETIDOS_MAX = 6;     // 6 clics seguidos en lo mismo → los siguientes no cuentan
+const TECLA_REPETIDA_MAX = 15;
+
+// Estado en vivo para el contador visible (sin volver a dibujar toda la app)
+const vivo = { fecha: "", base: 0, local: 0, ultima: 0, ultimaReal: 0, limite: INACTIVO_MS, repetitivo: 0, activo: false };
+
+const firmaElemento = (el) => {
+  if (!el || !el.tagName) return "";
+  const b = el.closest ? (el.closest("button,a,[role=button],input,select,label,tr,td,li") || el) : el;
+  const txt = (b.innerText || b.value || b.getAttribute?.("aria-label") || "").trim().slice(0, 30);
+  return `${b.tagName}|${b.id || ""}|${b.className && typeof b.className === "string" ? b.className.slice(0, 40) : ""}|${txt}`;
+};
+
+export function useContadorUso({ activo, seccion, userId }) {
   const secRef = useRef(seccion);
   secRef.current = seccion;
 
   useEffect(() => {
-    if (!activo) return;
+    if (!activo) { vivo.activo = false; return; }
     const dispositivo = esCelular() ? "celular" : "compu";
     const pendiente = new Map();   // "fecha|hora|sección" → acumulado sin guardar
-    let ultima = 0;                // momento de la última actividad que cuenta
+    let ultima = 0;                // última actividad de cualquier tipo
+    let ultimaReal = 0;            // última acción de trabajo (clic, tecla, scroll, WhatsApp)
     let limite = INACTIVO_MS;      // cuánto puede durar la pausa y seguir contando
     let ultimoWA = 0, ultimoMov = 0, ultimoScroll = 0;
+    let firmaClic = "", seguidosClic = 0, ultimoClic = 0;
+    let teclaPrev = "", seguidasTecla = 0;
+
+    // Total de hoy ya guardado (para el contador visible)
+    const hoy = fechaLocal(new Date());
+    Object.assign(vivo, { fecha: hoy, base: 0, local: 0, ultima: 0, ultimaReal: 0, repetitivo: 0, activo: true });
+    if (userId) supabase.from("uso_sistema").select("segundos").eq("user_id", userId).eq("fecha", hoy)
+      .then(({ data }) => { if (data && vivo.fecha === hoy) vivo.base = data.reduce((s, r) => s + (r.segundos || 0), 0); });
 
     const cubeta = (t) => {
       const d = new Date(t);
       const fecha = fechaLocal(d), hora = d.getHours(), sec = secRef.current || "";
       const k = `${fecha}|${hora}|${sec}`;
       let b = pendiente.get(k);
-      if (!b) { b = { fecha, hora, sec, seg: 0, clics: 0, scrolls: 0, teclas: 0, wa: 0, primera: t, ultima: t }; pendiente.set(k, b); }
+      if (!b) { b = { fecha, hora, sec, seg: 0, desc: 0, rep: 0, clics: 0, scrolls: 0, teclas: 0, wa: 0, primera: t, ultima: t }; pendiente.set(k, b); }
       b.ultima = t;
+      if (vivo.fecha !== fecha) { vivo.fecha = fecha; vivo.base = 0; vivo.local = 0; }
       return b;
     };
-    const actividad = (tipo) => {
+    // real = true para acciones de trabajo; con solo mover el mouse el tiempo
+    // cuenta hasta el límite desde la última acción real, y después se descarta.
+    const actividad = (tipo, real) => {
       const t = Date.now();
       const b = cubeta(t);
-      if (ultima && t - ultima <= limite) b.seg += (t - ultima) / 1000;
-      ultima = t; limite = INACTIVO_MS;
+      const gap = ultima ? t - ultima : Infinity;
+      if (gap <= limite) {
+        if (t - ultimaReal <= limite || real) { b.seg += gap / 1000; vivo.local += gap / 1000; }
+        else b.desc += gap / 1000;
+      }
+      ultima = t;
+      if (real) { ultimaReal = t; limite = limiteDe(secRef.current); }
       if (tipo) b[tipo] += 1;
+      vivo.ultima = ultima; vivo.ultimaReal = ultimaReal; vivo.limite = limite;
     };
-    const marcarWA = () => { actividad("wa"); ultimoWA = Date.now(); limite = ESPERA_WA_MS; };
+    const repetido = () => { const b = cubeta(Date.now()); b.rep += 1; vivo.repetitivo = Date.now(); actividad(null, false); };
+    const marcarWA = () => { actividad("wa", true); ultimoWA = Date.now(); limite = ESPERA_WA_MS; vivo.limite = limite; };
 
-    // Eventos de actividad real
-    const onMove = () => { const t = Date.now(); if (t - ultimoMov > 1000) { ultimoMov = t; actividad(null); } };
+    // Eventos de actividad
+    const onMove = () => { const t = Date.now(); if (t - ultimoMov > 1000) { ultimoMov = t; actividad(null, false); } };
     const onClick = (e) => {
       const a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
-      if (e.isTrusted) actividad("clics");
-      if (a && esLinkWhatsApp(a.getAttribute("href"))) marcarWA();   // después del clic, para que quede la espera de 5 min
+      const esWA = a && esLinkWhatsApp(a.getAttribute("href"));
+      if (e.isTrusted && !esWA) {
+        const t = Date.now();
+        const firma = `${secRef.current}|${firmaElemento(e.target)}|${Math.round(e.clientX / 25)},${Math.round(e.clientY / 25)}`;
+        if (firma === firmaClic) seguidosClic += 1; else { firmaClic = firma; seguidosClic = 1; }
+        const rafaga = firma === firmaClic && seguidosClic > 1 && t - ultimoClic < 250;
+        ultimoClic = t;
+        if (seguidosClic > REPETIDOS_MAX || rafaga) repetido();
+        else actividad("clics", true);
+      } else if (e.isTrusted) actividad("clics", true);
+      if (esWA) marcarWA();   // después del clic, para que quede la espera de 5 min
     };
-    const onScroll = () => { const t = Date.now(); if (t - ultimoScroll > 1000) { ultimoScroll = t; actividad("scrolls"); } else actividad(null); };
-    const onKey = (e) => { if (e.isTrusted) actividad("teclas"); };
-    const onToque = () => actividad(null);
+    const onScroll = () => { const t = Date.now(); if (t - ultimoScroll > 2000) { ultimoScroll = t; actividad("scrolls", true); } else actividad(null, false); };
+    const onKey = (e) => {
+      if (!e.isTrusted || e.repeat) { if (e.repeat) repetido(); return; }
+      if (e.key === teclaPrev) seguidasTecla += 1; else { teclaPrev = e.key; seguidasTecla = 1; }
+      if (seguidasTecla > TECLA_REPETIDA_MAX) repetido(); else actividad("teclas", true);
+    };
+    const onToque = () => actividad(null, false);
     const onVisible = () => {
-      if (document.visibilityState === "visible") { actividad(null); return; }
+      if (document.visibilityState === "visible") { actividad(null, Date.now() - ultimoWA <= ESPERA_WA_MS); return; }
       // Al salir de la pestaña: si fue para mandar por WhatsApp, se espera a que vuelva;
       // si no, el tiempo fuera no cuenta.
-      if (Date.now() - ultimoWA > 15000) ultima = 0;
+      if (Date.now() - ultimoWA > 15000) { ultima = 0; vivo.ultima = 0; }
       guardar();
     };
 
@@ -100,18 +154,19 @@ export function useContadorUso({ activo, seccion }) {
       const lote = [...pendiente.values()];
       pendiente.clear();
       for (const b of lote) {
-        const seg = Math.round(b.seg);
-        if (!seg && !b.clics && !b.scrolls && !b.teclas && !b.wa) continue;
+        const seg = Math.round(b.seg), desc = Math.round(b.desc);
+        if (!seg && !desc && !b.rep && !b.clics && !b.scrolls && !b.teclas && !b.wa) continue;
         const { error } = await supabase.rpc("registrar_uso", {
           p_fecha: b.fecha, p_hora: b.hora, p_seccion: b.sec, p_dispositivo: dispositivo,
-          p_segundos: seg, p_clics: b.clics, p_scrolls: b.scrolls, p_teclas: b.teclas, p_whatsapp: b.wa,
+          p_segundos: seg, p_descartados: desc, p_repetidos: b.rep,
+          p_clics: b.clics, p_scrolls: b.scrolls, p_teclas: b.teclas, p_whatsapp: b.wa,
           p_primera: new Date(b.primera).toISOString(), p_ultima: new Date(b.ultima).toISOString(),
         });
         if (error) {
           // Se devuelve a la cola para intentar en el siguiente minuto
           const k = `${b.fecha}|${b.hora}|${b.sec}`;
           const ya = pendiente.get(k);
-          if (ya) { ya.seg += b.seg; ya.clics += b.clics; ya.scrolls += b.scrolls; ya.teclas += b.teclas; ya.wa += b.wa; ya.primera = Math.min(ya.primera, b.primera); }
+          if (ya) { for (const c of ["seg", "desc", "rep", "clics", "scrolls", "teclas", "wa"]) ya[c] += b[c]; ya.primera = Math.min(ya.primera, b.primera); }
           else pendiente.set(k, b);
         }
       }
@@ -119,34 +174,46 @@ export function useContadorUso({ activo, seccion }) {
     };
 
     const opc = { capture: true, passive: true };
-    document.addEventListener("mousemove", onMove, opc);
-    document.addEventListener("click", onClick, opc);
-    document.addEventListener("scroll", onScroll, opc);
-    document.addEventListener("wheel", onScroll, opc);
-    document.addEventListener("keydown", onKey, opc);
-    document.addEventListener("touchstart", onToque, opc);
-    document.addEventListener("touchmove", onScroll, opc);
+    const eventos = [["mousemove", onMove], ["click", onClick], ["scroll", onScroll], ["wheel", onScroll], ["keydown", onKey], ["touchstart", onToque], ["touchmove", onScroll]];
+    eventos.forEach(([n, f]) => document.addEventListener(n, f, opc));
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("pagehide", guardar);
     const reloj = setInterval(guardar, GUARDAR_CADA_MS);
-    actividad(null);
+    actividad(null, true);
 
     return () => {
-      document.removeEventListener("mousemove", onMove, opc);
-      document.removeEventListener("click", onClick, opc);
-      document.removeEventListener("scroll", onScroll, opc);
-      document.removeEventListener("wheel", onScroll, opc);
-      document.removeEventListener("keydown", onKey, opc);
-      document.removeEventListener("touchstart", onToque, opc);
-      document.removeEventListener("touchmove", onScroll, opc);
+      eventos.forEach(([n, f]) => document.removeEventListener(n, f, opc));
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("pagehide", guardar);
       clearInterval(reloj);
       if (window.open !== openOriginal) window.open = openOriginal;
       if (sharePatch) { try { delete navigator.share; } catch (e) { /* nada */ } }
+      vivo.activo = false;
       guardar();
     };
-  }, [activo]);
+  }, [activo, userId]);
+}
+
+// Contador visible en la barra de arriba: tiempo de trabajo real de HOY.
+const reloj = (s) => { s = Math.max(0, Math.floor(s)); return `${Math.floor(s / 3600)}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`; };
+export function ContadorVisible() {
+  const [, setTic] = useState(0);
+  useEffect(() => { const i = setInterval(() => setTic((n) => n + 1), 1000); return () => clearInterval(i); }, []);
+  if (!vivo.activo) return null;
+  const t = Date.now();
+  const contando = vivo.ultima && t - vivo.ultima <= vivo.limite && t - vivo.ultimaReal <= vivo.limite;
+  const enCurso = contando ? (t - vivo.ultima) / 1000 : 0;
+  const repit = t - vivo.repetitivo < 20000;
+  const estado = repit ? { c: "#D97706", f: "#FFFBEB", b: "#FDE68A", l: "Clics repetidos: no cuentan" }
+    : contando ? { c: "#059669", f: "#ECFDF5", b: "#A7F3D0", l: "Contando tiempo de trabajo" }
+      : { c: "#94A3B8", f: "#F8FAFC", b: "#E2E8F0", l: "En pausa: sin actividad" };
+  return (<div title={`${estado.l}. Hoy llevas ${duracion(vivo.base + vivo.local + enCurso)} de trabajo real.`}
+    style={{ display: "flex", alignItems: "center", gap: 6, background: estado.f, border: `1px solid ${estado.b}`, borderRadius: 999, padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>
+    <span style={{ width: 8, height: 8, borderRadius: 999, background: estado.c, boxShadow: contando && !repit ? `0 0 0 3px ${estado.c}33` : "none" }} />
+    <Clock size={13} color={estado.c} />
+    <span className="hide-mobile" style={{ fontWeight: 600, color: "#64748B" }}>Hoy</span>
+    <span style={{ fontVariantNumeric: "tabular-nums" }}>{reloj(vivo.base + vivo.local + enCurso)}</span>
+  </div>);
 }
 
 // ── 2) Reporte ───────────────────────────────────────────────
@@ -165,12 +232,15 @@ function agrupar(filas, nombreSeccion) {
   const usuarios = new Map();
   for (const r of filas) {
     let u = usuarios.get(r.user_id);
-    if (!u) { u = { id: r.user_id, email: r.email || "(sin correo)", seg: 0, clics: 0, scrolls: 0, teclas: 0, wa: 0, compu: 0, celular: 0, dias: new Map() }; usuarios.set(r.user_id, u); }
+    if (!u) { u = { id: r.user_id, email: r.email || "(sin correo)", seg: 0, desc: 0, rep: 0, lectura: 0, clics: 0, scrolls: 0, teclas: 0, wa: 0, compu: 0, celular: 0, dias: new Map() }; usuarios.set(r.user_id, u); }
+    u.desc += r.descartados || 0; u.rep += r.repetidos || 0;
+    if (SECCIONES_LECTURA.has(r.seccion)) u.lectura += r.segundos;
     u.seg += r.segundos; u.clics += r.clics; u.scrolls += r.scrolls; u.teclas += r.teclas; u.wa += r.whatsapp;
     u[r.dispositivo === "celular" ? "celular" : "compu"] += r.segundos;
     let d = u.dias.get(r.fecha);
-    if (!d) { d = { fecha: r.fecha, seg: 0, clics: 0, wa: 0, primera: r.primera, ultima: r.ultima, horas: new Map() }; u.dias.set(r.fecha, d); }
-    d.seg += r.segundos; d.clics += r.clics; d.wa += r.whatsapp;
+    if (!d) { d = { fecha: r.fecha, seg: 0, desc: 0, acciones: 0, clics: 0, wa: 0, primera: r.primera, ultima: r.ultima, horas: new Map() }; u.dias.set(r.fecha, d); }
+    d.seg += r.segundos; d.desc += r.descartados || 0; d.clics += r.clics; d.wa += r.whatsapp;
+    d.acciones += r.clics + r.teclas + r.scrolls + r.whatsapp;
     if (r.primera && (!d.primera || r.primera < d.primera)) d.primera = r.primera;
     if (r.ultima && (!d.ultima || r.ultima > d.ultima)) d.ultima = r.ultima;
     let h = d.horas.get(r.hora);
@@ -178,6 +248,17 @@ function agrupar(filas, nombreSeccion) {
     h.seg += r.segundos; h.clics += r.clics; h.wa += r.whatsapp;
     const sn = nombreSeccion(r.seccion);
     h.secciones.set(sn, (h.secciones.get(sn) || 0) + r.segundos);
+  }
+  // Ritmo = acciones de trabajo por minuto. Un día con ritmo muy por debajo del
+  // normal de esa misma persona se marca para revisar (puede ser trabajo lento
+  // a propósito o una tarea que de verdad requiere leer mucho).
+  for (const u of usuarios.values()) {
+    const dias = [...u.dias.values()];
+    for (const d of dias) d.ritmo = d.seg >= 60 ? d.acciones / (d.seg / 60) : null;
+    const ritmos = dias.filter((d) => d.seg >= 15 * 60 && d.ritmo != null).map((d) => d.ritmo).sort((a, b) => a - b);
+    u.ritmoNormal = ritmos.length >= 3 ? ritmos[Math.floor(ritmos.length / 2)] : null;
+    for (const d of dias) d.lento = !!(u.ritmoNormal && d.seg >= 30 * 60 && d.ritmo < u.ritmoNormal * 0.4);
+    u.diasLentos = dias.filter((d) => d.lento).length;
   }
   return [...usuarios.values()].sort((a, b) => b.seg - a.seg);
 }
@@ -229,25 +310,25 @@ export function UsoSistemaPanel({ secciones = [], showToast }) {
       const resumen = [
         [{ value: `Tiempo de trabajo real · ${nombreMes(mes)}`, fontWeight: "bold", fontSize: 14 }],
         [],
-        ["Usuario", "Tiempo total", "Horas (decimal)", "Días trabajados", "Compu", "Celular", "Clics", "Scrolls", "Teclas", "Envíos WhatsApp"].map(titulo),
-        ...usuarios.map((u) => [u.email, duracion(u.seg), horasDec(u.seg), u.dias.size, duracion(u.compu), duracion(u.celular), u.clics, u.scrolls, u.teclas, u.wa]),
+        ["Usuario", "Tiempo real", "Horas (decimal)", "Días trabajados", "Leyendo reportes/finanzas", "Compu", "Celular", "Descartado (sin trabajo real)", "Clics repetidos", "Días con ritmo bajo", "Clics", "Scrolls", "Teclas", "Envíos WhatsApp"].map(titulo),
+        ...usuarios.map((u) => [u.email, duracion(u.seg), horasDec(u.seg), u.dias.size, duracion(u.lectura), duracion(u.compu), duracion(u.celular), duracion(u.desc), u.rep, u.diasLentos, u.clics, u.scrolls, u.teclas, u.wa]),
         [{ value: "TOTAL", fontWeight: "bold" }, { value: duracion(totalMes), fontWeight: "bold" }, { value: horasDec(totalMes), fontWeight: "bold" }],
       ];
-      const porDia = [["Usuario", "Fecha", "Primera actividad", "Última actividad", "Tiempo de trabajo", "Horas (decimal)", "Clics", "Envíos WhatsApp"].map(titulo)];
-      const porHora = [["Usuario", "Fecha", "Hora", "Sección", "Dispositivo", "Minutos", "Clics", "Scrolls", "Teclas", "Envíos WhatsApp"].map(titulo)];
+      const porDia = [["Usuario", "Fecha", "Primera actividad", "Última actividad", "Tiempo real", "Horas (decimal)", "Descartado", "Acciones por minuto", "Revisar", "Clics", "Envíos WhatsApp"].map(titulo)];
+      const porHora = [["Usuario", "Fecha", "Hora", "Sección", "Dispositivo", "Minutos reales", "Minutos descartados", "Clics repetidos", "Clics", "Scrolls", "Teclas", "Envíos WhatsApp"].map(titulo)];
       for (const u of usuarios) {
         for (const d of [...u.dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
-          porDia.push([u.email, d.fecha, horaCorta(d.primera), horaCorta(d.ultima), duracion(d.seg), horasDec(d.seg), d.clics, d.wa]);
+          porDia.push([u.email, d.fecha, horaCorta(d.primera), horaCorta(d.ultima), duracion(d.seg), horasDec(d.seg), duracion(d.desc), d.ritmo == null ? "" : Math.round(d.ritmo * 10) / 10, d.lento ? "Ritmo muy bajo" : "", d.clics, d.wa]);
         }
       }
       for (const r of filas || []) {
         porHora.push([r.email || "", r.fecha, rangoHora(r.hora), nombreSeccion(r.seccion), r.dispositivo === "celular" ? "Celular" : "Compu",
-          Math.round((r.segundos / 60) * 10) / 10, r.clics, r.scrolls, r.teclas, r.whatsapp]);
+          Math.round((r.segundos / 60) * 10) / 10, Math.round(((r.descartados || 0) / 60) * 10) / 10, r.repetidos || 0, r.clics, r.scrolls, r.teclas, r.whatsapp]);
       }
       const blob = await writeExcelFile([
-        { data: resumen, sheet: "Resumen del mes", columns: [{ width: 34 }, { width: 16 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 16 }] },
-        { data: porDia, sheet: "Por día", stickyRowsCount: 1, columns: [{ width: 34 }, { width: 12 }, { width: 16 }, { width: 16 }, { width: 18 }, { width: 14 }, { width: 10 }, { width: 16 }] },
-        { data: porHora, sheet: "Por hora", stickyRowsCount: 1, columns: [{ width: 34 }, { width: 12 }, { width: 16 }, { width: 22 }, { width: 12 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 16 }] },
+        { data: resumen, sheet: "Resumen del mes", columns: [{ width: 34 }, { width: 16 }, { width: 14 }, { width: 14 }, { width: 22 }, { width: 14 }, { width: 14 }, { width: 24 }, { width: 14 }, { width: 18 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 16 }] },
+        { data: porDia, sheet: "Por día", stickyRowsCount: 1, columns: [{ width: 34 }, { width: 12 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 14 }, { width: 14 }, { width: 18 }, { width: 16 }, { width: 10 }, { width: 16 }] },
+        { data: porHora, sheet: "Por hora", stickyRowsCount: 1, columns: [{ width: 34 }, { width: 12 }, { width: 16 }, { width: 22 }, { width: 12 }, { width: 14 }, { width: 18 }, { width: 14 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 16 }] },
       ], { fontFamily: "Calibri", fontSize: 11 }).toBlob();
       const nombre = `Tiempo de trabajo ${nombreMes(mes)}.xlsx`;
       setArchivo({ url: URL.createObjectURL(blob), nombre });
@@ -268,7 +349,7 @@ export function UsoSistemaPanel({ secciones = [], showToast }) {
       <button onClick={descargarExcel} disabled={!filas || !filas.length || generando} style={{ ...btn("#059669"), opacity: !filas || !filas.length || generando ? 0.5 : 1 }}><FileSpreadsheet size={15} />{generando ? "Creando…" : "Descargar Excel"}</button>
     </div>
     <p style={{ fontSize: 12, color: "#64748B", margin: "0 0 12px" }}>
-      Solo cuenta trabajo real: mouse, clics, scroll, teclado, toques en el celular y envíos por WhatsApp. Si pasan 2 minutos sin actividad, deja de contar.
+      Solo cuenta trabajo real: clics, scroll, teclado, toques en el celular y envíos por WhatsApp. Si pasan 2 minutos sin una acción (5 en Reportes, Finanzas y Contabilidad), deja de contar. Mover el mouse sin hacer nada, o dar clics seguidos en el mismo lugar, queda como <strong>descartado</strong>. Los días con un ritmo muy por debajo del normal de la persona se marcan con ⚠ para revisar.
     </p>
 
     {error && <div style={{ color: "#B91C1C", fontSize: 13 }}>No se pudo cargar: {error}</div>}
@@ -279,7 +360,7 @@ export function UsoSistemaPanel({ secciones = [], showToast }) {
       <div style={{ fontSize: 13, color: "#334155", marginBottom: 8 }}>Total del mes (todos los usuarios): <strong>{duracion(totalMes)}</strong></div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr><th style={th}></th><th style={th}>Usuario</th><th style={th}>Total del mes</th><th style={th}>Días</th><th style={th}><Monitor size={12} /> Compu</th><th style={th}><Smartphone size={12} /> Celular</th><th style={th}>Clics</th><th style={th}>WhatsApp</th></tr></thead>
+          <thead><tr><th style={th}></th><th style={th}>Usuario</th><th style={th}>Total del mes</th><th style={th}>Días</th><th style={th}>Leyendo</th><th style={th}>Descartado</th><th style={th}><Monitor size={12} /> Compu</th><th style={th}><Smartphone size={12} /> Celular</th><th style={th}>Clics</th><th style={th}>WhatsApp</th></tr></thead>
           <tbody>
             {usuarios.map((u) => {
               const abiertoU = abierto === u.id;
@@ -289,15 +370,17 @@ export function UsoSistemaPanel({ secciones = [], showToast }) {
                   <td style={td}>{abiertoU ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
                   <td style={{ ...td, fontWeight: 700 }}>{u.email}</td>
                   <td style={{ ...td, fontWeight: 800, color: "#EA580C" }}>{duracion(u.seg)}</td>
-                  <td style={td}>{u.dias.size}</td>
+                  <td style={td}>{u.dias.size}{u.diasLentos > 0 && <span title="Días con ritmo muy bajo" style={{ color: "#D97706", marginLeft: 6 }}>⚠ {u.diasLentos}</span>}</td>
+                  <td style={td}>{duracion(u.lectura)}</td>
+                  <td style={{ ...td, color: u.desc > 0 ? "#B45309" : "#94A3B8" }}>{duracion(u.desc)}{u.rep > 0 && <span style={{ fontSize: 11 }}> · {u.rep} repetidos</span>}</td>
                   <td style={td}>{duracion(u.compu)}</td>
                   <td style={td}>{duracion(u.celular)}</td>
                   <td style={td}>{u.clics}</td>
                   <td style={td}>{u.wa}</td>
                 </tr>,
-                abiertoU && <tr key={u.id + "-d"}><td colSpan={8} style={{ padding: "4px 0 12px 22px", background: "rgba(255,247,237,.5)" }}>
+                abiertoU && <tr key={u.id + "-d"}><td colSpan={10} style={{ padding: "4px 0 12px 22px", background: "rgba(255,247,237,.5)" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead><tr><th style={th}>Día</th><th style={th}>Desde</th><th style={th}>Hasta</th><th style={th}>Trabajo real</th><th style={th}>Clics</th><th style={th}>WhatsApp</th></tr></thead>
+                    <thead><tr><th style={th}>Día</th><th style={th}>Desde</th><th style={th}>Hasta</th><th style={th}>Trabajo real</th><th style={th}>Descartado</th><th style={th}>Ritmo</th><th style={th}>Clics</th><th style={th}>WhatsApp</th></tr></thead>
                     <tbody>{dias.map((d) => {
                       const abiertoD = diaAbierto === d.fecha;
                       return [
@@ -306,6 +389,8 @@ export function UsoSistemaPanel({ secciones = [], showToast }) {
                           <td style={td}>{horaCorta(d.primera)}</td>
                           <td style={td}>{horaCorta(d.ultima)}</td>
                           <td style={{ ...td, fontWeight: 700 }}>{duracion(d.seg)}</td>
+                          <td style={{ ...td, color: d.desc > 0 ? "#B45309" : "#94A3B8" }}>{duracion(d.desc)}</td>
+                          <td style={{ ...td, color: d.lento ? "#D97706" : "#475569", fontWeight: d.lento ? 700 : 400 }} title={d.lento ? "Ritmo muy por debajo de lo normal para esta persona: revisar" : "Acciones de trabajo por minuto"}>{d.ritmo == null ? "—" : `${d.ritmo.toFixed(1)}/min`}{d.lento && " ⚠"}</td>
                           <td style={td}>{d.clics}</td>
                           <td style={td}>{d.wa}</td>
                         </tr>,
@@ -314,6 +399,7 @@ export function UsoSistemaPanel({ secciones = [], showToast }) {
                             <td style={{ ...td, fontSize: 12, paddingLeft: 26 }}>{rangoHora(h.hora)}</td>
                             <td style={{ ...td, fontSize: 12, whiteSpace: "normal" }} colSpan={2}>{[...h.secciones.entries()].filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).map(([n, s]) => `${n} (${duracion(s)})`).join(", ") || "—"}</td>
                             <td style={{ ...td, fontSize: 12 }}>{duracion(h.seg)}</td>
+                            <td style={{ ...td, fontSize: 12 }} colSpan={2}></td>
                             <td style={{ ...td, fontSize: 12 }}>{h.clics}</td>
                             <td style={{ ...td, fontSize: 12 }}>{h.wa}</td>
                           </tr>),
