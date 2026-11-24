@@ -58,10 +58,10 @@ function saldosSugeridos(data) {
   return { cxc, cxp, sal, fondo: Math.max(0, gradCob - gradGas) };
 }
 
-export function ContabilidadPage({ data, showToast }) {
+export function ContabilidadPage({ data, showToast, tabFijo }) {
   const meses = useMemo(mesesDisponibles, []);
   const [sel, setSel] = useState(meses[0] || ARRANQUE); // el más reciente
-  const [tab, setTab] = useState("resultados");
+  const [tab, setTab] = useState(tabFijo || "resultados");
   const [cuentas, setCuentas] = useState([]);
   const [periodos, setPeriodos] = useState([]);
   const [asientos, setAsientos] = useState([]); // todos los asientos con sus líneas
@@ -127,13 +127,13 @@ export function ContabilidadPage({ data, showToast }) {
   if (sinModulo) return <div style={card}><h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Falta activar la contabilidad</h3><p style={{ fontSize: 13, color: GRIS }}>Hay que correr <code>supabase/contabilidad.sql</code> en Supabase (SQL Editor). Solo crea tablas nuevas; no cambia nada de lo que ya existe.</p></div>;
 
   return (<div>
-    <div style={{ ...card, display: "flex", gap: 10, alignItems: "flex-start", background: "rgba(239,246,255,.75)" }}>
+    {tab === "resultados" && <div style={{ ...card, display: "flex", gap: 10, alignItems: "flex-start", background: "rgba(239,246,255,.75)" }}>
       <Info size={18} color={AZUL} style={{ flexShrink: 0, marginTop: 2 }} />
       <div style={{ fontSize: 12.5, color: "#1E3A8A", lineHeight: 1.5 }}>
         <b>Contabilidad</b> registra lo que pasó, en partida doble, y se llena sola con los cobros, pagos y gastos que ya registras. No se edita a mano.
         Empieza el 1 de noviembre de 2026; julio a octubre quedan como historial. Un mes cerrado ya no cambia.
       </div>
-    </div>
+    </div>}
 
     <div style={{ ...card, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
       <div><label style={label}>Mes</label>
@@ -145,10 +145,10 @@ export function ContabilidadPage({ data, showToast }) {
       {!hayApertura && <span style={{ ...badge(ROJO) }}>Falta el asiento de apertura</span>}
     </div>
 
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+    {!tabFijo && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
       <Pest id="resultados" txt="Estado de resultados" /><Pest id="balance" txt="Balance general" /><Pest id="flujo" txt="Flujo de efectivo" />
       <Pest id="diario" txt="Libro diario" /><Pest id="mayor" txt="Libro mayor" /><Pest id="cierre" txt="Cierre de mes" /><Pest id="apertura" txt="Apertura" /><Pest id="catalogo" txt="Catálogo" />
-    </div>
+    </div>}
 
     {cargando ? <div style={card}><p style={{ fontSize: 13, color: GRIS }}>Cargando…</p></div> : <>
       {tab === "resultados" && <div style={card}>

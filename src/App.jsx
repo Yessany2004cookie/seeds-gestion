@@ -584,6 +584,7 @@ export default function App() {
   }, []);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [gruposAbiertos, setGruposAbiertos] = useState({});
   const [data, setData] = useState({ sucursales:[], maestros:[], secciones:[], padres:[], alumnos:[], facturas:[], gastos:[], materiales:[], ventas_material:[], conceptos_graduacion:[], cobros_graduacion:[], otros_ingresos:[], gastos_graduacion:[], deudas:[], cuentas_por_pagar:[] });
   const [sucursalActiva, setSucursalActiva] = useState(null); // id de la sucursal seleccionada
   const [toast, setToast] = useState(null);
@@ -656,18 +657,28 @@ export default function App() {
   if (rol.estado === "admin" && rol.perfil?.maestro_id && vistaDocente) return <DocenteApp session={session} perfil={rol.perfil} onVolver={()=>cambiarVista(false)} />;
   if (rol.estado === "sin_acceso") return <PantallaMensaje titulo="Tu usuario no tiene acceso" texto="Pide a administración de Seeds que te dé acceso al sistema." onSalir={logout} />;
 
-  const NAV = [
-    {id:"dashboard",label:"Inicio",icon:Home},{id:"secciones",label:"Secciones",icon:BookOpen},
-    {id:"maestros",label:"Maestros",icon:GraduationCap},{id:"alumnos",label:"Matrícula",icon:Users},
-    {id:"facturas",label:"Facturas",icon:FileText},{id:"materiales",label:"Materiales",icon:CreditCard},
-    {id:"graduacion",label:"Graduación",icon:Award},
-    {id:"historial",label:"Historial",icon:Calendar},{id:"recordatorios",label:"Recordatorios",icon:Bell},
-    {id:"ingresos",label:"Ingresos extra",icon:TrendingUp},
-    {id:"alertas",label:"Alertas financieras",icon:AlertCircle},
-    {id:"finanzas",label:"Finanzas",icon:DollarSign},{id:"contabilidad",label:"Contabilidad",icon:BookOpen},{id:"reportes",label:"Reportes",icon:FileText},
-    {id:"docentes",label:"Gestión curricular",icon:ClipboardList},
-    {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema",icon:LogIn},
+  // Menú agrupado: cada grupo es un submenú que se abre y se cierra
+  const GRUPOS = [
+    {id:"inicio",label:null,items:[{id:"dashboard",label:"Inicio",icon:Home}]},
+    {id:"escuela",label:"Escuela y alumnado",icon:GraduationCap,items:[
+      {id:"secciones",label:"Secciones",icon:BookOpen},{id:"maestros",label:"Maestros",icon:GraduationCap},
+      {id:"alumnos",label:"Matrícula",icon:Users},{id:"docentes",label:"Gestión curricular",icon:ClipboardList}]},
+    {id:"cobros",label:"Cobros",icon:FileText,items:[
+      {id:"facturas",label:"Facturas y pagos",icon:FileText},{id:"historial",label:"Historial",icon:Calendar},
+      {id:"recordatorios",label:"Recordatorios",icon:Bell},{id:"materiales",label:"Materiales",icon:CreditCard},
+      {id:"graduacion",label:"Graduación",icon:Award}]},
+    {id:"finanzas_g",label:"Finanzas",icon:DollarSign,items:[
+      {id:"alertas",label:"Alertas",icon:AlertCircle},{id:"finanzas",label:"Gastos, deudas y caja",icon:DollarSign},
+      {id:"ingresos",label:"Ingresos extra",icon:TrendingUp},{id:"reportes",label:"Reportes",icon:FileText}]},
+    {id:"contab_g",label:"Contabilidad",icon:BookOpen,items:[
+      {id:"c_resultados",label:"Estado de resultados",icon:TrendingUp},{id:"c_balance",label:"Balance general",icon:BookOpen},
+      {id:"c_flujo",label:"Flujo de efectivo",icon:DollarSign},{id:"c_diario",label:"Libro diario",icon:FileText},
+      {id:"c_mayor",label:"Libro mayor",icon:FileText},{id:"c_cierre",label:"Cierre de mes",icon:Check},
+      {id:"c_apertura",label:"Apertura",icon:Edit},{id:"c_catalogo",label:"Catálogo de cuentas",icon:ClipboardList}]},
+    {id:"sistema_g",label:"Configuración",icon:Edit,items:[
+      {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema y respaldos",icon:LogIn}]},
   ];
+  const NAV = GRUPOS.flatMap(g=>g.items.map(it=>({...it,grupo:g.label})));
 
   // Vista de datos filtrada por la sucursal activa.
   // Como la sucursal vive en la sección, filtramos secciones y de ahí todo lo demás.
@@ -708,7 +719,14 @@ export default function App() {
     ingresos:<IngresosPage {...propsSuc}/>,
     alertas:<AlertasFinanzasPage data={dataSuc}/>,
     finanzas:<FinanzasPage {...propsSuc}/>,
-    contabilidad:<ContabilidadPage data={data} showToast={showToast}/>,
+    c_resultados:<ContabilidadPage key="resultados" data={data} showToast={showToast} tabFijo="resultados"/>,
+    c_balance:<ContabilidadPage key="balance" data={data} showToast={showToast} tabFijo="balance"/>,
+    c_flujo:<ContabilidadPage key="flujo" data={data} showToast={showToast} tabFijo="flujo"/>,
+    c_diario:<ContabilidadPage key="diario" data={data} showToast={showToast} tabFijo="diario"/>,
+    c_mayor:<ContabilidadPage key="mayor" data={data} showToast={showToast} tabFijo="mayor"/>,
+    c_cierre:<ContabilidadPage key="cierre" data={data} showToast={showToast} tabFijo="cierre"/>,
+    c_apertura:<ContabilidadPage key="apertura" data={data} showToast={showToast} tabFijo="apertura"/>,
+    c_catalogo:<ContabilidadPage key="catalogo" data={data} showToast={showToast} tabFijo="catalogo"/>,
     reportes:<ReportesPage {...propsSuc}/>,
     docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
     config:<ConfiguracionPage {...props}/>,
@@ -726,9 +744,17 @@ export default function App() {
           <div style={{textAlign:"center"}}><div style={{fontWeight:800,fontSize:16,background:"linear-gradient(90deg,#F97316,#EA580C)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Seeds English</div><div style={{fontSize:11,color:"#94A3B8"}}>Sistema de Gestión</div></div>
         </div>
         <nav style={{flex:1,padding:"10px 10px",overflowY:"auto"}}>
-          {NAV.map(n=>{const Icon=n.icon;const a=page===n.id;return(
-            <button key={n.id} className={"menu-item"+(a?" activo":"")} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 14px",marginBottom:2,border:"none",borderRadius:14,cursor:"pointer",background:a?"linear-gradient(135deg,#FB923C,#EA580C)":"transparent",color:a?"#fff":"#CBD5E1",fontSize:13,fontWeight:a?700:500,textAlign:"left",boxShadow:a?"0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)":"none",fontFamily:"inherit"}}><Icon size={17}/>{n.label}</button>
-          );})}
+          {GRUPOS.map(g=>{
+            const activoAqui=g.items.some(it=>it.id===page);
+            const abierto=!g.label||activoAqui||gruposAbiertos[g.id];
+            const GIcon=g.icon;
+            return(<div key={g.id} style={{marginBottom:4}}>
+              {g.label&&<button onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",borderRadius:12,cursor:"pointer",background:"transparent",color:activoAqui?"#FDBA74":"#E2E8F0",fontSize:12.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16}/><span style={{flex:1}}>{g.label}</span><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>}
+              {abierto&&g.items.map(n=>{const Icon=n.icon;const a=page===n.id;return(
+                <button key={n.id} className={"menu-item"+(a?" activo":"")} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:g.label?"8px 14px 8px 30px":"10px 14px",marginBottom:2,border:"none",borderRadius:14,cursor:"pointer",background:a?"linear-gradient(135deg,#FB923C,#EA580C)":"transparent",color:a?"#fff":"#CBD5E1",fontSize:13,fontWeight:a?700:500,textAlign:"left",boxShadow:a?"0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)":"none",fontFamily:"inherit"}}><Icon size={15}/>{n.label}</button>
+              );})}
+            </div>);
+          })}
         </nav>
         <button onClick={logout} style={{display:"flex",alignItems:"center",gap:8,padding:"14px 20px",border:"none",borderTop:"1px solid rgba(255,255,255,.08)",background:"transparent",color:"#FCA5A5",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}><LogOut size={16}/>Cerrar sesión</button>
       </aside>
@@ -737,7 +763,7 @@ export default function App() {
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             {window.innerWidth<=768&&page!=="dashboard"&&<button onClick={()=>history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20}/></button>}
             {window.innerWidth<=768&&<button onClick={()=>setSidebarOpen(true)} aria-label="Menú" style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Menu size={22} color="#475569"/></button>}
-            <h1 className="titulo-barra" style={{fontSize:17,fontWeight:700,color:"#1E293B",margin:0}}>{NAV.find(n=>n.id===page)?.label||""}</h1>
+            <h1 className="titulo-barra" style={{fontSize:17,fontWeight:700,color:"#1E293B",margin:0}}>{(()=>{const n=NAV.find(x=>x.id===page);return n?(n.grupo?`${n.grupo} · ${n.label}`:n.label):"";})()}</h1>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {data.sucursales.length>0&&<div className="selector-sucursal" style={{display:"flex",alignItems:"center",gap:6,background:"rgba(245,243,255,.8)",border:"1px solid #DDD6FE",borderRadius:999,padding:"4px 10px",minWidth:0}}>
