@@ -60,6 +60,33 @@ function saldosSugeridos(data) {
   return { cxc, cxp, sal, fondo: Math.max(0, gradCob - gradGas) };
 }
 
+// ── Cobrado (facturado) vs. pagado de las mensualidades de un mes ──
+// Igual que la contabilidad: un cobro por alumno, mes y año. Solo lectura: no cambia nada.
+function cobranzaDelMes(facturas, anio, mes) {
+  const anioF = (f) => Number(f.anio_correspondiente) || Number(String(f.fecha_emision || "").slice(0, 4));
+  const grupos = {};
+  (facturas || []).filter((f) => (f.tipo_factura || "cobro") === "cobro" && f.estado !== "anulada" && MESES.indexOf(f.mes_correspondiente) + 1 === mes && anioF(f) === anio)
+    .forEach((f) => { (grupos[f.alumno_id] || (grupos[f.alumno_id] = [])).push(f); });
+  // Pagos confirmados (comprobantes), uno por cobro
+  const pagoPorCobro = {};
+  (facturas || []).filter((f) => f.tipo_factura === "comprobante" && f.estado !== "anulada" && f.cobro_id)
+    .forEach((f) => { const p = pagoPorCobro[f.cobro_id]; if (!p || String(f.created_at || "") < String(p.created_at || "")) pagoPorCobro[f.cobro_id] = f; });
+  const ini = `${anio}-${String(mes).padStart(2, "0")}-01`;
+  let facturado = 0, pagado = 0, adelantado = 0, alumnos = 0, alumnosPagados = 0;
+  Object.values(grupos).forEach((lista) => {
+    lista.sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+    const monto = Number(lista[0].monto_total) || 0;
+    const pago = lista.map((f) => pagoPorCobro[f.id]).find(Boolean);
+    alumnos++; facturado += monto;
+    if (pago || lista.some((f) => f.estado === "pagada")) {
+      const v = pago ? Math.min(monto, Number(pago.monto_total) || monto) : monto;
+      pagado += v; alumnosPagados++;
+      if (pago?.fecha_pago && pago.fecha_pago < ini) adelantado += v;
+    }
+  });
+  return { facturado, pagado, pendiente: Math.max(0, facturado - pagado), adelantado, alumnos, alumnosPagados };
+}
+
 export function ContabilidadPage({ data, showToast, tabFijo }) {
   const meses = useMemo(mesesDisponibles, []);
   const [sel, setSel] = useState(meses[0] || ARRANQUE); // el más reciente
@@ -112,6 +139,8 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
   const ingresos = cuentas.filter((c) => c.tipo === "ingreso").map((c) => ({ c, v: -(movMes[c.codigo] || 0) })).filter((x) => Math.abs(x.v) > 0.004);
   const gastos = cuentas.filter((c) => c.tipo === "gasto").map((c) => ({ c, v: movMes[c.codigo] || 0 })).filter((x) => Math.abs(x.v) > 0.004);
   const totIng = ingresos.reduce((s, x) => s + x.v, 0), totGas = gastos.reduce((s, x) => s + x.v, 0), resultado = totIng - totGas;
+  const cob = useMemo(() => cobranzaDelMes(data.facturas, sel.anio, sel.mes), [data.facturas, sel.anio, sel.mes]);
+  const nombreIng = (c) => (c.codigo === "4.1.01" ? "Mensualidades cobradas a padres (facturado)" : c.nombre);
 
   // Balance general al final del mes (los resultados de los meses se suman al patrimonio)
   const resAcum = cuentas.filter((c) => c.tipo === "ingreso" || c.tipo === "gasto").reduce((s, c) => s - (saldos[c.codigo] || 0), 0);
@@ -158,8 +187,9 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       const tot = (t, v, color) => [{ value: t, fontWeight: "bold", topBorderStyle: "thin", textColor: color }, n(v, { fontWeight: "bold", topBorderStyle: "thin", textColor: color })];
       const it = (t, v) => [{ value: t, indent: 1 }, n(v)];
       const mesTxt = `${MESES[sel.mes - 1]} ${sel.anio}`;
-      const hRes = [...enc(`Estado de resultados — ${mesTxt}`), cab("Concepto"), sec("Ingresos"), ...ingresos.map((x) => it(x.c.nombre, x.v)), tot("Total ingresos", totIng),
-        [], sec("Gastos y costos"), ...gastos.map((x) => it(x.c.nombre, x.v)), tot("Total gastos", totGas), [], tot(resultado >= 0 ? "Ganancia del mes" : "Pérdida del mes", resultado, resultado >= 0 ? "#2A5E45" : "#8E3131")];
+      const hRes = [...enc(`Estado de resultados — ${mesTxt}`), cab("Concepto"), sec("Ingresos"), ...ingresos.map((x) => it(nombreIng(x.c), x.v)), tot("Total ingresos", totIng),
+        [], sec("Gastos y costos"), ...gastos.map((x) => it(x.c.nombre, x.v)), tot("Total gastos", totGas), [], tot(resultado >= 0 ? "Ganancia del mes (si todos pagan)" : "Pérdida del mes", resultado, resultado >= 0 ? "#2A5E45" : "#8E3131"),
+        [], sec(`Mensualidades de ${mesTxt}: cobrado vs. pagado`), it(`Facturado (cobros enviados a ${cob.alumnos} alumnos)`, cob.facturado), it(`Pagado (confirmado, ${cob.alumnosPagados} alumnos)`, cob.pagado), tot("Pendiente de pago", cob.pendiente, "#8E3131")];
       const hBal = [...enc(`Balance general al ${new Date(sel.anio, sel.mes, 0).getDate()} de ${mesTxt}`), cab("Cuenta"), sec("Activos (lo que tengo)"), ...activos.map((x) => it(x.c.nombre, x.v)), tot("Total activos", totA),
         [], sec("Pasivos (lo que debo)"), ...pasivos.map((x) => it(x.c.nombre, x.v)), tot("Total pasivos", totP),
         [], sec("Patrimonio"), ...patrimonio.map((x) => it(x.c.nombre, x.v)), it("Resultados desde noviembre 2026", resAcum), tot("Total patrimonio", totPat), [], tot("Pasivos + patrimonio", totP + totPat)];
@@ -207,16 +237,24 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
     {cargando ? <div style={card}><p style={{ fontSize: 13, color: GRIS }}>Cargando…</p></div> : <>
       {tab === "resultados" && <div style={card}>
         <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Estado de resultados — {MESES[sel.mes - 1]} {sel.anio}</h3>
-        <p style={{ fontSize: 11.5, color: GRIS, margin: "0 0 12px" }}>Lo ganado y lo gastado <b>del mes</b>, aunque se cobre o se pague en otro mes.</p>
-        <Simple>{totIng === 0 && totGas === 0 ? "todavía no hay movimientos en este mes." : <>a la escuela le correspondieron {L(totIng)} y gastó {L(totGas)} en {MESES[sel.mes - 1]}. {resultado >= 0 ? <>Le quedó una <b style={{ color: VERDE }}>ganancia de {L(resultado)}</b>{totIng > 0 ? <> (L {Math.round(resultado / totIng * 100)} de cada L 100)</> : null}.</> : <>Gastó <b style={{ color: ROJO }}>{L(Math.abs(resultado))} más</b> de lo que le correspondió.</>}</>}</Simple>
+        <p style={{ fontSize: 11.5, color: GRIS, margin: "0 0 12px" }}>Lo que se le <b>cobró</b> a los padres y lo gastado <b>del mes</b>, aunque se pague en otro mes. Cobrar no es lo mismo que recibir el dinero.</p>
+        <Simple>{totIng === 0 && totGas === 0 ? "todavía no hay movimientos en este mes." : <>en {MESES[sel.mes - 1]} se les <b>cobró</b> a los padres {L(cob.facturado)} y la escuela gastó {L(totGas)}. De ese cobro, los padres <b>ya pagaron {L(cob.pagado)}</b>{cob.adelantado > 0 ? <> ({L(cob.adelantado)} por adelantado, antes del mes)</> : null} y <b style={{ color: cob.pendiente > 0 ? ROJO : VERDE }}>faltan {L(cob.pendiente)}</b> por pagar. {resultado >= 0 ? <>Si todos pagan, la <b style={{ color: VERDE }}>ganancia sería de {L(resultado)}</b>.</> : <>Gastó <b style={{ color: ROJO }}>{L(Math.abs(resultado))} más</b> de lo que cobró.</>} El dinero que de verdad entró está en Flujo de efectivo.</>}</Simple>
+        {cob.facturado > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, margin: "0 0 14px" }}>
+          {[["Facturado (cobros enviados)", cob.facturado, AZUL, `${cob.alumnos} alumnos`], ["Pagado (confirmado)", cob.pagado, VERDE, `${cob.alumnosPagados} alumnos`], ["Pendiente de pago", cob.pendiente, cob.pendiente > 0 ? ROJO : VERDE, `${cob.alumnos - cob.alumnosPagados} alumnos`]].map(([t, v, color, sub]) =>
+            <div key={t} style={{ border: "1px solid #DCE1E8", borderTop: `3px solid ${color}`, borderRadius: 4, padding: "8px 10px" }}>
+              <div style={{ fontSize: 11, color: GRIS, textTransform: "uppercase", letterSpacing: 0.4 }}>{t}</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color, fontVariantNumeric: "tabular-nums" }}>{L(v)}</div>
+              <div style={{ fontSize: 11, color: GRIS }}>{sub}</div>
+            </div>)}
+        </div>}
         <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>
           <tr><td style={{ ...td, fontWeight: 700 }} colSpan={2}>Ingresos</td></tr>
-          {ingresos.map((x) => <tr key={x.c.codigo}><td style={{ ...td, paddingLeft: 22 }}>{x.c.nombre}</td><td style={tdR}>{L(x.v)}</td></tr>)}
+          {ingresos.map((x) => <tr key={x.c.codigo}><td style={{ ...td, paddingLeft: 22 }}>{nombreIng(x.c)}{x.c.codigo === "4.1.01" && cob.facturado > 0 && <div style={{ fontSize: 11, color: GRIS }}>Pagado {L(cob.pagado)} · Pendiente {L(cob.pendiente)}</div>}</td><td style={tdR}>{L(x.v)}</td></tr>)}
           <tr><td style={{ ...td, fontWeight: 700 }}>Total ingresos</td><td style={{ ...tdR, fontWeight: 700, color: VERDE }}>{L(totIng)}</td></tr>
           <tr><td style={{ ...td, fontWeight: 700, paddingTop: 12 }} colSpan={2}>Gastos y costos</td></tr>
           {gastos.map((x) => <tr key={x.c.codigo}><td style={{ ...td, paddingLeft: 22 }}>{x.c.nombre}</td><td style={tdR}>{L(x.v)}</td></tr>)}
           <tr><td style={{ ...td, fontWeight: 700 }}>Total gastos</td><td style={{ ...tdR, fontWeight: 700, color: ROJO }}>{L(totGas)}</td></tr>
-          <tr><td style={{ ...td, fontWeight: 800, fontSize: 14, borderTop: "2px solid #1E293B" }}>{resultado >= 0 ? "Ganancia del mes" : "Pérdida del mes"}</td><td style={{ ...tdR, fontWeight: 800, fontSize: 14, borderTop: "2px solid #1E293B", color: resultado >= 0 ? VERDE : ROJO }}>{L(resultado)}</td></tr>
+          <tr><td style={{ ...td, fontWeight: 800, fontSize: 14, borderTop: "2px solid #1E293B" }}>{resultado >= 0 ? <>Ganancia del mes <span style={{ fontSize: 11, fontWeight: 400, color: GRIS }}>(si todos pagan)</span></> : "Pérdida del mes"}</td><td style={{ ...tdR, fontWeight: 800, fontSize: 14, borderTop: "2px solid #1E293B", color: resultado >= 0 ? VERDE : ROJO }}>{L(resultado)}</td></tr>
         </tbody></table>
         {!data.cuentas_por_pagar?.some((c) => c.tipo === "renta" && MESES.indexOf(c.mes_correspondiente) + 1 === sel.mes && (Number(c.anio_correspondiente) || sel.anio) === sel.anio) && !gastos.some((x) => x.c.codigo === "5.2.02") &&
           <div style={{ marginTop: 12, fontSize: 12, color: "#92400E", background: "#FEF3C7", padding: "8px 10px", borderRadius: 10, display: "flex", gap: 6 }}><AlertTriangle size={14} />La renta de {MESES[sel.mes - 1]} todavía no está registrada. Regístrala en Finanzas → Cuentas por pagar con mes {MESES[sel.mes - 1]} (aunque se pague el mes siguiente), para que este resultado sea real.</div>}
