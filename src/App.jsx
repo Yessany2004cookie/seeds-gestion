@@ -10,6 +10,8 @@ import { FinResumenExcel, FinMaestrosExcel, FinGastosExcel, IngresosExcel, Desca
 import { useVista, SelectorVista, EstilosVistas } from "./vistas";
 import { ContabilidadPage } from "./contabilidad";
 import { ResumenMesInicio } from "./resumenMesInicio";
+import { GrupoPage } from "./navegacion";
+import { InicioSoft } from "./inicioSoft";
 import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
 import { SelectorFondo } from "./fondo";
@@ -800,7 +802,10 @@ export default function App() {
   const GRUPOS = GRUPOS_TODOS.map(g=>({...g,items:g.items.filter(it=>personalizando||!marca.oculta(it.id))})).filter(g=>g.items.length);
   const NAV = GRUPOS_TODOS.flatMap(g=>g.items.filter(it=>!marca.oculta(it.id)).map(it=>({...it,grupo:g.label})));
   // Si la página abierta es de un módulo que se apagó, se muestra Inicio
-  const pageVisible = NAV.some(n=>n.id===page) ? page : "dashboard";
+  // Las categorías también son páginas: "grupo:<id>" muestra sus tarjetas de navegación
+  const grupoDe = (p) => typeof p==="string"&&p.startsWith("grupo:") ? GRUPOS_TODOS.map(g=>({...g,items:g.items.filter(it=>!marca.oculta(it.id))})).find(g=>g.label&&g.items.length&&"grupo:"+g.id===p) : null;
+  const grupoPagina = grupoDe(page);
+  const pageVisible = NAV.some(n=>n.id===page)||grupoPagina ? page : "dashboard";
 
   // Vista de datos filtrada por la sucursal activa.
   // Como la sucursal vive en la sección, filtramos secciones y de ahí todo lo demás.
@@ -852,12 +857,14 @@ export default function App() {
     c_cierre:<ContabilidadPage key="cierre" data={data} showToast={showToast} tabFijo="cierre"/>,
     c_apertura:<ContabilidadPage key="apertura" data={data} showToast={showToast} tabFijo="apertura"/>,
     c_catalogo:<ContabilidadPage key="catalogo" data={data} showToast={showToast} tabFijo="catalogo"/>,
-    reportes:<>{modulos.activo("contador")&&<UsoSistemaPanel secciones={NAV} showToast={showToast}/>}<ReportesPage {...propsSuc}/></>,
+    reportes:<>{modulos.activo("contador")&&<UsoSistemaPanel secciones={[...NAV,...GRUPOS_TODOS.filter(g=>g.label).map(g=>({id:"grupo:"+g.id,label:g.label}))]} showToast={showToast}/>}<ReportesPage {...propsSuc}/></>,
     docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
     config:<ConfiguracionPage {...props}/>,
     sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}
       personalizar={{grupos:GRUPOS_TODOS.filter(g=>g.label),pestanas:GRUPOS_TODOS.flatMap(g=>g.items),pestanasDocente:modulos.activo("docentes")?PESTANAS_DOCENTE.filter(n=>modulos.activo(n.modulo)):[],onEditarMenu:()=>{setPersonalizando(true);setSidebarOpen(true);}}}/>,
   };
+
+  if (grupoPagina) pageMap[page] = <GrupoPage key={page} grupo={grupoPagina} irA={setPage}/>;
 
   return (
     <div style={{display:"flex",height:"100vh",background:"transparent"}}>
@@ -876,11 +883,15 @@ export default function App() {
         <nav style={{flex:1,padding:"10px 10px",overflowY:"auto"}}>
           {GRUPOS.map(g=>{
             const activoAqui=g.items.some(it=>it.id===page);
+            const enGrupo=page==="grupo:"+g.id;
             const abierto=!g.label||activoAqui||gruposAbiertos[g.id]||personalizando;
             const GIcon=g.icon;
             return(<div key={g.id} style={{marginBottom:4}}>
               {g.label&&personalizando&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",color:"#F0A46A",fontSize:11.5,fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16} style={{flexShrink:0}}/><span style={{flex:1,minWidth:0}}><TextoEditable oscuro editando valor={g.label} max={30} titulo="Cambiar nombre del grupo" onGuardar={t=>guardarEtiqueta("g:"+g.id,t,showToast)} estilo={{color:"inherit"}}/></span></div>}
-              {g.label&&!personalizando&&<button data-tour={"g-"+g.id} onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui?"#F0A46A":"#C9D2E0",fontSize:11.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16}/><span style={{flex:1}}>{g.label}</span><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>}
+              {g.label&&!personalizando&&<div data-tour={"g-"+g.id} style={{display:"flex",alignItems:"stretch",borderRadius:3,background:enGrupo?"rgba(255,255,255,.09)":"transparent",borderLeft:enGrupo?"3px solid #D9641E":"3px solid transparent"}}>
+                <button className="menu-item" onClick={()=>{setPage("grupo:"+g.id);setGruposAbiertos(p=>({...p,[g.id]:true}));setSidebarOpen(false);}} title={"Ver todo lo de "+g.label} style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0,padding:"9px 4px 9px 11px",border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui||enGrupo?"#F0A46A":"#C9D2E0",fontSize:11.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16} style={{flexShrink:0}}/><span style={{flex:1}}>{g.label}</span></button>
+                <button onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} aria-label={(abierto?"Cerrar ":"Abrir ")+g.label} aria-expanded={abierto} style={{flexShrink:0,width:34,border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui||enGrupo?"#F0A46A":"#C9D2E0",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>
+              </div>}
               {abierto&&g.items.map(n=>{const Icon=n.icon;const a=page===n.id;
                 if(personalizando){const oculta=marca.oculta(n.id);return(
                 <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:g.label?"6px 8px 6px 30px":"8px 8px 8px 14px",marginBottom:2,color:"#C9D2E0",fontSize:13,opacity:oculta?.45:1}}>
@@ -903,7 +914,7 @@ export default function App() {
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             {window.innerWidth<=768&&page!=="dashboard"&&<button onClick={()=>history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20}/></button>}
             {window.innerWidth<=768&&<button onClick={()=>setSidebarOpen(true)} aria-label="Menú" style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Menu size={22} color="#475569"/></button>}
-            <h1 className="titulo-barra" style={{fontSize:18,fontWeight:600,color:"#1B2A4A",margin:0}}>{(()=>{const n=NAV.find(x=>x.id===page);return n?(n.grupo?`${n.grupo} · ${n.label}`:n.label):"";})()}</h1>
+            <h1 className="titulo-barra" style={{fontSize:18,fontWeight:600,color:"#1B2A4A",margin:0}}>{(()=>{if(grupoPagina)return grupoPagina.label;const n=NAV.find(x=>x.id===page);return n?(n.grupo?<><button onClick={()=>setPage("grupo:"+n.grupoId)} className="miga" title={"Ver todo lo de "+n.grupo}>{n.grupo}</button> · {n.label}</>:n.label):"";})()}</h1>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {data.sucursales.length>0&&<div data-tour="sucursal" className="selector-sucursal" style={{display:"flex",alignItems:"center",gap:6,background:"#F5F7FA",border:"1px solid #CDD3DC",borderRadius:4,padding:"4px 10px",minWidth:0}}>
@@ -1178,31 +1189,56 @@ function LoginPage({showToast,toast}){
 // ── DASHBOARD ──
 function Dashboard({data,setPage,loadData,showToast}){
   const modulos=useModulos(true);
-  const ta=data.alumnos.filter(a=>a.estado==="activo").length;
-  const ts=data.secciones.filter(s=>s.activa!==false).length;
-  const pend=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
-  const mes=MESES[new Date().getMonth()];
-  const compMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL));
-  const ingMens=compMes.reduce((s,f)=>s+(Number(f.monto_total)||0),0);
-  const ingMora=compMes.reduce((s,f)=>s+moraCobrada(f),0);
-  const ventMat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
-  const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
-  const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
-  const gradPag=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,ANIO_ACTUAL));
-  const ingGrad=gradPag.reduce((s,v)=>s+gradRecibido(v),0);
-  const ganGrad=ingGrad-costoGradDe(data,mes,ANIO_ACTUAL);
-  const ingOtros=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,ANIO_ACTUAL)).reduce((s,i)=>s+(Number(i.monto)||0),0);
-  const ing=ingMens+ingMora+ingMat+ingGrad+ingOtros;
-  const gastos=data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
-  // Salidas totales = gastos + costo de materiales + gastos de graduación (así Ingresos − Gastos = Ganancia)
-  const gastosTot=gastos+(ingMat-ganMat)+(ingGrad-ganGrad);
-  const ganancia=ing-gastosTot;
-  const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastosTot.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
+  const hoy=new Date();
+  // Números de un mes (mismo criterio de siempre: Ingresos − Gastos = Ganancia)
+  const numerosDe=(mes,anio)=>{
+    const compMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,anio));
+    const ingMens=compMes.reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+    const ingMora=compMes.reduce((s,f)=>s+moraCobrada(f),0);
+    const ventMat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,anio));
+    const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
+    const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
+    const gradPag=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,anio));
+    const ingGrad=gradPag.reduce((s,v)=>s+gradRecibido(v),0);
+    const ganGrad=ingGrad-costoGradDe(data,mes,anio);
+    const ingOtros=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,anio)).reduce((s,i)=>s+(Number(i.monto)||0),0);
+    const ing=ingMens+ingMora+ingMat+ingGrad+ingOtros;
+    const gastos=data.gastos.filter(g=>esGastoDe(g,mes,anio)).reduce((s,g)=>s+(Number(g.monto)||0),0);
+    // Salidas totales = gastos + costo de materiales + gastos de graduación
+    const gas=gastos+(ingMat-ganMat)+(ingGrad-ganGrad);
+    const cobros=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada"&&f.mes_correspondiente===mes&&anioCobro(f)===anio);
+    const pend=cobros.filter(f=>f.estado==="pendiente"||f.estado==="parcial").length;
+    return {ing,gas,cobros,pend};
+  };
+  // Últimos 6 meses, del más viejo al actual
+  const meses=[...Array(6)].map((_,k)=>{const d=new Date(hoy.getFullYear(),hoy.getMonth()-5+k,1);const mes=MESES[d.getMonth()];const fin=new Date(d.getFullYear(),d.getMonth()+1,0).toISOString().slice(0,10);
+    return {mes,anio:d.getFullYear(),nombre:`${mes} ${d.getFullYear()}`,etiqueta:mes.slice(0,3),fin,...numerosDe(mes,d.getFullYear())};});
+  const act=meses[5];
+  const activos=data.alumnos.filter(a=>a.estado==="activo");
+  // Alumnos activos al cierre de cada mes (por fecha de ingreso)
+  const serieAlumnos=meses.map((m,k)=>k===5?activos.length:activos.filter(a=>!a.fecha_ingreso||a.fecha_ingreso<=m.fin).length);
+  const pendTotal=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
+  const Lm=(v)=>`L ${Math.round(v).toLocaleString("es-HN")}`;
+  const kpis=[
+    {l:"Alumnos activos",v:activos.length,serie:serieAlumnos,p:"alumnos"},
+    {l:`Ingresos ${act.mes.toLowerCase()}`,v:Lm(act.ing),serie:meses.map(m=>m.ing),p:"finanzas"},
+    {l:`Gastos ${act.mes.toLowerCase()}`,v:Lm(act.gas),serie:meses.map(m=>m.gas),p:"finanzas",subirEsBueno:false},
+    {l:"Cobros pendientes",v:pendTotal,serie:meses.map(m=>m.pend),p:"facturas",subirEsBueno:false},
+  ];
+  const cm=act.cobros;
+  const cobros=[
+    {k:"pagado",l:"Pagados",n:cm.filter(f=>f.estado!=="pendiente"&&f.estado!=="parcial").length},
+    {k:"parcial",l:"Con abono",n:cm.filter(f=>f.estado==="parcial").length},
+    {k:"pendiente",l:"Pendientes",n:cm.filter(f=>f.estado==="pendiente").length},
+  ];
+  const secciones=data.secciones.filter(s=>s.activa!==false).map(s=>({nombre:s.nombre,n:activos.filter(a=>a.seccion_id===s.id).length})).filter(s=>s.n>0).sort((a,b)=>b.n-a.n).slice(0,4);
+  const nombreAl=Object.fromEntries(data.alumnos.map(a=>[a.id,a.nombre]));
+  const fmtF=(f)=>{if(!f)return"—";const[y,m,d]=String(f).slice(0,10).split("-");return `${d}/${m}/${y}`;};
+  const recientes=data.facturas.filter(f=>f.tipo_factura==="comprobante").sort((a,b)=>String(b.fecha_pago||b.fecha_emision||"").localeCompare(String(a.fecha_pago||a.fecha_emision||""))||String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,5)
+    .map(f=>({id:f.id,numero:f.numero_factura||"—",alumno:nombreAl[f.alumno_id]||"—",mes:f.mes_correspondiente,fecha:fmtF(f.fecha_pago||f.fecha_emision),monto:(Number(f.monto_total)||0)+moraCobrada(f)}));
   return(<div>
     {modulos.activo("asistencia")&&<AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
-      {stats.map((s,i)=>{const Icon=s.i;return(<div key={i} className="tarjeta-kpi" onClick={()=>setPage(s.p)} style={{...card,cursor:"pointer",padding:"16px 18px",display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${tono(s.c)}`}}><div style={{background:tono(s.c)+"12",border:`1px solid ${tono(s.c)}30`,borderRadius:4,padding:10,display:"flex"}}><Icon size={20} color={tono(s.c)}/></div><div style={{minWidth:0}}><div style={{fontSize:11,color:"#5B6576",textTransform:"uppercase",letterSpacing:.6,fontWeight:600}}>{s.l}</div><div className="cifra" style={{fontSize:22,fontWeight:700,color:"#1B2A4A",marginTop:2}}>{s.v}</div></div></div>);})}
-    </div>
+    <InicioSoft kpis={kpis} meses={meses} cobros={cobros} secciones={secciones} recientes={recientes} mes={act.nombre} irA={setPage}/>
     <ResumenMesInicio data={data} setPage={setPage} verAlertas={modulos.activo("alertas")}/>
     <ResumenFinanciero data={data}/>
     <div style={card}><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Acciones rápidas</h3><div style={{display:"flex",flexWrap:"wrap",gap:10}}><button onClick={()=>setPage("alumnos")} style={btn("#2563EB")}><UserPlus size={15}/>Nueva matrícula</button><button onClick={()=>setPage("facturas")} style={btn("#059669")}><FileText size={15}/>Crear cobros</button>{modulos.activo("recordatorios")&&<button onClick={()=>setPage("recordatorios")} style={btn("#7C3AED")}><Bell size={15}/>Recordatorios</button>}</div></div>
