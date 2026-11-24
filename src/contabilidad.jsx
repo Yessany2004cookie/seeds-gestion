@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, label, badge, btn, btnO } from "./estilo";
-import { BookOpen, Lock, Unlock, RefreshCw, Info, CheckCircle, AlertTriangle } from "lucide-react";
+import { BookOpen, Lock, Unlock, RefreshCw, Info, CheckCircle, AlertTriangle, Download } from "lucide-react";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const ARRANQUE = { anio: 2026, mes: 11 };
@@ -17,6 +17,8 @@ const L = (n) => { const v = Math.round((Number(n) || 0) * 100) / 100; const t =
 const clave = (a, m) => a * 12 + m;
 const th = { textAlign: "left", padding: "7px 8px", fontSize: 11, color: GRIS, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: "2px solid #E2E8F0" };
 const td = { padding: "6px 8px", borderBottom: "1px solid #F1F5F9", fontSize: 12.5, verticalAlign: "top" };
+// Recuadro "En palabras simples": resume un reporte contable en una o dos frases
+const Simple = ({ children }) => <div style={{ fontSize: 13, lineHeight: 1.55, color: "#1F2937", background: "#F5F7FA", border: "1px solid #DCE1E8", borderLeft: "3px solid #D9641E", borderRadius: 4, padding: "9px 12px", margin: "0 0 14px" }}><b>En palabras simples:</b> {children}</div>;
 const tdR = { ...td, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
 
 // Lista de meses desde el arranque hasta el mes actual
@@ -143,6 +145,35 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
   const totEnt = flujo.ent.reduce((t, c) => t + c.v, 0), totSal = flujo.sal.reduce((t, c) => t + c.v, 0);
   const dispIniFlujo = dispFinal - totEnt - totSal; // la apertura cuenta como saldo inicial, no como entrada
 
+  // Excel con una hoja por reporte: estado de resultados, balance general y flujo de efectivo
+  const [xls, setXls] = useState(null);
+  const descargarExcel = async () => {
+    try {
+      const writeExcelFile = (await import("write-excel-file/browser")).default;
+      const FMT = '"L "#,##0.00;("L "#,##0.00)';
+      const n = (v, o = {}) => ({ value: Math.round((Number(v) || 0) * 100) / 100, type: Number, format: FMT, ...o });
+      const enc = (t) => [[{ value: "Seeds English School", fontWeight: "bold", fontSize: 14, textColor: "#1B2A4A" }], [{ value: t, fontWeight: "bold", fontSize: 12 }], [{ value: "Cifras en Lempiras", textColor: "#5B6576" }], []];
+      const cab = (a, b = "Monto") => [{ value: a, fontWeight: "bold", backgroundColor: "#1B2A4A", textColor: "#FFFFFF" }, { value: b, fontWeight: "bold", backgroundColor: "#1B2A4A", textColor: "#FFFFFF", align: "right" }];
+      const sec = (t) => [{ value: t, fontWeight: "bold", backgroundColor: "#E8ECF2" }, { value: null, backgroundColor: "#E8ECF2" }];
+      const tot = (t, v, color) => [{ value: t, fontWeight: "bold", topBorderStyle: "thin", textColor: color }, n(v, { fontWeight: "bold", topBorderStyle: "thin", textColor: color })];
+      const it = (t, v) => [{ value: t, indent: 1 }, n(v)];
+      const mesTxt = `${MESES[sel.mes - 1]} ${sel.anio}`;
+      const hRes = [...enc(`Estado de resultados — ${mesTxt}`), cab("Concepto"), sec("Ingresos"), ...ingresos.map((x) => it(x.c.nombre, x.v)), tot("Total ingresos", totIng),
+        [], sec("Gastos y costos"), ...gastos.map((x) => it(x.c.nombre, x.v)), tot("Total gastos", totGas), [], tot(resultado >= 0 ? "Ganancia del mes" : "Pérdida del mes", resultado, resultado >= 0 ? "#2A5E45" : "#8E3131")];
+      const hBal = [...enc(`Balance general al ${new Date(sel.anio, sel.mes, 0).getDate()} de ${mesTxt}`), cab("Cuenta"), sec("Activos (lo que tengo)"), ...activos.map((x) => it(x.c.nombre, x.v)), tot("Total activos", totA),
+        [], sec("Pasivos (lo que debo)"), ...pasivos.map((x) => it(x.c.nombre, x.v)), tot("Total pasivos", totP),
+        [], sec("Patrimonio"), ...patrimonio.map((x) => it(x.c.nombre, x.v)), it("Resultados desde noviembre 2026", resAcum), tot("Total patrimonio", totPat), [], tot("Pasivos + patrimonio", totP + totPat)];
+      const hFlu = [...enc(`Flujo de efectivo — ${mesTxt}`), cab("Concepto"), it("Efectivo y bancos al iniciar el mes", dispIniFlujo), [], sec("Entradas de dinero"),
+        ...flujo.ent.flatMap((c) => [it(c.k, c.v), ...c.items.map((i) => [{ value: `${i.f || ""}  ${i.d || ""}`, indent: 2, textColor: "#5B6576" }, n(i.v, { textColor: "#5B6576" })])]), tot("Total entradas", totEnt),
+        [], sec("Salidas de dinero"), ...flujo.sal.flatMap((c) => [it(c.k, c.v), ...c.items.map((i) => [{ value: `${i.f || ""}  ${i.d || ""}`, indent: 2, textColor: "#5B6576" }, n(i.v, { textColor: "#5B6576" })])]), tot("Total salidas", totSal),
+        [], tot("Efectivo y bancos al cierre", dispFinal)];
+      const cols = [{ width: 58 }, { width: 18 }];
+      const blob = await writeExcelFile([{ data: hRes, sheet: "Estado de resultados", columns: cols }, { data: hBal, sheet: "Balance general", columns: cols }, { data: hFlu, sheet: "Flujo de efectivo", columns: cols }], { fontFamily: "Calibri", fontSize: 11 }).toBlob();
+      if (xls) URL.revokeObjectURL(xls.url);
+      setXls({ url: URL.createObjectURL(blob), nombre: `Contabilidad ${mesTxt}.xlsx` });
+    } catch (e) { showToast && showToast("No se pudo crear el Excel: " + e.message, "error"); }
+  };
+
   const Pest = ({ id, txt }) => <button onClick={() => setTab(id)} style={{ ...btnO, background: tab === id ? "#1E293B" : btnO.background, color: tab === id ? "#fff" : btnO.color, fontWeight: 700 }}>{txt}</button>;
 
   if (sinModulo) return <div style={card}><h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Falta activar la contabilidad</h3><p style={{ fontSize: 13, color: GRIS }}>Hay que correr <code>supabase/contabilidad.sql</code> en Supabase (SQL Editor). Solo crea tablas nuevas; no cambia nada de lo que ya existe.</p></div>;
@@ -164,6 +195,8 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       <span style={badge(cerrado ? GRIS : VERDE)}>{cerrado ? <><Lock size={11} /> Cerrado</> : "Abierto"}</span>
       {!cerrado && <button onClick={() => generar(true)} disabled={trabajando} style={{ ...btnO, opacity: trabajando ? 0.6 : 1 }}><RefreshCw size={14} />{trabajando ? "Actualizando…" : "Actualizar asientos"}</button>}
       {!hayApertura && <span style={{ ...badge(ROJO) }}>Falta el asiento de apertura</span>}
+      {!cargando && ["resultados", "balance", "flujo"].includes(tab) && <button onClick={descargarExcel} style={btnO}><Download size={14} />Descargar Excel</button>}
+      {xls && <a href={xls.url} download={xls.nombre} onClick={() => setTimeout(() => setXls(null), 500)} style={{ ...btn("#15803D"), textDecoration: "none" }}><Download size={14} />Guardar {xls.nombre}</a>}
     </div>
 
     {!tabFijo && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
@@ -175,6 +208,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       {tab === "resultados" && <div style={card}>
         <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Estado de resultados — {MESES[sel.mes - 1]} {sel.anio}</h3>
         <p style={{ fontSize: 11.5, color: GRIS, margin: "0 0 12px" }}>Lo ganado y lo gastado <b>del mes</b>, aunque se cobre o se pague en otro mes.</p>
+        <Simple>{totIng === 0 && totGas === 0 ? "todavía no hay movimientos en este mes." : <>a la escuela le correspondieron {L(totIng)} y gastó {L(totGas)} en {MESES[sel.mes - 1]}. {resultado >= 0 ? <>Le quedó una <b style={{ color: VERDE }}>ganancia de {L(resultado)}</b>{totIng > 0 ? <> (L {Math.round(resultado / totIng * 100)} de cada L 100)</> : null}.</> : <>Gastó <b style={{ color: ROJO }}>{L(Math.abs(resultado))} más</b> de lo que le correspondió.</>}</>}</Simple>
         <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>
           <tr><td style={{ ...td, fontWeight: 700 }} colSpan={2}>Ingresos</td></tr>
           {ingresos.map((x) => <tr key={x.c.codigo}><td style={{ ...td, paddingLeft: 22 }}>{x.c.nombre}</td><td style={tdR}>{L(x.v)}</td></tr>)}
@@ -191,6 +225,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       {tab === "balance" && <div style={card}>
         <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Balance general al {new Date(sel.anio, sel.mes, 0).getDate()} de {MESES[sel.mes - 1]} {sel.anio}</h3>
         <p style={{ fontSize: 11.5, color: GRIS, margin: "0 0 12px" }}>Lo que la escuela tiene, lo que debe y lo que es de la propietaria.</p>
+        <Simple>la escuela <b>tiene</b> {L(totA)} (dinero, lo que le deben y otras cosas) y <b>debe</b> {L(totP)}. Lo que queda, {L(totPat)}, es lo que realmente es de la escuela y su dueña.</Simple>
         <div style={{ display: "grid", gridTemplateColumns: window.innerWidth > 800 ? "1fr 1fr" : "1fr", gap: 20 }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>
             <tr><td style={{ ...td, fontWeight: 700 }} colSpan={2}>Activos (lo que tengo)</td></tr>
@@ -218,6 +253,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
 
       {tab === "flujo" && <div style={card}>
         <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Flujo de efectivo — {MESES[sel.mes - 1]} {sel.anio}</h3>
+        <Simple>el mes empezó con {L(dispIniFlujo)} en caja y banco. Entraron {L(totEnt)} y salieron {L(Math.abs(totSal))}, así que terminó con <b>{L(dispFinal)}</b>. Esto es el dinero de verdad, que no siempre es igual a la ganancia.</Simple>
         <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>
           <tr><td style={td}>Efectivo y bancos al iniciar el mes</td><td style={tdR}>{L(dispIniFlujo)}</td></tr>
           <tr><td style={{ ...td, fontWeight: 700, paddingTop: 12 }} colSpan={2}>Entradas de dinero</td></tr>
