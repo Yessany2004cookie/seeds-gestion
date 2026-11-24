@@ -70,11 +70,11 @@ html[data-fondo="pulpo"] body {
 /* ── Oscuro ── */
 html[data-fondo="oscuro"] {
   color-scheme: dark;
-  --texto: #E3E8F0; --suave: #9AA6B8; --borde: #2A3852; --fondo: #0F1726;
-  --sup: #172238; --sup-2: #1D2A44; --azul: #E3E8F0;
+  --texto: #E9EDEF; --suave: #8696A0; --borde: #2A3942; --fondo: #0B141A;
+  --sup: #111B21; --sup-2: #202C33; --azul: #E9EDEF;
 }
 html[data-fondo="oscuro"] body { background: var(--fondo); color: var(--texto); }
-html[data-fondo="oscuro"] h1, html[data-fondo="oscuro"] h2, html[data-fondo="oscuro"] h3, html[data-fondo="oscuro"] h4 { color: #F1F4F9; }
+html[data-fondo="oscuro"] h1, html[data-fondo="oscuro"] h2, html[data-fondo="oscuro"] h3, html[data-fondo="oscuro"] h4 { color: #E9EDEF; }
 
 /* Superficies blancas y grises claras → azul noche */
 html[data-fondo="oscuro"] [style*="background: rgb(255, 255, 255)"],
@@ -90,15 +90,15 @@ html[data-fondo="oscuro"] .vidrio-menu div[style*="background: rgb(255, 255, 255
 
 /* Fondos pastel de avisos → tonos oscuros de su color */
 html[data-fondo="oscuro"] [style*="background: rgb(236, 253, 245)"], html[data-fondo="oscuro"] [style*="background: rgb(240, 253, 244)"],
-html[data-fondo="oscuro"] [style*="background: rgb(209, 250, 229)"], html[data-fondo="oscuro"] [style*="background: rgb(220, 252, 231)"] { background: #15342A !important; }
-html[data-fondo="oscuro"] [style*="background: rgb(254, 242, 242)"], html[data-fondo="oscuro"] [style*="background: rgb(254, 226, 226)"] { background: #3A1E24 !important; }
+html[data-fondo="oscuro"] [style*="background: rgb(209, 250, 229)"], html[data-fondo="oscuro"] [style*="background: rgb(220, 252, 231)"] { background: #103529 !important; }
+html[data-fondo="oscuro"] [style*="background: rgb(254, 242, 242)"], html[data-fondo="oscuro"] [style*="background: rgb(254, 226, 226)"] { background: #3B1F24 !important; }
 html[data-fondo="oscuro"] [style*="background: rgb(255, 247, 237)"], html[data-fondo="oscuro"] [style*="background: rgb(255, 251, 235)"],
 html[data-fondo="oscuro"] [style*="background: rgb(254, 243, 199)"], html[data-fondo="oscuro"] [style*="background: rgb(255, 237, 213)"],
-html[data-fondo="oscuro"] [style*="background: rgb(255, 251, 245)"] { background: #3A2A1C !important; }
+html[data-fondo="oscuro"] [style*="background: rgb(255, 251, 245)"] { background: #3A2C1E !important; }
 html[data-fondo="oscuro"] [style*="background: rgb(239, 246, 255)"], html[data-fondo="oscuro"] [style*="background: rgb(219, 234, 254)"],
-html[data-fondo="oscuro"] [style*="background: rgb(238, 242, 247)"] { background: #1A2B47 !important; }
+html[data-fondo="oscuro"] [style*="background: rgb(238, 242, 247)"] { background: #182D3B !important; }
 html[data-fondo="oscuro"] [style*="background: rgb(245, 243, 255)"], html[data-fondo="oscuro"] [style*="background: rgb(237, 233, 254)"],
-html[data-fondo="oscuro"] [style*="background: rgb(241, 241, 246)"] { background: #26243F !important; }
+html[data-fondo="oscuro"] [style*="background: rgb(241, 241, 246)"] { background: #272638 !important; }
 
 /* Letras oscuras → claras */
 html[data-fondo="oscuro"] [style^="color: rgb(30, 41, 59)"], html[data-fondo="oscuro"] [style*="; color: rgb(30, 41, 59)"],
@@ -106,12 +106,12 @@ html[data-fondo="oscuro"] [style^="color: rgb(15, 23, 42)"], html[data-fondo="os
 html[data-fondo="oscuro"] [style^="color: rgb(27, 42, 74)"], html[data-fondo="oscuro"] [style*="; color: rgb(27, 42, 74)"],
 html[data-fondo="oscuro"] [style^="color: rgb(31, 41, 55)"], html[data-fondo="oscuro"] [style*="; color: rgb(31, 41, 55)"],
 html[data-fondo="oscuro"] [style^="color: rgb(51, 65, 85)"], html[data-fondo="oscuro"] [style*="; color: rgb(51, 65, 85)"],
-html[data-fondo="oscuro"] [style^="color: rgb(52, 64, 84)"], html[data-fondo="oscuro"] [style*="; color: rgb(52, 64, 84)"] { color: #E3E8F0 !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(52, 64, 84)"], html[data-fondo="oscuro"] [style*="; color: rgb(52, 64, 84)"] { color: #E9EDEF !important; }
 html[data-fondo="oscuro"] [style^="color: rgb(71, 85, 105)"], html[data-fondo="oscuro"] [style*="; color: rgb(71, 85, 105)"],
 html[data-fondo="oscuro"] [style^="color: rgb(63, 74, 90)"], html[data-fondo="oscuro"] [style*="; color: rgb(63, 74, 90)"],
 html[data-fondo="oscuro"] [style^="color: rgb(100, 116, 139)"], html[data-fondo="oscuro"] [style*="; color: rgb(100, 116, 139)"],
-html[data-fondo="oscuro"] [style^="color: rgb(91, 101, 118)"], html[data-fondo="oscuro"] [style*="; color: rgb(91, 101, 118)"] { color: #A9B4C6 !important; }
-html[data-fondo="oscuro"] [style^="color: rgb(148, 163, 184)"], html[data-fondo="oscuro"] [style*="; color: rgb(148, 163, 184)"] { color: #7F8BA0 !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(91, 101, 118)"], html[data-fondo="oscuro"] [style*="; color: rgb(91, 101, 118)"] { color: #AEBAC1 !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(148, 163, 184)"], html[data-fondo="oscuro"] [style*="; color: rgb(148, 163, 184)"] { color: #8696A0 !important; }
 
 /* Colores de acento, más luminosos para que se lean sobre oscuro */
 html[data-fondo="oscuro"] [style^="color: rgb(43, 76, 126)"], html[data-fondo="oscuro"] [style*="; color: rgb(43, 76, 126)"],
@@ -130,7 +130,7 @@ html[data-fondo="oscuro"] [style^="color: rgb(234, 88, 12)"], html[data-fondo="o
 html[data-fondo="oscuro"] svg[color="#2B4C7E"] { color: #93B4E6; } html[data-fondo="oscuro"] svg[color="#2F6B4F"] { color: #7FC9A3; }
 html[data-fondo="oscuro"] svg[color="#A33A3A"] { color: #EE9A9A; } html[data-fondo="oscuro"] svg[color="#4E4A7E"] { color: #B9B3EC; }
 html[data-fondo="oscuro"] svg[color="#1B2A4A"], html[data-fondo="oscuro"] svg[color="#475569"], html[data-fondo="oscuro"] svg[color="#64748B"],
-html[data-fondo="oscuro"] svg[color="#5B6576"] { color: #A9B4C6; }
+html[data-fondo="oscuro"] svg[color="#5B6576"] { color: #AEBAC1; }
 
 /* Bordes claros → bordes oscuros */
 html[data-fondo="oscuro"] [style*="rgb(226, 232, 240)"], html[data-fondo="oscuro"] [style*="rgb(220, 225, 232)"],
@@ -140,25 +140,25 @@ html[data-fondo="oscuro"] [style*="rgb(238, 242, 247)"] { border-color: var(--bo
 
 /* Campos */
 html[data-fondo="oscuro"] input, html[data-fondo="oscuro"] select, html[data-fondo="oscuro"] textarea {
-  background: #111B2E !important; color: var(--texto) !important; border-color: #34446A !important;
+  background: #2A3942 !important; color: var(--texto) !important; border-color: #3B4A54 !important;
 }
-html[data-fondo="oscuro"] input::placeholder, html[data-fondo="oscuro"] textarea::placeholder { color: #6F7C92; }
-html[data-fondo="oscuro"] option { background: #111B2E; color: var(--texto); }
+html[data-fondo="oscuro"] input::placeholder, html[data-fondo="oscuro"] textarea::placeholder { color: #667781; }
+html[data-fondo="oscuro"] option { background: #2A3942; color: var(--texto); }
 html[data-fondo="oscuro"] input:focus, html[data-fondo="oscuro"] select:focus, html[data-fondo="oscuro"] textarea:focus {
   border-color: #F0A46A !important; box-shadow: 0 0 0 3px rgba(240, 164, 106, .18) !important;
 }
 
 /* Tablas */
-html[data-fondo="oscuro"] table thead th { background: var(--sup-2) !important; color: #C9D2E0 !important; border-color: var(--borde) !important; }
-html[data-fondo="oscuro"] table tr, html[data-fondo="oscuro"] table td { border-color: #24314B !important; }
-html[data-fondo="oscuro"] table tbody tr:hover > td { background: #1B2740; }
+html[data-fondo="oscuro"] table thead th { background: var(--sup-2) !important; color: #D1D7DB !important; border-color: var(--borde) !important; }
+html[data-fondo="oscuro"] table tr, html[data-fondo="oscuro"] table td { border-color: #222D34 !important; }
+html[data-fondo="oscuro"] table tbody tr:hover > td { background: #202C33; }
 
 /* Barra superior, menú y ventanas */
 html[data-fondo="oscuro"] .vidrio-barra { background: var(--sup) !important; border-bottom-color: var(--borde); }
-html[data-fondo="oscuro"] .vidrio-menu { background: #0B1322; border-right-color: #1C2840; }
+html[data-fondo="oscuro"] .vidrio-menu { background: #111B21; border-right-color: #222D34; }
 html[data-fondo="oscuro"] div[style*="position: fixed"] > div[style*="background: rgb(255, 255, 255)"] { box-shadow: 0 24px 60px rgba(0, 0, 0, .55); }
 html[data-fondo="oscuro"] .boton-atras { background: var(--sup-2); color: var(--texto); border-color: var(--borde); }
-html[data-fondo="oscuro"] .tarjeta-kpi .cifra { color: #F1F4F9 !important; }
+html[data-fondo="oscuro"] .tarjeta-kpi .cifra { color: #E9EDEF !important; }
 html[data-fondo="oscuro"] .menu-fondo button:hover { background: var(--sup-2) !important; }
 html[data-fondo="oscuro"] ::-webkit-scrollbar-thumb { background: rgba(169, 180, 198, .3); }
 @media print { html[data-fondo="oscuro"] body { background: #fff !important; color: #000; } }
@@ -211,10 +211,10 @@ html[data-fondo="oscuro"] [style*="; color: rgb(45, 106, 127)"] { color: #93B4E6
 html[data-fondo="oscuro"] [style^="color: rgb(0, 0, 0)"],
 html[data-fondo="oscuro"] [style*="; color: rgb(0, 0, 0)"],
 html[data-fondo="oscuro"] [style^="color: rgb(85, 85, 85)"],
-html[data-fondo="oscuro"] [style*="; color: rgb(85, 85, 85)"] { color: #E3E8F0 !important; }
+html[data-fondo="oscuro"] [style*="; color: rgb(85, 85, 85)"] { color: #E9EDEF !important; }
 html[data-fondo="oscuro"] [style^="color: rgb(136, 136, 136)"],
-html[data-fondo="oscuro"] [style*="; color: rgb(136, 136, 136)"] { color: #A9B4C6 !important; }
-html[data-fondo="oscuro"] .vidrio-ahumado { background: #22314F !important; border-color: #34446A !important; color: #fff !important; }
+html[data-fondo="oscuro"] [style*="; color: rgb(136, 136, 136)"] { color: #AEBAC1 !important; }
+html[data-fondo="oscuro"] .vidrio-ahumado { background: #202C33 !important; border-color: #3B4A54 !important; color: #fff !important; }
 html[data-fondo="oscuro"] button[style*="background: rgba(255, 255, 255, 0."] { background: var(--sup-2) !important; border-color: var(--borde) !important; }
 html[data-fondo="oscuro"] .tabla-tarjetas > tbody > tr { background: var(--sup) !important; border-left-color: #F0A46A !important; }
 
@@ -238,7 +238,7 @@ html[data-fondo="oscuro"] [style*="background-color: rgba(224, 242, 254,"],
 html[data-fondo="oscuro"] [style*="background: rgb(238, 242, 247)"],
 html[data-fondo="oscuro"] [style*="background: rgba(238, 242, 247,"],
 html[data-fondo="oscuro"] [style*="background-color: rgb(238, 242, 247)"],
-html[data-fondo="oscuro"] [style*="background-color: rgba(238, 242, 247,"] { background: #1A2B47 !important; }
+html[data-fondo="oscuro"] [style*="background-color: rgba(238, 242, 247,"] { background: #182D3B !important; }
 html[data-fondo="oscuro"] [style*="background: rgb(236, 253, 245)"],
 html[data-fondo="oscuro"] [style*="background: rgba(236, 253, 245,"],
 html[data-fondo="oscuro"] [style*="background-color: rgb(236, 253, 245)"],
@@ -254,7 +254,7 @@ html[data-fondo="oscuro"] [style*="background-color: rgba(209, 250, 229,"],
 html[data-fondo="oscuro"] [style*="background: rgb(220, 252, 231)"],
 html[data-fondo="oscuro"] [style*="background: rgba(220, 252, 231,"],
 html[data-fondo="oscuro"] [style*="background-color: rgb(220, 252, 231)"],
-html[data-fondo="oscuro"] [style*="background-color: rgba(220, 252, 231,"] { background: #15342A !important; }
+html[data-fondo="oscuro"] [style*="background-color: rgba(220, 252, 231,"] { background: #103529 !important; }
 html[data-fondo="oscuro"] [style*="background: rgb(254, 242, 242)"],
 html[data-fondo="oscuro"] [style*="background: rgba(254, 242, 242,"],
 html[data-fondo="oscuro"] [style*="background-color: rgb(254, 242, 242)"],
@@ -266,7 +266,7 @@ html[data-fondo="oscuro"] [style*="background-color: rgba(254, 226, 226,"],
 html[data-fondo="oscuro"] [style*="background: rgb(255, 241, 242)"],
 html[data-fondo="oscuro"] [style*="background: rgba(255, 241, 242,"],
 html[data-fondo="oscuro"] [style*="background-color: rgb(255, 241, 242)"],
-html[data-fondo="oscuro"] [style*="background-color: rgba(255, 241, 242,"] { background: #3A1E24 !important; }
+html[data-fondo="oscuro"] [style*="background-color: rgba(255, 241, 242,"] { background: #3B1F24 !important; }
 html[data-fondo="oscuro"] [style*="background: rgb(255, 247, 237)"],
 html[data-fondo="oscuro"] [style*="background: rgba(255, 247, 237,"],
 html[data-fondo="oscuro"] [style*="background-color: rgb(255, 247, 237)"],
@@ -290,7 +290,7 @@ html[data-fondo="oscuro"] [style*="background-color: rgba(255, 251, 247,"],
 html[data-fondo="oscuro"] [style*="background: rgb(255, 251, 245)"],
 html[data-fondo="oscuro"] [style*="background: rgba(255, 251, 245,"],
 html[data-fondo="oscuro"] [style*="background-color: rgb(255, 251, 245)"],
-html[data-fondo="oscuro"] [style*="background-color: rgba(255, 251, 245,"] { background: #3A2A1C !important; }
+html[data-fondo="oscuro"] [style*="background-color: rgba(255, 251, 245,"] { background: #3A2C1E !important; }
 html[data-fondo="oscuro"] [style*="background: rgb(245, 243, 255)"],
 html[data-fondo="oscuro"] [style*="background: rgba(245, 243, 255,"],
 html[data-fondo="oscuro"] [style*="background-color: rgb(245, 243, 255)"],
@@ -306,7 +306,7 @@ html[data-fondo="oscuro"] [style*="background-color: rgba(241, 241, 246,"],
 html[data-fondo="oscuro"] [style*="background: rgb(250, 245, 255)"],
 html[data-fondo="oscuro"] [style*="background: rgba(250, 245, 255,"],
 html[data-fondo="oscuro"] [style*="background-color: rgb(250, 245, 255)"],
-html[data-fondo="oscuro"] [style*="background-color: rgba(250, 245, 255,"] { background: #26243F !important; }
+html[data-fondo="oscuro"] [style*="background-color: rgba(250, 245, 255,"] { background: #272638 !important; }
 html[data-fondo="oscuro"] [style*="background: rgb(248, 250, 252)"],
 html[data-fondo="oscuro"] [style*="background: rgba(248, 250, 252,"],
 html[data-fondo="oscuro"] [style*="background-color: rgb(248, 250, 252)"],
@@ -349,9 +349,9 @@ html[data-fondo="oscuro"] [style*="background-color: rgb(255, 255, 255)"] { back
 html[data-fondo="oscuro"] .vidrio-menu div[style*="background: rgb(255, 255, 255)"] { background: #fff !important; }
 /* Bordes de avisos */
 html[data-fondo="oscuro"] [style*="rgb(191, 219, 254)"],
-html[data-fondo="oscuro"] [style*="rgb(186, 230, 253)"] { border-color: #2E4A78 !important; }
+html[data-fondo="oscuro"] [style*="rgb(186, 230, 253)"] { border-color: #2D4A5C !important; }
 html[data-fondo="oscuro"] [style*="rgb(187, 247, 208)"],
-html[data-fondo="oscuro"] [style*="rgb(167, 243, 208)"] { border-color: #2A5A45 !important; }
+html[data-fondo="oscuro"] [style*="rgb(167, 243, 208)"] { border-color: #1F5E48 !important; }
 html[data-fondo="oscuro"] [style*="rgb(254, 202, 202)"],
 html[data-fondo="oscuro"] [style*="rgb(252, 165, 165)"] { border-color: #6A3434 !important; }
 html[data-fondo="oscuro"] [style*="rgb(254, 215, 170)"],
@@ -370,24 +370,24 @@ html[data-fondo="oscuro"] [style*="rgb(242, 242, 242)"] { border-color: var(--bo
 /* Pestañas y botones azul marino: en oscuro se marcan con un azul más claro para que se distingan */
 html[data-fondo="oscuro"] button[style*="background: rgb(27, 42, 74)"],
 html[data-fondo="oscuro"] button[style*="background: rgb(30, 41, 59)"],
-html[data-fondo="oscuro"] button[style*="background: rgb(15, 23, 42)"] { background: #2B4C7E !important; border-color: #3B5E94 !important; color: #fff !important; }
+html[data-fondo="oscuro"] button[style*="background: rgb(15, 23, 42)"] { background: #B4531A !important; border-color: #D9641E !important; color: #fff !important; }
 
 /* Reportes (estado de resultados y demás): en pantalla siguen el tema oscuro.
    Los PDF se arman siempre con el fondo claro. */
 html[data-fondo="oscuro"] .edo, html[data-fondo="oscuro"] .edo .sec td, html[data-fondo="oscuro"] .edo .det td,
-html[data-fondo="oscuro"] .edo .ok, html[data-fondo="oscuro"] .tit, html[data-fondo="oscuro"] .aviso { color: #E3E8F0 !important; }
-html[data-fondo="oscuro"] .edo th { color: #A9B4C6 !important; }
-html[data-fondo="oscuro"] .edo .det .num { color: #C9D2E0 !important; }
-html[data-fondo="oscuro"] .edo .pct, html[data-fondo="oscuro"] .edo .nota, html[data-fondo="oscuro"] .tit .nota, html[data-fondo="oscuro"] .pie { color: #8E9AB0 !important; }
+html[data-fondo="oscuro"] .edo .ok, html[data-fondo="oscuro"] .tit, html[data-fondo="oscuro"] .aviso { color: #E9EDEF !important; }
+html[data-fondo="oscuro"] .edo th { color: #AEBAC1 !important; }
+html[data-fondo="oscuro"] .edo .det .num { color: #D1D7DB !important; }
+html[data-fondo="oscuro"] .edo .pct, html[data-fondo="oscuro"] .edo .nota, html[data-fondo="oscuro"] .tit .nota, html[data-fondo="oscuro"] .pie { color: #8696A0 !important; }
 html[data-fondo="oscuro"] .edo th, html[data-fondo="oscuro"] .edo .sec td, html[data-fondo="oscuro"] .edo .tot td, html[data-fondo="oscuro"] .edo .sub td,
-html[data-fondo="oscuro"] .edo .neta td, html[data-fondo="oscuro"] .edo .pend td, html[data-fondo="oscuro"] .aviso { border-color: #5A6A88 !important; }
-html[data-fondo="oscuro"] .edo .cta td { border-bottom-color: #24314B !important; }
+html[data-fondo="oscuro"] .edo .neta td, html[data-fondo="oscuro"] .edo .pend td, html[data-fondo="oscuro"] .aviso { border-color: #54656F !important; }
+html[data-fondo="oscuro"] .edo .cta td { border-bottom-color: #222D34 !important; }
 html[data-fondo="oscuro"] .edo .sub td, html[data-fondo="oscuro"] .edo .neta td { background: var(--sup-2) !important; }
 html[data-fondo="oscuro"] .edo .neta td { color: #7FC9A3 !important; }
 html[data-fondo="oscuro"] .edo .neta.perdida td, html[data-fondo="oscuro"] .edo .pend td, html[data-fondo="oscuro"] .edo .pend .num { color: #EE9A9A !important; }
-html[data-fondo="oscuro"] .edo .pend td { background: #3A1E24 !important; }
-html[data-fondo="oscuro"] .aviso { background: #3A2A1C !important; border-left-color: #F0A46A !important; }
+html[data-fondo="oscuro"] .edo .pend td { background: #3B1F24 !important; }
+html[data-fondo="oscuro"] .aviso { background: #3A2C1E !important; border-left-color: #F0A46A !important; }
 html[data-fondo="oscuro"] .grafica { background: #F2F2F2; border-color: var(--borde) !important; }
-html[data-fondo="oscuro"] [style*="solid rgb(0, 0, 0)"] { border-color: #5A6A88 !important; }
+html[data-fondo="oscuro"] [style*="solid rgb(0, 0, 0)"] { border-color: #54656F !important; }
 html[data-fondo="oscuro"] [style^="color: rgb(21, 128, 61)"], html[data-fondo="oscuro"] [style*="; color: rgb(21, 128, 61)"],
 html[data-fondo="oscuro"] [style^="color: rgb(22, 163, 74)"], html[data-fondo="oscuro"] [style*="; color: rgb(22, 163, 74)"] { color: #7FC9A3 !important; }
