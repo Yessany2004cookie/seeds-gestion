@@ -13,6 +13,7 @@ import { BarraDescargas } from "./documentoFormal";
 import { useMarca } from "./marca";
 import { Balanza, Ajustes, Antiguedad, calcularBalanza, calcularAntiguedad } from "./contabilidadExtra";
 import { useVista, SelectorVista, EstilosVistas, Titular, Kpis, Comparar, Desglose, Movimientos, Hoja, Lc, VERDE as VERDE_S, ROJO as ROJO_S, NARANJA, AZUL as AZUL_M } from "./vistas";
+import { fuentesExcel, EXCEL_TEXTO } from "./tipografia";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const ARRANQUE = { anio: 2026, mes: 11 };
@@ -276,11 +277,11 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       const informe = await hojaInforme({ marca: { nombre: marcaC.nombreO("Seeds English School") }, logo: logoX, modulo: "Contabilidad", mesTxt, antTxt: `${MESES[((kAnt - 1) % 12)]} ${Math.floor((kAnt - 1) / 12)}`,
         actual: serieC[serieC.length - 1], anterior: antC, serie: serieC, balance: { caja: saldos["1.1.01"] || 0, porCobrar: totA - (saldos["1.1.01"] || 0), porPagar: totP },
         nota: "Cifras de la contabilidad (partida doble): ingresos cuando se cobran a los padres (facturado) y gastos del mes al que corresponden. La contabilidad arranca en noviembre de 2026, por eso los meses anteriores salen en cero. Cifras en Lempiras." });
-      const blob = await writeExcelFile([informe, { data: hRes, sheet: "Estado de resultados", columns: cols }, { data: hBal, sheet: "Balance general", columns: cols }, { data: hFlu, sheet: "Flujo de efectivo", columns: cols },
+      const blob = await writeExcelFile(fuentesExcel([informe, { data: hRes, sheet: "Estado de resultados", columns: cols }, { data: hBal, sheet: "Balance general", columns: cols }, { data: hFlu, sheet: "Flujo de efectivo", columns: cols },
         { data: hBz, sheet: "Balanza de comprobación", columns: [{ width: 10 }, { width: 40 }, ...Array(6).fill({ width: 16 })] },
         { data: hDi, sheet: "Libro diario", columns: [{ width: 12 }, { width: 58 }, { width: 10 }, { width: 16 }, { width: 16 }] },
         { data: hMa, sheet: "Libro mayor", columns: [{ width: 12 }, { width: 58 }, { width: 16 }, { width: 16 }, { width: 16 }] },
-        { data: hAn, sheet: "Antigüedad de saldos", columns: [{ width: 40 }, { width: 14 }, ...Array(5).fill({ width: 16 })] }], { fontFamily: "IBM Plex Sans", fontSize: 10, features: [extraHoja] }).toBlob();
+        { data: hAn, sheet: "Antigüedad de saldos", columns: [{ width: 40 }, { width: 14 }, ...Array(5).fill({ width: 16 })] }]), { fontFamily: EXCEL_TEXTO, fontSize: 10, features: [extraHoja] }).toBlob();
       if (xls) URL.revokeObjectURL(xls.url);
       setXls({ url: URL.createObjectURL(blob), nombre: `Contabilidad ${mesTxt}.xlsx` });
     } catch (e) { showToast && showToast("No se pudo crear el Excel: " + e.message, "error"); }

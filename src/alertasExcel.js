@@ -6,6 +6,7 @@
 //  Solo arma el archivo; no lee ni escribe en la base de datos.
 // ════════════════════════════════════════════════════════════
 
+import { fuentesExcel, EXCEL_TEXTO } from "./tipografia.js";
 export const FMT_L = '"L "#,##0.00;[Red]-"L "#,##0.00';
 const FMT_PCT = "0%";
 const FMT_ENT = "#,##0";
@@ -185,5 +186,5 @@ export async function crearExcelAlertas(writeExcelFile, datos, logo) {
     ...h,
     images: lg ? [{ ...lg, dpi: 96, anchor: { row: 1, column: 1 }, offsetX: 4, offsetY: 4, title: datos.nombre }] : undefined,
   }));
-  return writeExcelFile(libro, { fontFamily: "Calibri", fontSize: 10, features: [extraHoja] });
+  return writeExcelFile(fuentesExcel(libro), { fontFamily: EXCEL_TEXTO, fontSize: 10, features: [extraHoja] });
 }

@@ -1,0 +1,76 @@
+/* ════════════════════════════════════════════════════════════
+   Tarjetas de navegación (hover cards) con el relieve suave de Inicio.
+   Superficie sólida, borde fino, esquinas de 6px. Al pasar el mouse la
+   tarjeta sube, gana sombra y una línea naranja la cruza arriba.
+   ════════════════════════════════════════════════════════════ */
+:root {
+  --nv-sup: #FFFFFF; --nv-borde: #DCE1E8; --nv-borde-hover: #E7B48F;
+  --nv-titulo: #1B2A4A; --nv-texto: #4A5466; --nv-suave: #7A8597;
+  --nv-acento: #D9641E; --nv-icono-fondo: #F5F7FA; --nv-num: #C3CAD5;
+  --nv-sombra: 0 1px 2px rgba(16, 24, 40, .05);
+  --nv-sombra-hover: 0 14px 28px -10px rgba(27, 42, 74, .22), 0 4px 10px -4px rgba(27, 42, 74, .10);
+  --nv-bien: #2F6B4F; --nv-mal: #A33A3A;
+}
+html[data-fondo="oscuro"] {
+  --nv-sup: #2A2D31; --nv-borde: #40444A; --nv-borde-hover: #8A5733;
+  --nv-titulo: #E9EDEF; --nv-texto: #AEBAC1; --nv-suave: #8696A0;
+  --nv-acento: #F2A66E; --nv-icono-fondo: #33363B; --nv-num: #5A5F66;
+  --nv-sombra: none;
+  --nv-sombra-hover: 0 14px 28px -10px rgba(0, 0, 0, .55), 0 4px 10px -4px rgba(0, 0, 0, .35);
+  --nv-bien: #7FC9A3; --nv-mal: #EE9A9A;
+}
+
+/* ── Encabezado de la categoría ── */
+.nav-pagina { max-width: 1180px; background: var(--sf-fondo); border-radius: 18px; padding: 26px; box-shadow: var(--sf-relieve); }
+.nav-encabezado { padding: 0 2px 6px; margin-bottom: 24px; }
+.nav-eyebrow { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--nv-acento); }
+.nav-titulo { font-family: var(--letra-titulo); font-size: 28px; font-weight: 600; color: var(--nv-titulo) !important; margin: 8px 0 6px; line-height: 1.2; }
+.nav-intro { font-size: 15px; line-height: 1.55; color: var(--nv-texto); margin: 0; max-width: 680px; }
+
+/* ── Rejilla de tarjetas ── */
+.nav-rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+
+/* ── La tarjeta ── */
+.nav-tarjeta {
+  position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start;
+  text-align: left; width: 100%; min-width: 0; padding: 20px 20px 18px; cursor: pointer;
+  background: var(--sf-fondo); border: none; border-radius: 14px;
+  box-shadow: var(--sf-relieve); color: var(--nv-texto); font-family: inherit;
+  transition: transform .22s cubic-bezier(.2, .8, .2, 1), box-shadow .22s ease, border-color .22s ease;
+}
+.nav-tarjeta:hover, .nav-tarjeta:focus-visible { transform: translateY(-4px); box-shadow: var(--sf-relieve-alto); }
+.nav-tarjeta:not(:disabled):hover, .nav-tarjeta:not(:disabled):active { filter: none; }
+.nav-tarjeta:focus-visible { outline: 2px solid var(--nv-acento); outline-offset: 2px; }
+.nav-tarjeta:active { transform: none; box-shadow: var(--sf-hundido); }
+.nav-linea { position: absolute; left: 18px; right: 18px; top: 0; height: 3px; border-radius: 0 0 3px 3px; background: var(--nv-acento); transform: scaleX(0); transform-origin: left; transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
+.nav-tarjeta:hover .nav-linea, .nav-tarjeta:focus-visible .nav-linea { transform: scaleX(1); }
+
+.nav-cabeza { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 16px; }
+.nav-num { font-family: var(--letra-titulo); font-size: 13px; font-weight: 600; letter-spacing: 1px; color: var(--nv-num); transition: color .22s ease; }
+.nav-icono { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 12px; background: var(--sf-fondo); box-shadow: var(--sf-hundido); color: var(--nv-titulo); transition: background .22s ease, color .22s ease, border-color .22s ease; }
+.nav-tarjeta:hover .nav-icono, .nav-tarjeta:focus-visible .nav-icono { background: #D9641E; box-shadow: 3px 3px 8px var(--sf-sombra); color: #fff; }
+.nav-tarjeta:hover .nav-num { color: var(--nv-acento); }
+
+.nav-nombre { font-family: var(--letra-titulo); font-size: 17px; font-weight: 600; line-height: 1.3; color: var(--nv-titulo); }
+.nav-texto { margin-top: 8px; font-size: 13.5px; line-height: 1.55; color: var(--nv-texto); flex: 1; }
+.nav-entrar { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; font-size: 12px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--nv-suave); transition: color .22s ease; }
+.nav-flecha { display: inline-block; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.nav-tarjeta:hover .nav-entrar, .nav-tarjeta:focus-visible .nav-entrar { color: var(--nv-acento); }
+.nav-tarjeta:hover .nav-flecha, .nav-tarjeta:focus-visible .nav-flecha { transform: translateX(5px); }
+
+@media (max-width: 768px) {
+  .nav-titulo { font-size: 23px; }
+  .nav-intro { font-size: 14px; }
+  .nav-rejilla { grid-template-columns: 1fr; gap: 12px; }
+  .nav-tarjeta { padding: 16px; }
+  .nav-pagina { padding: 16px; border-radius: 14px; }
+  .nav-cabeza { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-tarjeta, .nav-linea, .nav-flecha { transition: none; }
+  .nav-tarjeta:hover, .nav-tarjeta:focus-visible { transform: none; }
+}
+
+/* Categoría en el título de arriba: se puede tocar para volver a sus tarjetas */
+.miga { background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; border-bottom: 1px dotted currentColor; }
+.miga:hover { color: var(--nv-acento); }

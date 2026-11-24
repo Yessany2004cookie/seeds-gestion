@@ -10,6 +10,9 @@ import { FinResumenExcel, FinMaestrosExcel, FinGastosExcel, IngresosExcel, Desca
 import { useVista, SelectorVista, EstilosVistas } from "./vistas";
 import { ContabilidadPage } from "./contabilidad";
 import { ResumenMesInicio } from "./resumenMesInicio";
+import { GrupoPage } from "./navegacion";
+import { InicioSoft } from "./inicioSoft";
+import { LINK_FUENTES, CSS_CIFRAS, fuentesExcel, EXCEL_TEXTO, cargarFuentesInforme } from "./tipografia";
 import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
 import { SelectorFondo } from "./fondo";
@@ -291,7 +294,7 @@ const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
   const cv = document.createElement('canvas'); cv.width = W*K; cv.height = H*K;
   const c = cv.getContext('2d'); c.scale(K, K);
   const AZUL = '#1B2A4A', NARANJA = '#EA580C', ACENTO = NARANJA, VERDE = '#166534', GRIS = '#475569', LINEA = '#CBD5E1';
-  const SERIF = 'Georgia,"Times New Roman",serif', SANS = '"Segoe UI",system-ui,sans-serif';
+  const SERIF = 'Manrope,"Segoe UI",Arial,sans-serif', SANS = 'Inter,"Segoe UI",Arial,sans-serif';
   const linea = (x1,y1,x2,y2,col=LINEA,w=1) => { c.strokeStyle=col; c.lineWidth=w; c.beginPath(); c.moveTo(x1,y1); c.lineTo(x2,y2); c.stroke(); };
 
   c.fillStyle = '#fff'; c.fillRect(0,0,W,H);
@@ -800,7 +803,10 @@ export default function App() {
   const GRUPOS = GRUPOS_TODOS.map(g=>({...g,items:g.items.filter(it=>personalizando||!marca.oculta(it.id))})).filter(g=>g.items.length);
   const NAV = GRUPOS_TODOS.flatMap(g=>g.items.filter(it=>!marca.oculta(it.id)).map(it=>({...it,grupo:g.label})));
   // Si la página abierta es de un módulo que se apagó, se muestra Inicio
-  const pageVisible = NAV.some(n=>n.id===page) ? page : "dashboard";
+  // Las categorías también son páginas: "grupo:<id>" muestra sus tarjetas de navegación
+  const grupoDe = (p) => typeof p==="string"&&p.startsWith("grupo:") ? GRUPOS_TODOS.map(g=>({...g,items:g.items.filter(it=>!marca.oculta(it.id))})).find(g=>g.label&&g.items.length&&"grupo:"+g.id===p) : null;
+  const grupoPagina = grupoDe(page);
+  const pageVisible = NAV.some(n=>n.id===page)||grupoPagina ? page : "dashboard";
 
   // Vista de datos filtrada por la sucursal activa.
   // Como la sucursal vive en la sección, filtramos secciones y de ahí todo lo demás.
@@ -852,12 +858,14 @@ export default function App() {
     c_cierre:<ContabilidadPage key="cierre" data={data} showToast={showToast} tabFijo="cierre"/>,
     c_apertura:<ContabilidadPage key="apertura" data={data} showToast={showToast} tabFijo="apertura"/>,
     c_catalogo:<ContabilidadPage key="catalogo" data={data} showToast={showToast} tabFijo="catalogo"/>,
-    reportes:<>{modulos.activo("contador")&&<UsoSistemaPanel secciones={NAV} showToast={showToast}/>}<ReportesPage {...propsSuc}/></>,
+    reportes:<>{modulos.activo("contador")&&<UsoSistemaPanel secciones={[...NAV,...GRUPOS_TODOS.filter(g=>g.label).map(g=>({id:"grupo:"+g.id,label:g.label}))]} showToast={showToast}/>}<ReportesPage {...propsSuc}/></>,
     docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
     config:<ConfiguracionPage {...props}/>,
     sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}
       personalizar={{grupos:GRUPOS_TODOS.filter(g=>g.label),pestanas:GRUPOS_TODOS.flatMap(g=>g.items),pestanasDocente:modulos.activo("docentes")?PESTANAS_DOCENTE.filter(n=>modulos.activo(n.modulo)):[],onEditarMenu:()=>{setPersonalizando(true);setSidebarOpen(true);}}}/>,
   };
+
+  if (grupoPagina) pageMap[page] = <GrupoPage key={page} grupo={grupoPagina} irA={setPage}/>;
 
   return (
     <div style={{display:"flex",height:"100vh",background:"transparent"}}>
@@ -876,11 +884,15 @@ export default function App() {
         <nav style={{flex:1,padding:"10px 10px",overflowY:"auto"}}>
           {GRUPOS.map(g=>{
             const activoAqui=g.items.some(it=>it.id===page);
+            const enGrupo=page==="grupo:"+g.id;
             const abierto=!g.label||activoAqui||gruposAbiertos[g.id]||personalizando;
             const GIcon=g.icon;
             return(<div key={g.id} style={{marginBottom:4}}>
               {g.label&&personalizando&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",color:"#F0A46A",fontSize:11.5,fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16} style={{flexShrink:0}}/><span style={{flex:1,minWidth:0}}><TextoEditable oscuro editando valor={g.label} max={30} titulo="Cambiar nombre del grupo" onGuardar={t=>guardarEtiqueta("g:"+g.id,t,showToast)} estilo={{color:"inherit"}}/></span></div>}
-              {g.label&&!personalizando&&<button data-tour={"g-"+g.id} onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui?"#F0A46A":"#C9D2E0",fontSize:11.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16}/><span style={{flex:1}}>{g.label}</span><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>}
+              {g.label&&!personalizando&&<div data-tour={"g-"+g.id} style={{display:"flex",alignItems:"stretch",borderRadius:3,background:enGrupo?"rgba(255,255,255,.09)":"transparent",borderLeft:enGrupo?"3px solid #D9641E":"3px solid transparent"}}>
+                <button className="menu-item" onClick={()=>{setPage("grupo:"+g.id);setGruposAbiertos(p=>({...p,[g.id]:true}));setSidebarOpen(false);}} title={"Ver todo lo de "+g.label} style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0,padding:"9px 4px 9px 11px",border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui||enGrupo?"#F0A46A":"#C9D2E0",fontSize:11.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16} style={{flexShrink:0}}/><span style={{flex:1}}>{g.label}</span></button>
+                <button onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} aria-label={(abierto?"Cerrar ":"Abrir ")+g.label} aria-expanded={abierto} style={{flexShrink:0,width:34,border:"none",borderRadius:3,cursor:"pointer",background:"transparent",color:activoAqui||enGrupo?"#F0A46A":"#C9D2E0",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>
+              </div>}
               {abierto&&g.items.map(n=>{const Icon=n.icon;const a=page===n.id;
                 if(personalizando){const oculta=marca.oculta(n.id);return(
                 <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:g.label?"6px 8px 6px 30px":"8px 8px 8px 14px",marginBottom:2,color:"#C9D2E0",fontSize:13,opacity:oculta?.45:1}}>
@@ -903,7 +915,7 @@ export default function App() {
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             {window.innerWidth<=768&&page!=="dashboard"&&<button onClick={()=>history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20}/></button>}
             {window.innerWidth<=768&&<button onClick={()=>setSidebarOpen(true)} aria-label="Menú" style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Menu size={22} color="#475569"/></button>}
-            <h1 className="titulo-barra" style={{fontSize:18,fontWeight:600,color:"#1B2A4A",margin:0}}>{(()=>{const n=NAV.find(x=>x.id===page);return n?(n.grupo?`${n.grupo} · ${n.label}`:n.label):"";})()}</h1>
+            <h1 className="titulo-barra" style={{fontSize:18,fontWeight:600,color:"#1B2A4A",margin:0}}>{(()=>{if(grupoPagina)return grupoPagina.label;const n=NAV.find(x=>x.id===page);return n?(n.grupo?<><button onClick={()=>setPage("grupo:"+n.grupoId)} className="miga" title={"Ver todo lo de "+n.grupo}>{n.grupo}</button> · {n.label}</>:n.label):"";})()}</h1>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {data.sucursales.length>0&&<div data-tour="sucursal" className="selector-sucursal" style={{display:"flex",alignItems:"center",gap:6,background:"#F5F7FA",border:"1px solid #CDD3DC",borderRadius:4,padding:"4px 10px",minWidth:0}}>
@@ -1178,31 +1190,56 @@ function LoginPage({showToast,toast}){
 // ── DASHBOARD ──
 function Dashboard({data,setPage,loadData,showToast}){
   const modulos=useModulos(true);
-  const ta=data.alumnos.filter(a=>a.estado==="activo").length;
-  const ts=data.secciones.filter(s=>s.activa!==false).length;
-  const pend=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
-  const mes=MESES[new Date().getMonth()];
-  const compMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,ANIO_ACTUAL));
-  const ingMens=compMes.reduce((s,f)=>s+(Number(f.monto_total)||0),0);
-  const ingMora=compMes.reduce((s,f)=>s+moraCobrada(f),0);
-  const ventMat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,ANIO_ACTUAL));
-  const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
-  const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
-  const gradPag=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,ANIO_ACTUAL));
-  const ingGrad=gradPag.reduce((s,v)=>s+gradRecibido(v),0);
-  const ganGrad=ingGrad-costoGradDe(data,mes,ANIO_ACTUAL);
-  const ingOtros=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,ANIO_ACTUAL)).reduce((s,i)=>s+(Number(i.monto)||0),0);
-  const ing=ingMens+ingMora+ingMat+ingGrad+ingOtros;
-  const gastos=data.gastos.filter(g=>esGastoDe(g,mes,ANIO_ACTUAL)).reduce((s,g)=>s+(Number(g.monto)||0),0);
-  // Salidas totales = gastos + costo de materiales + gastos de graduación (así Ingresos − Gastos = Ganancia)
-  const gastosTot=gastos+(ingMat-ganMat)+(ingGrad-ganGrad);
-  const ganancia=ing-gastosTot;
-  const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastosTot.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
+  const hoy=new Date();
+  // Números de un mes (mismo criterio de siempre: Ingresos − Gastos = Ganancia)
+  const numerosDe=(mes,anio)=>{
+    const compMes=data.facturas.filter(f=>f.tipo_factura==="comprobante"&&esIngresoDe(f,mes,anio));
+    const ingMens=compMes.reduce((s,f)=>s+(Number(f.monto_total)||0),0);
+    const ingMora=compMes.reduce((s,f)=>s+moraCobrada(f),0);
+    const ventMat=(data.ventas_material||[]).filter(v=>v.estado==="pagado"&&esIngresoDe(v,mes,anio));
+    const ingMat=ventMat.reduce((s,v)=>s+Number(v.precio_venta),0);
+    const ganMat=ventMat.reduce((s,v)=>s+Number(v.ganancia),0);
+    const gradPag=(data.cobros_graduacion||[]).filter(v=>gradCuenta(v)&&esIngresoDe(v,mes,anio));
+    const ingGrad=gradPag.reduce((s,v)=>s+gradRecibido(v),0);
+    const ganGrad=ingGrad-costoGradDe(data,mes,anio);
+    const ingOtros=(data.otros_ingresos||[]).filter(i=>esIngresoDe(i,mes,anio)).reduce((s,i)=>s+(Number(i.monto)||0),0);
+    const ing=ingMens+ingMora+ingMat+ingGrad+ingOtros;
+    const gastos=data.gastos.filter(g=>esGastoDe(g,mes,anio)).reduce((s,g)=>s+(Number(g.monto)||0),0);
+    // Salidas totales = gastos + costo de materiales + gastos de graduación
+    const gas=gastos+(ingMat-ganMat)+(ingGrad-ganGrad);
+    const cobros=data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.estado!=="anulada"&&f.mes_correspondiente===mes&&anioCobro(f)===anio);
+    const pend=cobros.filter(f=>f.estado==="pendiente"||f.estado==="parcial").length;
+    return {ing,gas,cobros,pend};
+  };
+  // Últimos 6 meses, del más viejo al actual
+  const meses=[...Array(6)].map((_,k)=>{const d=new Date(hoy.getFullYear(),hoy.getMonth()-5+k,1);const mes=MESES[d.getMonth()];const fin=new Date(d.getFullYear(),d.getMonth()+1,0).toISOString().slice(0,10);
+    return {mes,anio:d.getFullYear(),nombre:`${mes} ${d.getFullYear()}`,etiqueta:mes.slice(0,3),fin,...numerosDe(mes,d.getFullYear())};});
+  const act=meses[5];
+  const activos=data.alumnos.filter(a=>a.estado==="activo");
+  // Alumnos activos al cierre de cada mes (por fecha de ingreso)
+  const serieAlumnos=meses.map((m,k)=>k===5?activos.length:activos.filter(a=>!a.fecha_ingreso||a.fecha_ingreso<=m.fin).length);
+  const pendTotal=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
+  const Lm=(v)=>`L ${Math.round(v).toLocaleString("es-HN")}`;
+  const kpis=[
+    {l:"Alumnos activos",v:activos.length,serie:serieAlumnos,p:"alumnos"},
+    {l:`Ingresos ${act.mes.toLowerCase()}`,v:Lm(act.ing),serie:meses.map(m=>m.ing),p:"finanzas"},
+    {l:`Gastos ${act.mes.toLowerCase()}`,v:Lm(act.gas),serie:meses.map(m=>m.gas),p:"finanzas",subirEsBueno:false},
+    {l:"Cobros pendientes",v:pendTotal,serie:meses.map(m=>m.pend),p:"facturas",subirEsBueno:false},
+  ];
+  const cm=act.cobros;
+  const cobros=[
+    {k:"pagado",l:"Pagados",n:cm.filter(f=>f.estado!=="pendiente"&&f.estado!=="parcial").length},
+    {k:"parcial",l:"Con abono",n:cm.filter(f=>f.estado==="parcial").length},
+    {k:"pendiente",l:"Pendientes",n:cm.filter(f=>f.estado==="pendiente").length},
+  ];
+  const secciones=data.secciones.filter(s=>s.activa!==false).map(s=>({nombre:s.nombre,n:activos.filter(a=>a.seccion_id===s.id).length})).filter(s=>s.n>0).sort((a,b)=>b.n-a.n).slice(0,4);
+  const nombreAl=Object.fromEntries(data.alumnos.map(a=>[a.id,a.nombre]));
+  const fmtF=(f)=>{if(!f)return"—";const[y,m,d]=String(f).slice(0,10).split("-");return `${d}/${m}/${y}`;};
+  const recientes=data.facturas.filter(f=>f.tipo_factura==="comprobante").sort((a,b)=>String(b.fecha_pago||b.fecha_emision||"").localeCompare(String(a.fecha_pago||a.fecha_emision||""))||String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,5)
+    .map(f=>({id:f.id,numero:f.numero_factura||"—",alumno:nombreAl[f.alumno_id]||"—",mes:f.mes_correspondiente,fecha:fmtF(f.fecha_pago||f.fecha_emision),monto:(Number(f.monto_total)||0)+moraCobrada(f)}));
   return(<div>
     {modulos.activo("asistencia")&&<AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
-      {stats.map((s,i)=>{const Icon=s.i;return(<div key={i} className="tarjeta-kpi" onClick={()=>setPage(s.p)} style={{...card,cursor:"pointer",padding:"16px 18px",display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${tono(s.c)}`}}><div style={{background:tono(s.c)+"12",border:`1px solid ${tono(s.c)}30`,borderRadius:4,padding:10,display:"flex"}}><Icon size={20} color={tono(s.c)}/></div><div style={{minWidth:0}}><div style={{fontSize:11,color:"#5B6576",textTransform:"uppercase",letterSpacing:.6,fontWeight:600}}>{s.l}</div><div className="cifra" style={{fontSize:22,fontWeight:700,color:"#1B2A4A",marginTop:2}}>{s.v}</div></div></div>);})}
-    </div>
+    <InicioSoft kpis={kpis} meses={meses} cobros={cobros} secciones={secciones} recientes={recientes} mes={act.nombre} irA={setPage}/>
     <ResumenMesInicio data={data} setPage={setPage} verAlertas={modulos.activo("alertas")}/>
     <ResumenFinanciero data={data}/>
     <div style={card}><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Acciones rápidas</h3><div style={{display:"flex",flexWrap:"wrap",gap:10}}><button onClick={()=>setPage("alumnos")} style={btn("#2563EB")}><UserPlus size={15}/>Nueva matrícula</button><button onClick={()=>setPage("facturas")} style={btn("#059669")}><FileText size={15}/>Crear cobros</button>{modulos.activo("recordatorios")&&<button onClick={()=>setPage("recordatorios")} style={btn("#7C3AED")}><Bell size={15}/>Recordatorios</button>}</div></div>
@@ -1251,7 +1288,7 @@ function ResumenFinanciero({data}){
   const max=Math.max(...barras.map(b=>b.v),1);
   const H=220;
 
-  return(<div style={{...card,padding:0,overflow:"hidden",marginBottom:24}}>
+  return(<div className="rf-soft" style={{...card,padding:0,overflow:"hidden",marginBottom:24}}>
     <style>{`
       .rf-bar{transition:height .9s cubic-bezier(.22,1,.36,1), filter .2s, transform .2s;transform-origin:bottom}
       .rf-load{animation:rf-eq .8s ease-in-out infinite alternate}
@@ -1261,15 +1298,15 @@ function ResumenFinanciero({data}){
       .rf-col:hover .rf-val{opacity:1;transform:translateY(0)}
     `}</style>
     {/* Encabezado */}
-    <div style={{padding:"18px 22px",background:AZUL_MARCA,borderBottom:`3px solid ${NARANJA_MARCA}`,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+    <div className="rf-cab" style={{padding:"18px 22px",background:AZUL_MARCA,borderBottom:`3px solid ${NARANJA_MARCA}`,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
       <div>
         <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:"#FDBA74",fontWeight:700}}>Resumen financiero</div>
         <div style={{fontSize:20,fontWeight:800,marginTop:2}}>{mes}</div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{textAlign:"right"}}>
-          <div style={{fontSize:11,color:"#CBD5E1"}}>Margen de ganancia</div>
-          <div style={{fontSize:22,fontWeight:800,color:ganancia>=0?"#6EE7B7":"#FCA5A5"}}>{ingresos>0?`${(ganancia/ingresos*100).toFixed(1)}%`:"—"}</div>
+          <div className="rf-margen-t" style={{fontSize:11,color:"#CBD5E1"}}>Margen de ganancia</div>
+          <div className={"rf-margen cifra "+(ganancia>=0?"bien":"mal")} style={{fontSize:22,fontWeight:800,color:ganancia>=0?"#6EE7B7":"#FCA5A5"}}>{ingresos>0?`${(ganancia/ingresos*100).toFixed(1)}%`:"—"}</div>
         </div>
         <select value={mes} onChange={e=>setMes(e.target.value)} style={{background:"rgba(255,255,255,.1)",color:"#fff",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,padding:"7px 10px",fontSize:13,fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
           {MESES.map(m=><option key={m} value={m} style={{color:"#1E293B"}}>{m}</option>)}
@@ -2058,10 +2095,10 @@ function HistorialPage({data,loadData,showToast}){
       </table>`;
     };
     const cuerpo=bloques.map(tablaDeBloque).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Estado de cuenta ${alumno.nombre} ${rangoTxt}</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Estado de cuenta ${alumno.nombre} ${rangoTxt}</title>
       <style>
         @page { size: letter portrait; margin: 15mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif}${CSS_CIFRAS}
         body{padding:0;color:#1E293B}
         .head{display:flex;align-items:center;gap:20px;border-bottom:3px solid #F97316;padding-bottom:14px;margin-bottom:18px}
         .head .htxt{text-align:left}
@@ -2150,6 +2187,9 @@ function HistorialPage({data,loadData,showToast}){
   // Marcar un mes como PENDIENTE (crea un cobro pendiente para gestionar la deuda)
   const marcarPendiente=async(mes,anio)=>{
     if(!alumno)return;
+    const clave=`${alumno.id}|${mes}|${anio}`;
+    if(PENDIENTES_EN_CURSO.has(clave))return; // doble clic: ya se está guardando
+    PENDIENTES_EN_CURSO.add(clave);
     try{
       const monto=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
       const n=data.facturas.length+1;
@@ -2158,6 +2198,7 @@ function HistorialPage({data,loadData,showToast}){
       await loadData();
       showToast(`${mes} ${anio} marcado como pendiente`);
     }catch(e){showToast("Error: "+e.message,"error");}
+    finally{PENDIENTES_EN_CURSO.delete(clave);}
   };
 
   // Marcar un mes pendiente como "al día" (quita el cobro pendiente de ese mes)
@@ -2566,9 +2607,9 @@ function FinanzasPage({data,loadData,showToast,sucursalActiva}){
         <tr><td>Fondo de graduación usado por la escuela que no tuvo que reponerse (ganancia del evento)</td><td class="r verde">${L(prestado-repuesto)}</td></tr>
       </tbody></table>
       <div class="nota">En ${esc(lista(mesesCob)||"meses anteriores")} la escuela utilizó ${L(prestado)} cobrados de graduación para cubrir sus gastos de operación, como préstamo interno del fondo del evento. En ${mes}, al pagar los gastos del evento (${L(gasMes)}), lo cobrado de graduación en el mes (${L(cobMes)}) no alcanzó y la escuela repuso ${L(repuesto)} con sus propios ingresos (mensualidades). Por eso las salidas de ${mes} son mayores: incluyen la devolución de ese préstamo interno, no un gasto adicional de la escuela. El evento cobró en total ${L(gCobTot)} y gastó ${L(gGasTot)}, con una ganancia de ${L(gCobTot-gGasTot)}${gPend>0?`; quedan ${L(gPend)} por cobrar`:""}.</div>`:"";
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cierre de ${mes} ${ANIO_ACTUAL}</title><style>
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Cierre de ${mes} ${ANIO_ACTUAL}</title><style>
       @page { size: letter portrait; margin: 14mm; }
-      *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}${CSS_CIFRAS}
       body{color:#000;font-size:12.5px}
       .head{display:flex;align-items:center;gap:18px;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:16px}
       .head h1{font-size:22px;letter-spacing:.3px}
@@ -3651,10 +3692,10 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       const sec=g.seccion_id?data.secciones.find(s=>s.id===g.seccion_id):null;
       return `<tr><td>${g.fecha||"—"}</td><td>${esc(mesGasto(g)||"—")}</td><td>${esc(g.descripcion||"—")}${sec?` <span style="color:#000000;font-size:11px">· ${esc(sec.nombre)}</span>`:""}</td><td>${esc(g.comentario||"—")}</td><td style="text-align:right;white-space:nowrap">${L(g.monto)}</td></tr>`;
     }).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte del evento — Graduación</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Reporte del evento — Graduación</title>
       <style>
         @page { size: letter portrait; margin: 15mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif}${CSS_CIFRAS}
         body{color:#000000}
         .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #000000;padding-bottom:14px;margin-bottom:18px}
         .head h1{font-size:21px;color:#000000}
@@ -3734,10 +3775,10 @@ function GraduacionPage({data,loadData,showToast,sucursalActiva}){
       <tfoot><tr><td colspan="5">Subtotal ${esc(x.nombre)}</td><td class="r">${L(x.total)}</td><td class="r">${L(x.cob)}</td><td class="r">${L(x.total-x.cob)}</td></tr></tfoot></table>`).join("");
     const filasGastos=[...gastosEvento].sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||""))).map(g=>`<tr><td>${fCorta(g.fecha)}</td><td>${esc(mesGasto(g)||"—")}</td><td>${esc(g.descripcion||"—")}</td><td>${esc(g.seccion_id?nomSec(g.seccion_id):"Todo el evento")}</td><td class="sm">${esc(g.comentario||"—")}</td><td class="r">${L(g.monto)}</td></tr>`).join("");
     const proyectada=totalACobrar-gastadoEvento;
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Informe de graduación</title>
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>Informe de graduación</title>
       <style>
         @page { size: letter portrait; margin: 14mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif}${CSS_CIFRAS}
         body{color:#000000;font-size:12px}
         .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #000000;padding-bottom:14px;margin-bottom:16px}
         .head h1{font-size:21px;color:#000000}
@@ -4230,7 +4271,7 @@ function ReportesPage({data,showToast}){
   ];
   const svgGrafica=(()=>{const W=760,H=300,top=46,base=250,n=barrasRep.length,slot=W/n,bw=Math.min(62,slot*0.56);const max=Math.max(...barrasRep.map(b=>b.v),1);
     const fmt=(v)=>`L ${(Math.round(v*100)/100).toLocaleString()}`;
-    let out=`<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" style="font-family:Georgia,'Times New Roman',serif;display:block"><defs>`;
+    let out=`<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" style="font-family:'IBM Plex Sans',Arial,sans-serif;display:block"><defs>`;
     barrasRep.forEach((b,i)=>{out+=`<linearGradient id="gr${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${b.c[0]}"/><stop offset="1" stop-color="${b.c[1]}"/></linearGradient>`;});
     out+=`<pattern id="rayas" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="8" fill="rgba(255,255,255,.35)"/></pattern></defs>`;
     [0.25,0.5,0.75,1].forEach(t=>{const y=base-(base-top)*t;out+=`<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="#FFFFFF" stroke-dasharray="4 4"/>`;});
@@ -4355,7 +4396,8 @@ function ReportesPage({data,showToast}){
   const estadoHTML=hojas.map(h=>h.html).join("\n");
 
   const EDO_CSS=`
-    .edo,.tit,.pie,.aviso{font-family:Georgia,'Times New Roman',serif}
+    .edo,.tit,.pie,.aviso{font-family:'IBM Plex Sans',Arial,sans-serif}
+    .edo .num,.edo .pct{font-family:'IBM Plex Mono',Consolas,monospace}
     .edo{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px;color:#000000}
     .edo th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#555555;font-weight:700;text-align:left;padding:6px 8px;border-bottom:2px solid #000000}
     .edo td{padding:6px 8px;vertical-align:top}
@@ -4454,9 +4496,10 @@ function ReportesPage({data,showToast}){
     <p class="pie">Son las mismas cifras del estado de resultados, explicadas de forma sencilla. Cifras en Lempiras, redondeadas.</p>
   </div>`;
   const SEN_CSS=`
-    .sen{--t:#1F2937;--s:#5B6576;--b:#DCE1E8;--sup:#FFFFFF;--sup2:#F5F7FA;--ent:#2A5E45;--sal:#D9641E;--mal:#8E3131;--az:#1B2A4A;font-family:'Source Serif 4',Georgia,serif;color:var(--t)}
+    .sen{--t:#1F2937;--s:#5B6576;--b:#DCE1E8;--sup:#FFFFFF;--sup2:#F5F7FA;--ent:#2A5E45;--sal:#D9641E;--mal:#8E3131;--az:#1B2A4A;font-family:'IBM Plex Sans',Arial,sans-serif;color:var(--t)}
     html[data-fondo="oscuro"] .sen:not(.pdf){--t:#E9EDEF;--s:#8696A0;--b:#40444A;--sup:#2A2D31;--sup2:#33363B;--ent:#7FC9A3;--sal:#F0A46A;--mal:#EE9A9A;--az:#E9EDEF}
-    .sen h2,.sen h3,.sen strong{font-family:Lora,Georgia,serif}
+    .sen h2,.sen h3,.sen strong{font-family:'IBM Plex Sans',Arial,sans-serif}
+    .sen .lin b,.sen .fila .monto{font-family:'IBM Plex Mono',Consolas,monospace}
     .sen .titular{border-left:4px solid var(--sal);padding:4px 0 4px 14px;margin-bottom:16px}
     .sen .titular h2{font-size:21px;font-weight:600;margin:0;color:var(--az);line-height:1.35}
     .sen .titular p{font-size:14px;color:var(--s);margin:6px 0 0;line-height:1.5}
@@ -4485,7 +4528,7 @@ function ReportesPage({data,showToast}){
     .sen .fila .barra{grid-column:1/-1;height:8px;margin-top:4px}
     .sen ul{margin:0;padding-left:18px} .sen li{font-size:13.5px;line-height:1.55;margin-bottom:6px}
     .sen .vacio{font-size:13px;color:var(--s);margin:0}
-    .sen .glos summary{cursor:pointer;font-family:Lora,Georgia,serif;font-weight:600;font-size:14px;color:var(--az)}
+    .sen .glos summary{cursor:pointer;font-family:'IBM Plex Sans',Arial,sans-serif;font-weight:600;font-size:14px;color:var(--az)}
     .sen .glos p{font-size:13px;margin:6px 0 0;line-height:1.45}
     .sen .pie{font-size:11px;color:var(--s);margin-top:6px}
     @media (max-width:700px){.sen .tres,.sen .dos{grid-template-columns:1fr}.sen .lin{grid-template-columns:60px 1fr 90px}}`;
@@ -4493,10 +4536,10 @@ function ReportesPage({data,showToast}){
   // Documento completo del reporte (se usa para descargar el PDF y para imprimir)
   const nombreArchivo=`${vista==="sencilla"?"Resumen del mes":"Estado de resultados"} ${mesSel} ${anioSel}`;
   const documentoHTML=()=>{
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${nombreArchivo}</title>
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">${LINK_FUENTES}<title>${nombreArchivo}</title>
       <style>
         @page { size: letter portrait; margin: 14mm; }
-        *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans',Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}${CSS_CIFRAS}
         body{color:#000000}
         .head{display:flex;align-items:center;gap:18px;border-bottom:3px solid #000000;padding-bottom:12px;margin-bottom:16px}
         .head h1{font-size:24px;color:#000000}
@@ -4546,6 +4589,7 @@ function ReportesPage({data,showToast}){
     const contenido=`<div class="pdfroot" style="width:100%;background:#F2F2F2"><style>${cssLocal}</style>${cuerpo}</div>`;
     try{
       const html2pdf=(await import("html2pdf.js")).default;
+      await cargarFuentesInforme();
       const pdfBlob=await html2pdf().set({
         margin:[10,10,12,10],
         filename:`${nombreArchivo}.pdf`,
@@ -4672,7 +4716,7 @@ function ReportesPage({data,showToast}){
         balance:{caja:cajaRep.saldo,porCobrar:calcularAntiguedad(data,finSel<hoyISO?finSel:hoyISO).totCxc,porPagar:(data.cuentas_por_pagar||[]).filter(c=>!c.pagada).reduce((t,c)=>t+(Number(c.monto)||0),0)+rentaPendiente}});
       const libro=[informe,{data:resumen,sheet:"Resumen",columns:cols,images:img,showGridLines:false},
         ...hojas.filter(h=>!h.sinExcel).map(h=>({data:[...encabezado(h.t),...hojaAFilas(h.html)],sheet:h.t.slice(0,31),columns:cols,images:img,showGridLines:false}))];
-      const blob=await writeExcelFile(libro,{fontFamily:"IBM Plex Sans",fontSize:10,features:[extraHoja]}).toBlob();
+      const blob=await writeExcelFile(fuentesExcel(libro),{fontFamily:EXCEL_TEXTO,fontSize:10,features:[extraHoja]}).toBlob();
       const nombre=`Reportes ${mesSel} ${anioSel}.xlsx`;
       if(pdfListo)URL.revokeObjectURL(pdfListo.url);
       setPdfListo({url:URL.createObjectURL(blob),nombre,blob,tipo:"Excel"});
@@ -4739,7 +4783,7 @@ function ReportesPage({data,showToast}){
       </div>
       <style>{HOJA_CSS}</style>
       <div className="pestanas" role="tablist">{hojas.map(h=><button key={h.k} role="tab" aria-selected={hojaActiva.k===h.k} onClick={()=>setHojaSel(h.k)}>{h.t}</button>)}</div>
-      <div style={{overflowX:"auto"}}><div className="hojaW" style={{minWidth:560,fontFamily:"Georgia,'Times New Roman',serif"}} dangerouslySetInnerHTML={{__html:hojaActiva.sinExcel?hojaActiva.html:comoHoja(hojaActiva.html)}}/></div>
+      <div style={{overflowX:"auto"}}><div className="hojaW" style={{minWidth:560,fontFamily:"'IBM Plex Sans',Arial,sans-serif"}} dangerouslySetInnerHTML={{__html:hojaActiva.sinExcel?hojaActiva.html:comoHoja(hojaActiva.html)}}/></div>
       <div style={{fontSize:11,color:"#5B6576",marginTop:8}}>El PDF y la impresión traen todas las hojas juntas. «Descargar Excel» crea un archivo con una hoja por pestaña, más un resumen.</div>
     </div>
     </>}
@@ -4769,6 +4813,7 @@ async function htmlAPdf(html, nombre){
   const cssLocal=css.replace(/@page[^}]*\}/,"").replace(/\*\{/g,".pdfroot,.pdfroot *{").replace(/(^|\s)body\{/,"$1.pdfroot{");
   const contenido=`<div class="pdfroot" style="width:100%;background:#fff"><style>${cssLocal}</style>${cuerpo}</div>`;
   const html2pdf=(await import("html2pdf.js")).default;
+  await cargarFuentesInforme();
   const out=await html2pdf().set({
     margin:[10,10,12,10], filename:`${nombre}.pdf`, image:{type:"jpeg",quality:0.96},
     html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff",scrollY:0},
@@ -4898,8 +4943,21 @@ function IngresosPage({data,loadData,showToast,sucursalActiva}){
   </div>);
 }
 
+// Marcas de "se está guardando" para botones sueltos (fuera de una ventana)
+const PENDIENTES_EN_CURSO=new Set();
 function Modal({title,onClose,onSave,children,wide}){
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:wide?640:440,maxHeight:"90vh",overflow:"auto"}}><div style={{padding:"16px 20px",borderBottom:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3 style={{fontSize:15,fontWeight:700,margin:0,color:"#1E293B"}}>{title}</h3><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><X size={18} color="#64748B"/></button></div><div style={{padding:20}}>{children}</div><div style={{padding:"0 20px 16px",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={onClose} style={btnO}>Cancelar</button><button onClick={onSave} style={btn()}>Guardar</button></div></div></div>);
+  // Evita guardar dos veces lo mismo (doble clic): mientras se guarda, el botón queda bloqueado
+  const guardando=useRef(false);
+  const [ocupado,setOcupado]=useState(false);
+  const vivo=useRef(true);
+  useEffect(()=>()=>{vivo.current=false;},[]);
+  const alGuardar=async()=>{
+    if(guardando.current||!onSave)return;
+    guardando.current=true;setOcupado(true);
+    try{await onSave();}
+    finally{guardando.current=false;if(vivo.current)setOcupado(false);}
+  };
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:wide?640:440,maxHeight:"90vh",overflow:"auto"}}><div style={{padding:"16px 20px",borderBottom:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3 style={{fontSize:15,fontWeight:700,margin:0,color:"#1E293B"}}>{title}</h3><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><X size={18} color="#64748B"/></button></div><div style={{padding:20}}>{children}</div><div style={{padding:"0 20px 16px",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={onClose} style={btnO}>Cancelar</button><button onClick={alGuardar} disabled={ocupado} style={{...btn(),opacity:ocupado?0.6:1,cursor:ocupado?"wait":"pointer"}}>{ocupado?"Guardando…":"Guardar"}</button></div></div></div>);
 }
 function Field({label:lbl,value,onChange,type="text",placeholder,multiline}){
   return(<div style={{marginBottom:12}}><label style={label}>{lbl}</label>{multiline?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={3} style={{...input,resize:"vertical"}}/>:<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={input}/>}</div>);

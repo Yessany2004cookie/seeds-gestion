@@ -12,6 +12,7 @@ import { useMarca } from "./marca";
 import { Phone, Info, FileSpreadsheet, FileText, Download, Eye, X } from "lucide-react";
 import "./alertasFinanzas.css";
 import { alertasDelSistema } from "./resumenMes";
+import { cargarFuentesInforme } from "./tipografia";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const L = (n) => `L ${Math.round(Number(n) || 0).toLocaleString("es-HN")}`;
@@ -237,6 +238,7 @@ export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
     if (generando) return; setGenerando("pdf");
     try {
       const [{ default: html2pdf }, { documentoAlertas, OPCIONES_PDF }] = await Promise.all([import("html2pdf.js"), import("./alertasPdf")]);
+      await cargarFuentesInforme();
       const pdf = await html2pdf().set(OPCIONES_PDF).from(documentoAlertas(armarDatos(), marca.logoSrc), "string").toPdf().get("pdf");
       // Número de página al pie de cada hoja
       const total = pdf.internal.getNumberOfPages(), an = pdf.internal.pageSize.getWidth(), al = pdf.internal.pageSize.getHeight();
