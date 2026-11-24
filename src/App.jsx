@@ -5,6 +5,7 @@ import { LOGO_SEEDS } from "./logo";
 import { SELLO_SEEDS, FIRMA_ADMIN } from "./sello";
 import { AlertasFinanzasPage } from "./alertasFinanzas";
 import { ContabilidadPage } from "./contabilidad";
+import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
 import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
@@ -743,6 +744,9 @@ export default function App() {
 
   useEffect(() => { if(session && rol.estado==="admin") loadData(); }, [session, rol.estado, loadData]);
 
+  // Contador de tiempo de trabajo real (solo en el panel de administración)
+  useContadorUso({ activo: !!session && rol.estado==="admin" && !(rol.perfil?.maestro_id && vistaDocente), seccion: page, userId: session?.user?.id });
+
   const logout = async () => { await supabase.auth.signOut(); setSession(null); };
 
   if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC"}}><div style={{textAlign:"center"}}><img src={LOGO_SEEDS} alt="Seeds" style={{width:80,height:80,objectFit:"contain",marginBottom:12}}/><p style={{color:"#64748B"}}>Cargando Seeds...</p></div></div>;
@@ -822,7 +826,7 @@ export default function App() {
     c_cierre:<ContabilidadPage key="cierre" data={data} showToast={showToast} tabFijo="cierre"/>,
     c_apertura:<ContabilidadPage key="apertura" data={data} showToast={showToast} tabFijo="apertura"/>,
     c_catalogo:<ContabilidadPage key="catalogo" data={data} showToast={showToast} tabFijo="catalogo"/>,
-    reportes:<ReportesPage {...propsSuc}/>,
+    reportes:<><UsoSistemaPanel secciones={NAV} showToast={showToast}/><ReportesPage {...propsSuc}/></>,
     docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
     config:<ConfiguracionPage {...props}/>,
     sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}/>,
@@ -868,6 +872,7 @@ export default function App() {
               </select>
             </div>}
             {rol.perfil?.maestro_id&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:8,cursor:"pointer",padding:"5px 10px",color:"#EA580C",fontSize:12,fontWeight:700,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
+            <ContadorVisible/>
             <BotonAyuda onClick={recorrido.abrir}/>
             <button data-tour="refrescar" onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"rgba(255,255,255,.6)",border:"1px solid rgba(255,255,255,.85)",borderRadius:999,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
             <div style={{fontSize:12,color:"#64748B"}} className="hide-mobile">{session.user.email}</div>
