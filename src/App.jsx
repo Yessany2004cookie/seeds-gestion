@@ -7,6 +7,7 @@ import { AlertasFinanzasPage } from "./alertasFinanzas";
 import { ContabilidadPage } from "./contabilidad";
 import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
+import { SelectorFondo } from "./fondo";
 import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
@@ -873,6 +874,7 @@ export default function App() {
             </div>}
             {rol.perfil?.maestro_id&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1px solid #E7B48F",borderRadius:4,cursor:"pointer",padding:"5px 10px",color:"#C2571A",fontSize:12,fontWeight:600,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
             <ContadorVisible/>
+            <SelectorFondo/>
             <BotonAyuda onClick={recorrido.abrir}/>
             <button data-tour="refrescar" onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"#fff",border:"1px solid #CDD3DC",borderRadius:4,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
             <div style={{fontSize:12,color:"#64748B"}} className="hide-mobile">{session.user.email}</div>

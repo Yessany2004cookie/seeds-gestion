@@ -1,0 +1,219 @@
+/* ════════════════════════════════════════════════════════════
+   FONDOS que cada persona puede escoger (botón de paleta arriba):
+   claro (por defecto), oscuro, naranja suave y Pulpi con burbujas.
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Naranja suave: tapiz cálido con puntitos naranjas ── */
+html[data-fondo="naranja"] body {
+  background-color: #F5E3D1;
+  background-image:
+    radial-gradient(rgba(217, 100, 30, .16) 1.3px, transparent 1.4px),
+    linear-gradient(160deg, #FAEDE1 0%, #F2D9C2 100%);
+  background-size: 20px 20px, 100% 100%;
+  background-attachment: fixed;
+}
+
+/* ── Pulpi y burbujas: el fondo de colores de antes, con las tarjetas sólidas ── */
+.burbujas { display: none; }
+html[data-fondo="pulpo"] .burbujas { display: block; }
+html[data-fondo="pulpo"] body {
+  background:
+    radial-gradient(at 8% 8%, #FFD6B0 0, transparent 42%),
+    radial-gradient(at 92% 4%, #E9D5FF 0, transparent 40%),
+    radial-gradient(at 85% 88%, #BAE6FD 0, transparent 44%),
+    radial-gradient(at 6% 95%, #FBCFE8 0, transparent 40%),
+    radial-gradient(at 50% 50%, #FFF7ED 0, transparent 60%),
+    #F5F3FA;
+  background-attachment: fixed;
+}
+/* Burbujas de vidrio que suben despacio en el fondo */
+.burbujas { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.burbujas .burbuja {
+  position: absolute; bottom: -160px; border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 28%, rgba(255, 255, 255, .95) 0, rgba(255, 255, 255, .35) 12%, transparent 30%),
+    radial-gradient(circle at 70% 78%, rgba(255, 255, 255, .35) 0, transparent 35%),
+    radial-gradient(circle at 50% 50%, transparent 55%, var(--tono, rgba(249, 115, 22, .22)) 72%, rgba(255, 255, 255, .55) 100%);
+  box-shadow: inset 0 0 18px rgba(255, 255, 255, .5), 0 8px 24px rgba(30, 41, 59, .06);
+  animation: subir var(--t, 30s) linear infinite; animation-delay: var(--d, 0s);
+}
+/* Pulpi: nada despacio por el fondo, tenue como las burbujas */
+.pulpi { position: absolute; width: 150px; height: 158px; left: 0; top: 0; opacity: .32; filter: drop-shadow(0 10px 20px rgba(234, 88, 12, .15));
+  animation: pulpiNada 70s ease-in-out infinite; }
+.pulpi-flota { position: relative; width: 100%; height: 100%; animation: pulpiFlota 5s ease-in-out infinite; }
+.pulpi-pata { transform-origin: 0 0; animation: pulpiPata 2.6s ease-in-out infinite alternate; }
+.pulpi-burbuja { position: absolute; top: 4px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .9);
+  background: radial-gradient(circle at 32% 30%, rgba(255, 255, 255, .95), rgba(253, 186, 116, .25) 60%, transparent 70%);
+  animation: pulpiBurbuja 4.8s ease-in infinite; opacity: 0; }
+@keyframes pulpiNada {
+  0% { transform: translate(6vw, 72vh) rotate(-6deg); }
+  25% { transform: translate(38vw, 46vh) rotate(4deg); }
+  50% { transform: translate(78vw, 64vh) rotate(-4deg); }
+  75% { transform: translate(60vw, 18vh) rotate(6deg); }
+  100% { transform: translate(6vw, 72vh) rotate(-6deg); }
+}
+@keyframes pulpiFlota { 0%, 100% { transform: translateY(0) scale(1, 1); } 45% { transform: translateY(-14px) scale(.97, 1.04); } 70% { transform: translateY(-6px) scale(1.03, .97); } }
+@keyframes pulpiPata { from { transform: rotate(-9deg); } to { transform: rotate(9deg); } }
+@keyframes pulpiBurbuja { 0% { transform: translateY(0) scale(.6); opacity: 0; } 15% { opacity: .9; } 100% { transform: translate(10px, -90px) scale(1.15); opacity: 0; } }
+@media (max-width: 768px) { .pulpi { width: 96px; height: 101px; } }
+
+@keyframes subir {
+  0% { transform: translate(0, 0) scale(1); opacity: 0; }
+  8% { opacity: 1; }
+  50% { transform: translate(var(--dx, 40px), -55vh) scale(1.05); }
+  92% { opacity: 1; }
+  100% { transform: translate(0, -115vh) scale(.95); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .burbujas { display: none !important; } }
+@media print { .burbujas { display: none !important; } }
+
+/* ── Oscuro ── */
+html[data-fondo="oscuro"] {
+  color-scheme: dark;
+  --texto: #E3E8F0; --suave: #9AA6B8; --borde: #2A3852; --fondo: #0F1726;
+  --sup: #172238; --sup-2: #1D2A44; --azul: #E3E8F0;
+}
+html[data-fondo="oscuro"] body { background: var(--fondo); color: var(--texto); }
+html[data-fondo="oscuro"] h1, html[data-fondo="oscuro"] h2, html[data-fondo="oscuro"] h3, html[data-fondo="oscuro"] h4 { color: #F1F4F9; }
+
+/* Superficies blancas y grises claras → azul noche */
+html[data-fondo="oscuro"] [style*="background: rgb(255, 255, 255)"],
+html[data-fondo="oscuro"] [style*="background-color: rgb(255, 255, 255)"],
+html[data-fondo="oscuro"] [style*="background: white"],
+html[data-fondo="oscuro"] div[style*="background: rgba(255, 255, 255, 0."] { background: var(--sup) !important; }
+html[data-fondo="oscuro"] [style*="background: rgb(248, 250, 252)"], html[data-fondo="oscuro"] [style*="background: rgb(241, 245, 249)"],
+html[data-fondo="oscuro"] [style*="background: rgb(245, 247, 250)"], html[data-fondo="oscuro"] [style*="background: rgb(243, 244, 247)"],
+html[data-fondo="oscuro"] [style*="background: rgb(226, 232, 240)"], html[data-fondo="oscuro"] [style*="background: rgb(250, 251, 252)"],
+html[data-fondo="oscuro"] [style*="background: rgb(248, 250, 252)"] { background: var(--sup-2) !important; }
+/* El logo sigue sobre blanco */
+html[data-fondo="oscuro"] .vidrio-menu div[style*="background: rgb(255, 255, 255)"] { background: #fff !important; }
+
+/* Fondos pastel de avisos → tonos oscuros de su color */
+html[data-fondo="oscuro"] [style*="background: rgb(236, 253, 245)"], html[data-fondo="oscuro"] [style*="background: rgb(240, 253, 244)"],
+html[data-fondo="oscuro"] [style*="background: rgb(209, 250, 229)"], html[data-fondo="oscuro"] [style*="background: rgb(220, 252, 231)"] { background: #15342A !important; }
+html[data-fondo="oscuro"] [style*="background: rgb(254, 242, 242)"], html[data-fondo="oscuro"] [style*="background: rgb(254, 226, 226)"] { background: #3A1E24 !important; }
+html[data-fondo="oscuro"] [style*="background: rgb(255, 247, 237)"], html[data-fondo="oscuro"] [style*="background: rgb(255, 251, 235)"],
+html[data-fondo="oscuro"] [style*="background: rgb(254, 243, 199)"], html[data-fondo="oscuro"] [style*="background: rgb(255, 237, 213)"],
+html[data-fondo="oscuro"] [style*="background: rgb(255, 251, 245)"] { background: #3A2A1C !important; }
+html[data-fondo="oscuro"] [style*="background: rgb(239, 246, 255)"], html[data-fondo="oscuro"] [style*="background: rgb(219, 234, 254)"],
+html[data-fondo="oscuro"] [style*="background: rgb(238, 242, 247)"] { background: #1A2B47 !important; }
+html[data-fondo="oscuro"] [style*="background: rgb(245, 243, 255)"], html[data-fondo="oscuro"] [style*="background: rgb(237, 233, 254)"],
+html[data-fondo="oscuro"] [style*="background: rgb(241, 241, 246)"] { background: #26243F !important; }
+
+/* Letras oscuras → claras */
+html[data-fondo="oscuro"] [style^="color: rgb(30, 41, 59)"], html[data-fondo="oscuro"] [style*="; color: rgb(30, 41, 59)"],
+html[data-fondo="oscuro"] [style^="color: rgb(15, 23, 42)"], html[data-fondo="oscuro"] [style*="; color: rgb(15, 23, 42)"],
+html[data-fondo="oscuro"] [style^="color: rgb(27, 42, 74)"], html[data-fondo="oscuro"] [style*="; color: rgb(27, 42, 74)"],
+html[data-fondo="oscuro"] [style^="color: rgb(31, 41, 55)"], html[data-fondo="oscuro"] [style*="; color: rgb(31, 41, 55)"],
+html[data-fondo="oscuro"] [style^="color: rgb(51, 65, 85)"], html[data-fondo="oscuro"] [style*="; color: rgb(51, 65, 85)"],
+html[data-fondo="oscuro"] [style^="color: rgb(52, 64, 84)"], html[data-fondo="oscuro"] [style*="; color: rgb(52, 64, 84)"] { color: #E3E8F0 !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(71, 85, 105)"], html[data-fondo="oscuro"] [style*="; color: rgb(71, 85, 105)"],
+html[data-fondo="oscuro"] [style^="color: rgb(63, 74, 90)"], html[data-fondo="oscuro"] [style*="; color: rgb(63, 74, 90)"],
+html[data-fondo="oscuro"] [style^="color: rgb(100, 116, 139)"], html[data-fondo="oscuro"] [style*="; color: rgb(100, 116, 139)"],
+html[data-fondo="oscuro"] [style^="color: rgb(91, 101, 118)"], html[data-fondo="oscuro"] [style*="; color: rgb(91, 101, 118)"] { color: #A9B4C6 !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(148, 163, 184)"], html[data-fondo="oscuro"] [style*="; color: rgb(148, 163, 184)"] { color: #7F8BA0 !important; }
+
+/* Colores de acento, más luminosos para que se lean sobre oscuro */
+html[data-fondo="oscuro"] [style^="color: rgb(43, 76, 126)"], html[data-fondo="oscuro"] [style*="; color: rgb(43, 76, 126)"],
+html[data-fondo="oscuro"] [style^="color: rgb(37, 99, 235)"], html[data-fondo="oscuro"] [style*="; color: rgb(37, 99, 235)"] { color: #93B4E6 !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(47, 107, 79)"], html[data-fondo="oscuro"] [style*="; color: rgb(47, 107, 79)"],
+html[data-fondo="oscuro"] [style^="color: rgb(5, 150, 105)"], html[data-fondo="oscuro"] [style*="; color: rgb(5, 150, 105)"],
+html[data-fondo="oscuro"] [style^="color: rgb(22, 101, 52)"], html[data-fondo="oscuro"] [style*="; color: rgb(22, 101, 52)"] { color: #7FC9A3 !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(163, 58, 58)"], html[data-fondo="oscuro"] [style*="; color: rgb(163, 58, 58)"],
+html[data-fondo="oscuro"] [style^="color: rgb(220, 38, 38)"], html[data-fondo="oscuro"] [style*="; color: rgb(220, 38, 38)"],
+html[data-fondo="oscuro"] [style^="color: rgb(185, 28, 28)"], html[data-fondo="oscuro"] [style*="; color: rgb(185, 28, 28)"] { color: #EE9A9A !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(78, 74, 126)"], html[data-fondo="oscuro"] [style*="; color: rgb(78, 74, 126)"],
+html[data-fondo="oscuro"] [style^="color: rgb(124, 58, 237)"], html[data-fondo="oscuro"] [style*="; color: rgb(124, 58, 237)"] { color: #B9B3EC !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(217, 100, 30)"], html[data-fondo="oscuro"] [style*="; color: rgb(217, 100, 30)"],
+html[data-fondo="oscuro"] [style^="color: rgb(194, 87, 26)"], html[data-fondo="oscuro"] [style*="; color: rgb(194, 87, 26)"],
+html[data-fondo="oscuro"] [style^="color: rgb(234, 88, 12)"], html[data-fondo="oscuro"] [style*="; color: rgb(234, 88, 12)"] { color: #F2A66E !important; }
+html[data-fondo="oscuro"] svg[color="#2B4C7E"] { color: #93B4E6; } html[data-fondo="oscuro"] svg[color="#2F6B4F"] { color: #7FC9A3; }
+html[data-fondo="oscuro"] svg[color="#A33A3A"] { color: #EE9A9A; } html[data-fondo="oscuro"] svg[color="#4E4A7E"] { color: #B9B3EC; }
+html[data-fondo="oscuro"] svg[color="#1B2A4A"], html[data-fondo="oscuro"] svg[color="#475569"], html[data-fondo="oscuro"] svg[color="#64748B"],
+html[data-fondo="oscuro"] svg[color="#5B6576"] { color: #A9B4C6; }
+
+/* Bordes claros → bordes oscuros */
+html[data-fondo="oscuro"] [style*="rgb(226, 232, 240)"], html[data-fondo="oscuro"] [style*="rgb(220, 225, 232)"],
+html[data-fondo="oscuro"] [style*="rgb(205, 211, 220)"], html[data-fondo="oscuro"] [style*="rgb(231, 234, 240)"],
+html[data-fondo="oscuro"] [style*="rgb(241, 245, 249)"], html[data-fondo="oscuro"] [style*="rgb(203, 213, 225)"],
+html[data-fondo="oscuro"] [style*="rgb(238, 242, 247)"] { border-color: var(--borde) !important; }
+
+/* Campos */
+html[data-fondo="oscuro"] input, html[data-fondo="oscuro"] select, html[data-fondo="oscuro"] textarea {
+  background: #111B2E !important; color: var(--texto) !important; border-color: #34446A !important;
+}
+html[data-fondo="oscuro"] input::placeholder, html[data-fondo="oscuro"] textarea::placeholder { color: #6F7C92; }
+html[data-fondo="oscuro"] option { background: #111B2E; color: var(--texto); }
+html[data-fondo="oscuro"] input:focus, html[data-fondo="oscuro"] select:focus, html[data-fondo="oscuro"] textarea:focus {
+  border-color: #F0A46A !important; box-shadow: 0 0 0 3px rgba(240, 164, 106, .18) !important;
+}
+
+/* Tablas */
+html[data-fondo="oscuro"] table thead th { background: var(--sup-2) !important; color: #C9D2E0 !important; border-color: var(--borde) !important; }
+html[data-fondo="oscuro"] table tr, html[data-fondo="oscuro"] table td { border-color: #24314B !important; }
+html[data-fondo="oscuro"] table tbody tr:hover > td { background: #1B2740; }
+
+/* Barra superior, menú y ventanas */
+html[data-fondo="oscuro"] .vidrio-barra { background: var(--sup) !important; border-bottom-color: var(--borde); }
+html[data-fondo="oscuro"] .vidrio-menu { background: #0B1322; border-right-color: #1C2840; }
+html[data-fondo="oscuro"] div[style*="position: fixed"] > div[style*="background: rgb(255, 255, 255)"] { box-shadow: 0 24px 60px rgba(0, 0, 0, .55); }
+html[data-fondo="oscuro"] .boton-atras { background: var(--sup-2); color: var(--texto); border-color: var(--borde); }
+html[data-fondo="oscuro"] .tarjeta-kpi .cifra { color: #F1F4F9 !important; }
+html[data-fondo="oscuro"] .menu-fondo button:hover { background: var(--sup-2) !important; }
+html[data-fondo="oscuro"] ::-webkit-scrollbar-thumb { background: rgba(169, 180, 198, .3); }
+@media print { html[data-fondo="oscuro"] body { background: #fff !important; color: #000; } }
+
+/* Más tonos oscuros escritos directo en las pantallas */
+html[data-fondo="oscuro"] [style^="color: rgb(154, 52, 18)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(154, 52, 18)"],
+html[data-fondo="oscuro"] [style^="color: rgb(146, 64, 14)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(146, 64, 14)"],
+html[data-fondo="oscuro"] [style^="color: rgb(124, 45, 18)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(124, 45, 18)"],
+html[data-fondo="oscuro"] [style^="color: rgb(180, 83, 9)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(180, 83, 9)"],
+html[data-fondo="oscuro"] [style^="color: rgb(217, 119, 6)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(217, 119, 6)"],
+html[data-fondo="oscuro"] [style^="color: rgb(168, 112, 30)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(168, 112, 30)"] { color: #F2B27E !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(4, 120, 87)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(4, 120, 87)"],
+html[data-fondo="oscuro"] [style^="color: rgb(6, 95, 70)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(6, 95, 70)"],
+html[data-fondo="oscuro"] [style^="color: rgb(42, 94, 69)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(42, 94, 69)"],
+html[data-fondo="oscuro"] [style^="color: rgb(36, 83, 61)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(36, 83, 61)"] { color: #7FC9A3 !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(153, 27, 27)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(153, 27, 27)"],
+html[data-fondo="oscuro"] [style^="color: rgb(127, 29, 29)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(127, 29, 29)"],
+html[data-fondo="oscuro"] [style^="color: rgb(142, 49, 49)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(142, 49, 49)"] { color: #EE9A9A !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(109, 40, 217)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(109, 40, 217)"],
+html[data-fondo="oscuro"] [style^="color: rgb(91, 33, 182)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(91, 33, 182)"],
+html[data-fondo="oscuro"] [style^="color: rgb(69, 65, 111)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(69, 65, 111)"] { color: #B9B3EC !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(30, 58, 138)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(30, 58, 138)"],
+html[data-fondo="oscuro"] [style^="color: rgb(30, 64, 175)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(30, 64, 175)"],
+html[data-fondo="oscuro"] [style^="color: rgb(29, 78, 216)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(29, 78, 216)"],
+html[data-fondo="oscuro"] [style^="color: rgb(7, 89, 133)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(7, 89, 133)"],
+html[data-fondo="oscuro"] [style^="color: rgb(35, 63, 106)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(35, 63, 106)"],
+html[data-fondo="oscuro"] [style^="color: rgb(45, 106, 127)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(45, 106, 127)"] { color: #93B4E6 !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(0, 0, 0)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(0, 0, 0)"],
+html[data-fondo="oscuro"] [style^="color: rgb(85, 85, 85)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(85, 85, 85)"] { color: #E3E8F0 !important; }
+html[data-fondo="oscuro"] [style^="color: rgb(136, 136, 136)"],
+html[data-fondo="oscuro"] [style*="; color: rgb(136, 136, 136)"] { color: #A9B4C6 !important; }
+html[data-fondo="oscuro"] .vidrio-ahumado { background: #22314F !important; border-color: #34446A !important; color: #fff !important; }
+html[data-fondo="oscuro"] button[style*="background: rgba(255, 255, 255, 0."] { background: var(--sup-2) !important; border-color: var(--borde) !important; }
+html[data-fondo="oscuro"] .tabla-tarjetas > tbody > tr { background: var(--sup) !important; border-left-color: #F0A46A !important; }

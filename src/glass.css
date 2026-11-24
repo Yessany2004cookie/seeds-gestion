@@ -93,8 +93,6 @@ button:not(:disabled):active { filter: brightness(.88); }
 .tarjeta-kpi { transition: border-color .15s ease, box-shadow .15s ease; }
 .tarjeta-kpi:hover { box-shadow: 0 4px 12px rgba(16, 24, 40, .08) !important; }
 
-/* Fondo decorativo (burbujas y Pulpi) apagado en el estilo ejecutivo */
-.burbujas { display: none; }
 
 /* Barras de desplazamiento finas */
 * { scrollbar-width: thin; scrollbar-color: rgba(91, 101, 118, .35) transparent; }

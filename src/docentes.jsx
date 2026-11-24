@@ -9,6 +9,7 @@ import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
 import { FormularioClase, AdminChecklist } from "./formulario";
 import { ParteMensual } from "./parteMensual";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_DOCENTE } from "./recorrido";
+import { SelectorFondo } from "./fondo";
 import { Bitacora, AdminBitacoras, PortadaCuero, useVueltaHoja, ESTILOS_LIBRO, ComboMaestros } from "./bitacora";
 import {
   LogOut, Users, BookOpen, Check, X, Menu, Send, Home, ClipboardList, ChevronLeft as AtrasIcon,
@@ -196,6 +197,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {onVolver && <button onClick={onVolver} title="Volver a administración" style={{ ...btnO, padding: "5px 10px", fontSize: 12, color: NAR, borderColor: "#FED7AA" }}>Administración</button>}
+            <SelectorFondo />
             <BotonAyuda onClick={recorrido.abrir} />
             <button onClick={cargar} title="Actualizar" style={{ background: "#fff", border: "1px solid #CDD3DC", borderRadius: 4, cursor: "pointer", padding: "5px 8px", display: "flex" }}><RefreshCw size={14} color="#64748B" /></button>
             <div className="hide-mobile" style={{ fontSize: 12, color: "#64748B", textAlign: "right" }}><div style={{ fontWeight: 700, color: "#1E293B" }}>{datos.maestro?.nombre || ""}</div><div>{session.user.email}</div></div>

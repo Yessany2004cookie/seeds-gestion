@@ -3,6 +3,11 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import Burbujas from './burbujas.jsx'
 import './glass.css'
+import './fondos.css'
+import { leerFondo, aplicarFondo } from './fondo.jsx'
+
+// El fondo que escogió la persona se pone antes de pintar, para que no parpadee
+aplicarFondo(leerFondo())
 
 
 // Tablas en celular: cada fila se muestra como tarjeta. Aquí se le pone a
