@@ -8,6 +8,7 @@ import { LOGO_SEEDS } from "./logo";
 import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
 import { FormularioClase, AdminChecklist } from "./formulario";
 import { ParteMensual } from "./parteMensual";
+import { useRecorrido, Recorrido, BotonAyuda, PASOS_DOCENTE } from "./recorrido";
 import { Bitacora, AdminBitacoras, PortadaCuero, useVueltaHoja, ESTILOS_LIBRO, ComboMaestros } from "./bitacora";
 import {
   LogOut, Users, BookOpen, Check, X, Menu, Send, Home, ClipboardList, ChevronLeft as AtrasIcon,
@@ -110,6 +111,8 @@ export function DocenteApp({ session, perfil, onVolver }) {
     window.addEventListener("popstate", volver); return () => window.removeEventListener("popstate", volver);
   }, []);
   const [menu, setMenu] = useState(false);
+  // Recorrido guiado y novedades del portal docente
+  const recorrido = useRecorrido(perfil.maestro_id ? session : null, "docente");
   const [datos, setDatos] = useState({ maestro: null, secciones: [], alumnos: [], padres: [] });
   const [cargando, setCargando] = useState(true);
   const [toast, setToast] = useState(null);
@@ -178,7 +181,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
         </div>
         <nav style={{ flex: 1, padding: "10px 10px", overflowY: "auto" }}>
           {NAV.map((n) => { const Icon = n.icon; const a = page === n.id; return (
-            <button key={n.id} className={"menu-item"+(a?" activo":"")} onClick={() => { setPage(n.id); setMenu(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", marginBottom: 2, border: "none", borderRadius: 14, cursor: "pointer", background: a ? "linear-gradient(135deg,#FB923C,#EA580C)" : "transparent", color: a ? "#fff" : "#CBD5E1", boxShadow: a ? "0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)" : "none", fontSize: 13, fontWeight: a ? 700 : 500, fontFamily: "inherit", borderLeft: a ? "3px solid #F97316" : "3px solid transparent", textAlign: "left" }}><Icon size={17} />{n.label}</button>
+            <button key={n.id} data-tour={"n-" + n.id} className={"menu-item"+(a?" activo":"")} onClick={() => { setPage(n.id); setMenu(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", marginBottom: 2, border: "none", borderRadius: 14, cursor: "pointer", background: a ? "linear-gradient(135deg,#FB923C,#EA580C)" : "transparent", color: a ? "#fff" : "#CBD5E1", boxShadow: a ? "0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)" : "none", fontSize: 13, fontWeight: a ? 700 : 500, fontFamily: "inherit", borderLeft: a ? "3px solid #F97316" : "3px solid transparent", textAlign: "left" }}><Icon size={17} />{n.label}</button>
           ); })}
         </nav>
         {onVolver && <button onClick={onVolver} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", border: "none", borderTop: "1px solid rgba(255,255,255,.08)", background: "transparent", color: "#FDBA74", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}><RefreshCw size={16} />Volver a administración</button>}
@@ -193,6 +196,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {onVolver && <button onClick={onVolver} title="Volver a administración" style={{ ...btnO, padding: "5px 10px", fontSize: 12, color: NAR, borderColor: "#FED7AA" }}>Administración</button>}
+            <BotonAyuda onClick={recorrido.abrir} />
             <button onClick={cargar} title="Actualizar" style={{ background: "rgba(255,255,255,.6)", border: "1px solid rgba(255,255,255,.85)", borderRadius: 999, cursor: "pointer", padding: "5px 8px", display: "flex" }}><RefreshCw size={14} color="#64748B" /></button>
             <div className="hide-mobile" style={{ fontSize: 12, color: "#64748B", textAlign: "right" }}><div style={{ fontWeight: 700, color: "#1E293B" }}>{datos.maestro?.nombre || ""}</div><div>{session.user.email}</div></div>
           </div>
@@ -200,6 +204,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
         <div style={{ flex: 1, overflow: "auto", padding: 20 }}>{cargando ? <Vacio>Cargando…</Vacio> : paginas[page]}</div>
       </main>
       <Toast toast={toast} />
+      {!cargando && <Recorrido estado={recorrido} pasos={PASOS_DOCENTE} abrirMenu={setMenu} irA={setPage} />}
     </div>
   );
 }
