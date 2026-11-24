@@ -121,6 +121,27 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
   const lineasDisp = lineasDe(delMes).filter((l) => l.cuenta === "1.1.01");
   const entradas = lineasDisp.reduce((s, l) => s + Number(l.debe), 0), salidas = lineasDisp.reduce((s, l) => s + Number(l.haber), 0);
   const dispFinal = saldos["1.1.01"] || 0, dispInicial = dispFinal - entradas + salidas;
+  // Desglose del flujo: cada asiento que mueve dinero se clasifica según su otra cuenta
+  const flujo = useMemo(() => {
+    const cats = {};
+    delMes.filter((a) => a.clase !== "apertura").forEach((a) => {
+      const ls = a.contab_lineas || [];
+      const neto = ls.filter((l) => l.cuenta === "1.1.01").reduce((s, l) => s + Number(l.debe) - Number(l.haber), 0);
+      if (Math.abs(neto) < 0.005) return;
+      const otras = ls.filter((l) => l.cuenta !== "1.1.01").map((l) => l.cuenta);
+      const tiene = (pre) => otras.some((c) => c.startsWith(pre));
+      let k;
+      if (neto > 0) k = tiene("1.2.01") ? "Mensualidades cobradas (con mora)" : tiene("4.2.01") ? "Venta de materiales (menos su costo)" : tiene("2.3.01") ? "Cuotas de graduación (fondo)" : tiene("4.3") ? "Ingresos extra" : "Otras entradas";
+      else k = tiene("2.1.") ? "Pagos de gastos de meses anteriores (salarios, renta, servicios)" : tiene("2.2.") ? "Pagos de deudas y préstamos" : tiene("2.3.01") ? "Gastos del evento de graduación" : tiene("1.4.01") ? "Pagos por adelantado" : tiene("5.") ? "Gastos del mes" : "Otras salidas";
+      const c = cats[k] || (cats[k] = { k, v: 0, items: [] });
+      c.v += neto; c.items.push({ f: a.fecha, d: a.descripcion, v: neto });
+    });
+    const lista = Object.values(cats);
+    return { ent: lista.filter((c) => c.v > 0).sort((a, b) => b.v - a.v), sal: lista.filter((c) => c.v < 0).sort((a, b) => a.v - b.v) };
+  }, [delMes]);
+  const [abiertoFlujo, setAbiertoFlujo] = useState({});
+  const totEnt = flujo.ent.reduce((t, c) => t + c.v, 0), totSal = flujo.sal.reduce((t, c) => t + c.v, 0);
+  const dispIniFlujo = dispFinal - totEnt - totSal; // la apertura cuenta como saldo inicial, no como entrada
 
   const Pest = ({ id, txt }) => <button onClick={() => setTab(id)} style={{ ...btnO, background: tab === id ? "#1E293B" : btnO.background, color: tab === id ? "#fff" : btnO.color, fontWeight: 700 }}>{txt}</button>;
 
@@ -198,12 +219,16 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       {tab === "flujo" && <div style={card}>
         <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Flujo de efectivo — {MESES[sel.mes - 1]} {sel.anio}</h3>
         <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>
-          <tr><td style={td}>Efectivo y bancos al iniciar el mes</td><td style={tdR}>{L(dispInicial)}</td></tr>
-          <tr><td style={td}>(+) Entradas de dinero</td><td style={{ ...tdR, color: VERDE }}>{L(entradas)}</td></tr>
-          <tr><td style={td}>(−) Salidas de dinero</td><td style={{ ...tdR, color: ROJO }}>{L(-salidas)}</td></tr>
+          <tr><td style={td}>Efectivo y bancos al iniciar el mes</td><td style={tdR}>{L(dispIniFlujo)}</td></tr>
+          <tr><td style={{ ...td, fontWeight: 700, paddingTop: 12 }} colSpan={2}>Entradas de dinero</td></tr>
+          {flujo.ent.map((c) => <FilaFlujo key={c.k} c={c} abierto={abiertoFlujo[c.k]} toggle={() => setAbiertoFlujo((p) => ({ ...p, [c.k]: !p[c.k] }))} />)}
+          <tr><td style={{ ...td, fontWeight: 700 }}>Total entradas</td><td style={{ ...tdR, fontWeight: 700, color: VERDE }}>{L(totEnt)}</td></tr>
+          <tr><td style={{ ...td, fontWeight: 700, paddingTop: 12 }} colSpan={2}>Salidas de dinero</td></tr>
+          {flujo.sal.map((c) => <FilaFlujo key={c.k} c={c} abierto={abiertoFlujo[c.k]} toggle={() => setAbiertoFlujo((p) => ({ ...p, [c.k]: !p[c.k] }))} />)}
+          <tr><td style={{ ...td, fontWeight: 700 }}>Total salidas</td><td style={{ ...tdR, fontWeight: 700, color: ROJO }}>{L(totSal)}</td></tr>
           <tr><td style={{ ...td, fontWeight: 800, borderTop: "2px solid #1E293B" }}>Efectivo y bancos al cierre</td><td style={{ ...tdR, fontWeight: 800, borderTop: "2px solid #1E293B" }}>{L(dispFinal)}</td></tr>
         </tbody></table>
-        <p style={{ fontSize: 11.5, color: GRIS, marginTop: 10 }}>El flujo cuenta el dinero por la fecha real en que entró o salió. Por eso puede ser distinto de la ganancia del mes.</p>
+        <p style={{ fontSize: 11.5, color: GRIS, marginTop: 10, lineHeight: 1.5 }}>El flujo cuenta el dinero por la fecha real en que entró o salió. Los pagos de salarios, renta o deudas de meses anteriores aparecen aquí como salidas de este mes, aunque no bajan la ganancia del mes (ya se contaron en el mes que corresponden). Toca una línea para ver el detalle.</p>
       </div>}
 
       {tab === "diario" && <div style={card}>
@@ -227,6 +252,13 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       </div>}
     </>}
   </div>);
+}
+
+function FilaFlujo({ c, abierto, toggle }) {
+  return (<>
+    <tr onClick={toggle} style={{ cursor: "pointer" }}><td style={{ ...td, paddingLeft: 22 }}>{abierto ? "▾" : "▸"} {c.k} <span style={{ color: GRIS, fontSize: 11 }}>({c.items.length})</span></td><td style={{ ...tdR, color: c.v < 0 ? ROJO : "#334155" }}>{L(c.v)}</td></tr>
+    {abierto && c.items.map((it, i) => <tr key={i}><td style={{ ...td, paddingLeft: 44, fontSize: 11.5, color: GRIS }}>{String(it.f).split("-").reverse().join("/")} · {it.d}</td><td style={{ ...tdR, fontSize: 11.5, color: GRIS }}>{L(it.v)}</td></tr>)}
+  </>);
 }
 
 function Mayor({ cuentas, asientos, nombreCta, tipoCta, sel }) {
