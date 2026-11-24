@@ -1,19 +1,19 @@
 -- ════════════════════════════════════════════════════════════════
 --  Respaldos automáticos
---  Todos los días a las 2:00 AM (hora de Honduras) la base de datos se
---  copia sola dentro de Supabase, en el esquema privado "respaldos".
+--  El día 1 de cada mes a las 2:00 AM (hora de Honduras) la base de datos
+--  se copia sola dentro de Supabase, en el esquema privado "respaldos".
 --  Cada copia guarda TODAS las tablas de la app en el mismo formato que el
 --  botón "Descargar respaldo", así que se puede bajar desde la app y volver
 --  a cargar con "Restaurar respaldo".
 --
---  Se guardan: las copias de los últimos 30 días + la primera copia de cada
---  mes durante un año. Lo más viejo se borra solo.
+--  Se guardan las últimas 12 copias mensuales (un año) y las copias hechas a
+--  mano de los últimos 90 días. Lo más viejo se borra solo.
 --
 --  El esquema "respaldos" no es visible desde la app: solo administración
 --  puede ver la lista y descargar copias, a través de las funciones de abajo.
 --
 --  Para deshacer:
---    select cron.unschedule('respaldo-diario');
+--    select cron.unschedule('respaldo-mensual');
 --    drop function public.respaldos_lista(); drop function public.respaldo_descargar(bigint);
 --    drop function public.respaldo_hacer_ahora(); drop schema respaldos cascade;
 --  (No toca ninguna tabla existente.)
@@ -62,16 +62,12 @@ begin
   values (case when p_tipo = 'manual' then 'manual' else 'automatico' end, n_tablas, n_filas, todo)
   returning id into nuevo;
 
-  -- Limpieza: se queda lo de los últimos 30 días, la primera copia de cada
-  -- mes del último año, y siempre las 7 más recientes.
+  -- Limpieza: se quedan las 12 copias automáticas más recientes (un año)
+  -- y las copias hechas a mano de los últimos 90 días.
   delete from respaldos.copias c
-  where c.creado < now() - interval '30 days'
-    and c.id not in (select id from respaldos.copias order by creado desc limit 7)
-    and (c.creado < now() - interval '365 days'
-         or c.id not in (
-           select distinct on (date_trunc('month', creado at time zone 'America/Tegucigalpa')) id
-           from respaldos.copias
-           order by date_trunc('month', creado at time zone 'America/Tegucigalpa'), creado));
+  where (c.tipo = 'automatico'
+         and c.id not in (select id from respaldos.copias where tipo = 'automatico' order by creado desc limit 12))
+     or (c.tipo = 'manual' and c.creado < now() - interval '90 days');
 
   return nuevo;
 end $$;
@@ -113,5 +109,5 @@ grant execute on function public.respaldos_lista() to authenticated;
 grant execute on function public.respaldo_descargar(bigint) to authenticated;
 grant execute on function public.respaldo_hacer_ahora() to authenticated;
 
--- Programar: todos los días 08:00 UTC = 2:00 AM en Honduras.
-select cron.schedule('respaldo-diario', '0 8 * * *', $$select respaldos.hacer_copia('automatico')$$);
+-- Programar: el día 1 de cada mes, 08:00 UTC = 2:00 AM en Honduras.
+select cron.schedule('respaldo-mensual', '0 8 1 * *', $$select respaldos.hacer_copia('automatico')$$);

@@ -1,5 +1,5 @@
 // ── RESPALDOS AUTOMÁTICOS ──
-// La base de datos se copia sola todos los días a las 2:00 AM (hora de
+// La base de datos se copia sola el día 1 de cada mes a las 2:00 AM (hora de
 // Honduras) dentro de Supabase (ver supabase/respaldos_automaticos.sql).
 // Aquí administración ve cuándo fue la última copia, puede bajar cualquiera
 // en el mismo formato que "Descargar respaldo" y hacer una copia en el momento.
@@ -65,7 +65,7 @@ export function RespaldosAutomaticos({ showToast }) {
 
   const ultimaAuto = copias.find((c) => c.tipo === "automatico");
   const ultima = copias[0];
-  const atrasada = !ultimaAuto || Date.now() - new Date(ultimaAuto.creado).getTime() > 36 * 36e5;
+  const atrasada = !ultimaAuto || Date.now() - new Date(ultimaAuto.creado).getTime() >= 33 * 24 * 36e5;
   const lista = verTodas ? copias : copias.slice(0, 5);
 
   return (
@@ -73,10 +73,10 @@ export function RespaldosAutomaticos({ showToast }) {
       <div style={{ background: atrasada ? "#FEF3C7" : "#ECFDF5", borderRadius: 8, padding: 12, fontSize: 13, color: atrasada ? "#92400E" : "#065F46" }}>
         {ultimaAuto
           ? <>✅ <strong>Último respaldo automático:</strong> {fechaHN(ultimaAuto.creado)} ({haceCuanto(ultimaAuto.creado)}).</>
-          : <>🕑 <strong>Aún no hay respaldo automático.</strong> El primero se hace esta noche a las 2:00 AM.</>}
+          : <>🕑 <strong>Aún no hay respaldo automático.</strong> El primero se hace el día 1 del próximo mes a las 2:00 AM. Si quiere uno ya, use el botón de abajo.</>}
         <div style={{ fontSize: 12, marginTop: 4, opacity: 0.9 }}>
-          La base de datos se copia sola todos los días a las 2:00 AM. Se guardan los últimos 30 días y una copia de cada mes durante un año.
-          {atrasada && ultimaAuto && " ⚠️ La última copia tiene más de un día: revise que el proyecto de Supabase no esté pausado."}
+          La base de datos se copia sola el día 1 de cada mes a las 2:00 AM. Se guardan las copias de los últimos 12 meses.
+          {atrasada && ultimaAuto && " ⚠️ La última copia tiene más de un mes: revise que el proyecto de Supabase no esté pausado."}
         </div>
       </div>
 
