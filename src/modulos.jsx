@@ -8,6 +8,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import { card } from "./estilo";
+import { cambiarModulosConClave, ConfirmarConClave } from "./marca";
 
 // padre: si el módulo padre está apagado, este también queda apagado.
 export const MODULOS = [
@@ -69,19 +70,23 @@ export function useModulos(session) {
 export function ModulosPanel({ showToast }) {
   const { listo, apagados: lista, activo } = useModulos(true);
   const [guardando, setGuardando] = useState(null);
-  const cambiar = async (id) => {
+  const [apagar, setApagar] = useState(null);
+  // Encender no pide clave. Apagar pide la clave de seguridad (lo revisa la base de datos).
+  const guardar = async (id, clave) => {
     const nueva = lista.includes(id) ? lista.filter((x) => x !== id) : [...lista, id];
     setGuardando(id);
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from("modulos_sistema").update({ apagados: nueva, actualizado: new Date().toISOString(), actualizado_por: user?.id || null }).eq("id", 1).select().single();
+    const motivo = await cambiarModulosConClave(nueva, clave);
     setGuardando(null);
-    if (error) {
-      showToast(/relation|does not exist|schema cache/i.test(error.message) ? "Falta crear la tabla modulos_sistema en Supabase (supabase/modulos_sistema.sql)" : "No se pudo guardar: " + error.message, "error");
-      return;
-    }
+    if (motivo) return motivo;
     apagados = nueva; avisar();
     const m = MODULOS.find((x) => x.id === id);
     showToast(nueva.includes(id) ? `${m.titulo}: desactivado` : `${m.titulo}: activado`);
+    return null;
+  };
+  const cambiar = async (id) => {
+    if (!lista.includes(id)) { setApagar(MODULOS.find((x) => x.id === id)); return; }
+    const motivo = await guardar(id, null);
+    if (motivo) showToast(motivo, "error");
   };
   return (
     <div style={card}>
@@ -104,7 +109,10 @@ export function ModulosPanel({ showToast }) {
           </div>
         );
       })}
-      <div style={{ fontSize: 11.5, color: "#94A3B8", marginTop: 8 }}>Siempre encendidos: Inicio, Secciones, Maestros, Matrícula, Facturas y pagos, Historial, Gastos y caja, Reportes y Configuración.</div>
+      {apagar && <ConfirmarConClave titulo={`Apagar «${apagar.titulo}»`} que="apagar un módulo"
+        consecuencia={<>El módulo <strong>{apagar.titulo}</strong> desaparecerá del menú, del recorrido y de las alertas para todos{apagar.id === "docentes" ? ", y los maestros no podrán entrar a su portal" : ""}. <strong>No se borra ningún dato</strong>: si lo vuelve a encender, todo está como estaba.</>}
+        textoBoton="Apagar módulo" accion={(c) => guardar(apagar.id, c)} onCerrar={() => setApagar(null)} />}
+      <div style={{ fontSize: 11.5, color: "#94A3B8", marginTop: 8 }}>🔒 Para apagar un módulo se pide la clave de seguridad. Siempre encendidos: Inicio, Secciones, Maestros, Matrícula, Facturas y pagos, Historial, Gastos y caja, Reportes y Configuración.</div>
     </div>
   );
 }
