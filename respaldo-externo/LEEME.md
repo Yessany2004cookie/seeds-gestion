@@ -40,3 +40,8 @@ Desde ahí se repite solo el día 1 de cada mes.
   SQL Editor `seeds_schema_v2.sql` y los archivos de `supabase/` (esto crea las tablas vacías),
   cambiar la URL y la clave en `src/supabaseClient.js`, y luego cargar el `.json` con
   **Restaurar respaldo**.
+
+> Nota: el botón **Restaurar respaldo** carga las tablas principales (sucursales, secciones,
+> maestros, padres, alumnos, facturas, gastos, materiales, graduación, ingresos extra, deudas y
+> cuentas por pagar). El archivo trae **todas** las tablas (también asistencia, bitácoras,
+> contabilidad, etc.); esas se cargarían aparte con ayuda en el SQL Editor.
