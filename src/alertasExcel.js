@@ -21,11 +21,12 @@ const AMBAR = "#8F5E1A";
 const VERDE = "#2A5E45";
 
 // Pie de página al imprimir: nombre del reporte y número de página
-const PIE = '<headerFooter><oddFooter>&amp;L&amp;8&amp;K5B6576Finanzas · Alertas&amp;R&amp;8&amp;K5B6576Página &amp;P de &amp;N</oddFooter></headerFooter>';
+const piePara = (t) => `<headerFooter><oddFooter>&amp;L&amp;8&amp;K5B6576${String(t).replace(/&/g, "&amp;&amp;").replace(/</g, "&amp;lt;")}&amp;R&amp;8&amp;K5B6576Página &amp;P de &amp;N</oddFooter></headerFooter>`;
+const PIE = piePara("Finanzas · Alertas");
 
 // ── Filtros y ajuste de impresión: el paquete no los trae, se agregan al XML ──
 // Cada hoja puede llevar `filtro: "A7:J30"` y `ajustarAncho: true`.
-const extraHoja = {
+export const extraHoja = {
   files: {
     transform: {
       "xl/worksheets/sheet{id}.xml": {
@@ -39,12 +40,12 @@ const extraHoja = {
             if (xml.includes("<pageSetup")) {
               xml = xml.replace(/<pageSetup([^>]*)\/>/, (m, a) => `<pageSetup${a.replace(/\s(fitToWidth|fitToHeight|paperSize)="[^"]*"/g, "")} paperSize="1" fitToWidth="1" fitToHeight="0"/>`);
               xml = xml.replace(/<pageMargins[^>]*\/>/, '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.6" header="0.3" footer="0.3"/>');
-              if (!xml.includes("<headerFooter")) xml = xml.replace(/(<pageSetup[^>]*\/>)/, "$1" + PIE);
+              if (!xml.includes("<headerFooter")) xml = xml.replace(/(<pageSetup[^>]*\/>)/, "$1" + (opciones.pie ? piePara(opciones.pie) : PIE));
             }
             else {
               const margenes = '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>';
               const setup = `<pageSetup paperSize="1" orientation="${opciones.orientation || "landscape"}" fitToWidth="1" fitToHeight="0"/>`;
-              const pie = PIE;
+              const pie = opciones.pie ? piePara(opciones.pie) : PIE;
               if (xml.includes("<pageMargins")) xml = xml.replace(/<pageMargins[^>]*\/>/, margenes + setup + pie);
               else {
                 // Respeta el orden de elementos que exige Excel: los de impresión van antes de <drawing>

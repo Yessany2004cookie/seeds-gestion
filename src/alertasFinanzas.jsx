@@ -63,7 +63,7 @@ const Kpi = ({ c, t, v, s }) => (
 
 // Logo para el Excel: se reduce a 56 px de alto (nítido) y se pasa a PNG.
 // Si no se puede leer (por ejemplo, un logo externo sin permiso), el Excel sale sin logo.
-async function logoParaExcel(src) {
+export async function logoParaExcel(src) {
   try {
     const img = new Image();
     img.crossOrigin = "anonymous";
