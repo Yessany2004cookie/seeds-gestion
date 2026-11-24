@@ -9,6 +9,7 @@ import SCRIPT_ROLES from "../supabase/roles_docentes.sql?raw";
 import { FormularioClase, AdminChecklist } from "./formulario";
 import { ParteMensual } from "./parteMensual";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_DOCENTE } from "./recorrido";
+import { useModulos } from "./modulos";
 import { SelectorFondo } from "./fondo";
 import { Bitacora, AdminBitacoras, PortadaCuero, useVueltaHoja, ESTILOS_LIBRO, ComboMaestros } from "./bitacora";
 import {
@@ -113,7 +114,8 @@ export function DocenteApp({ session, perfil, onVolver }) {
   }, []);
   const [menu, setMenu] = useState(false);
   // Recorrido guiado y novedades del portal docente
-  const recorrido = useRecorrido(perfil.maestro_id ? session : null, "docente");
+  const modulos = useModulos(session);
+  const recorrido = useRecorrido(perfil.maestro_id && modulos.listo ? session : null, "docente", (n) => modulos.activo(n.modulo));
   const [datos, setDatos] = useState({ maestro: null, secciones: [], alumnos: [], padres: [] });
   const [cargando, setCargando] = useState(true);
   const [toast, setToast] = useState(null);
@@ -145,13 +147,15 @@ export function DocenteApp({ session, perfil, onVolver }) {
   const NAV = [
     { id: "inicio", label: "Inicio", icon: Home },
     { id: "grupos", label: "Mis grupos", icon: Users },
-    { id: "asistencia", label: "Libreta de asistencia", icon: UserCheck },
-    { id: "parte", label: "Parte mensual", icon: FileText },
-    { id: "bitacora", label: "Bitácora", icon: BookOpen },
-    { id: "reflections", label: "Reflections", icon: MessageSquare },
-    { id: "reporte", label: "Check list de la clase", icon: ClipboardList },
-    { id: "solicitudes", label: "Solicitudes", icon: Inbox },
-  ];
+    { id: "asistencia", label: "Libreta de asistencia", icon: UserCheck, modulo: "asistencia" },
+    { id: "parte", label: "Parte mensual", icon: FileText, modulo: "asistencia" },
+    { id: "bitacora", label: "Bitácora", icon: BookOpen, modulo: "bitacoras" },
+    { id: "reflections", label: "Reflections", icon: MessageSquare, modulo: "reflections" },
+    { id: "reporte", label: "Check list de la clase", icon: ClipboardList, modulo: "reflections" },
+    { id: "solicitudes", label: "Solicitudes", icon: Inbox, modulo: "solicitudes" },
+  ].filter((n) => modulos.activo(n.modulo));
+  // Si la página abierta es de un módulo que se apagó, se muestra Inicio
+  const pagina = NAV.some((n) => n.id === page) ? page : "inicio";
   const escritorio = window.innerWidth > 768;
   const props = { datos, maestroId: perfil.maestro_id, avisar, setPage };
   const paginas = {
@@ -193,7 +197,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
             {!escritorio && page !== "inicio" && <button onClick={() => history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20} /></button>}
             {!escritorio && <button onClick={() => setMenu(true)} aria-label="Menú" style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Menu size={22} color="#475569" /></button>}
-            <h1 className="titulo-barra" style={{ fontSize: 18, fontWeight: 600, color: "#1B2A4A", margin: 0 }}>{NAV.find((n) => n.id === page)?.label}</h1>
+            <h1 className="titulo-barra" style={{ fontSize: 18, fontWeight: 600, color: "#1B2A4A", margin: 0 }}>{NAV.find((n) => n.id === pagina)?.label}</h1>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {onVolver && <button onClick={onVolver} title="Volver a administración" style={{ ...btnO, padding: "5px 10px", fontSize: 12, color: NAR, borderColor: "#FED7AA" }}>Administración</button>}
@@ -203,10 +207,10 @@ export function DocenteApp({ session, perfil, onVolver }) {
             <div className="hide-mobile" style={{ fontSize: 12, color: "#64748B", textAlign: "right" }}><div style={{ fontWeight: 700, color: "#1E293B" }}>{datos.maestro?.nombre || ""}</div><div>{session.user.email}</div></div>
           </div>
         </header>
-        <div style={{ flex: 1, overflow: "auto", padding: 20 }}>{cargando ? <Vacio>Cargando…</Vacio> : paginas[page]}</div>
+        <div style={{ flex: 1, overflow: "auto", padding: 20 }}>{cargando ? <Vacio>Cargando…</Vacio> : paginas[pagina]}</div>
       </main>
       <Toast toast={toast} />
-      {!cargando && <Recorrido estado={recorrido} pasos={PASOS_DOCENTE} abrirMenu={setMenu} irA={setPage} />}
+      {!cargando && <Recorrido estado={recorrido} pasos={PASOS_DOCENTE.filter((p) => modulos.activo(p.modulo))} abrirMenu={setMenu} irA={setPage} />}
     </div>
   );
 }
@@ -707,20 +711,26 @@ export function AdminDocentesPage({ data, showToast }) {
   const [error, setError] = useState("");
   const tBtn = (a) => ({ padding: "10px 16px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", borderBottom: a ? `3px solid ${NAR}` : "3px solid transparent", background: "transparent", color: a ? NAR : "#64748B" });
   const props = { data, showToast, setError };
+  const modulos = useModulos(true);
+  const TABS = [
+    { id: "solicitudes", label: "📥 Solicitudes", modulo: "solicitudes" },
+    { id: "asistencia", label: "✅ Asistencia", modulo: "asistencia" },
+    { id: "reflections", label: "💬 Reflections", modulo: "reflections" },
+    { id: "reportes", label: "📋 Check list de clase", modulo: "reflections" },
+    { id: "bitacoras", label: "📖 Bitácoras", modulo: "bitacoras" },
+  ].filter((t) => modulos.activo(t.modulo));
+  const tabVisible = TABS.some((t) => t.id === tab) ? tab : TABS[0]?.id;
+  if (!TABS.length) return <div style={{ ...card, fontSize: 13, color: "#64748B" }}>No hay partes de Gestión curricular activas. Puede encenderlas en Configuración → Sistema y respaldos.</div>;
   return (<div>
     {error && (error.startsWith("Falta activar") ? <AvisoActivarModulo showToast={showToast} /> : <div style={{ ...card, background: "#FFF7ED", border: "1px solid #FDBA74", color: "#9A3412", fontSize: 13 }}>⚠ {error}</div>)}
     <div style={{ display: "flex", borderBottom: "1px solid #E2E8F0", marginBottom: 16, flexWrap: "wrap" }}>
-      <button onClick={() => setTab("solicitudes")} style={tBtn(tab === "solicitudes")}>📥 Solicitudes</button>
-      <button onClick={() => setTab("asistencia")} style={tBtn(tab === "asistencia")}>✅ Asistencia</button>
-      <button onClick={() => setTab("reflections")} style={tBtn(tab === "reflections")}>💬 Reflections</button>
-      <button onClick={() => setTab("reportes")} style={tBtn(tab === "reportes")}>📋 Check list de clase</button>
-      <button onClick={() => setTab("bitacoras")} style={tBtn(tab === "bitacoras")}>📖 Bitácoras</button>
+      {TABS.map((t) => <button key={t.id} onClick={() => setTab(t.id)} style={tBtn(tabVisible === t.id)}>{t.label}</button>)}
     </div>
-    {tab === "solicitudes" && <AdminSolicitudes {...props} />}
-    {tab === "asistencia" && <AdminAsistencia {...props} />}
-    {tab === "reflections" && <AdminReflections {...props} />}
-    {tab === "reportes" && <AdminChecklist {...props} />}
-    {tab === "bitacoras" && <AdminBitacoras data={data} showToast={showToast} />}
+    {tabVisible === "solicitudes" && <AdminSolicitudes {...props} />}
+    {tabVisible === "asistencia" && <AdminAsistencia {...props} />}
+    {tabVisible === "reflections" && <AdminReflections {...props} />}
+    {tabVisible === "reportes" && <AdminChecklist {...props} />}
+    {tabVisible === "bitacoras" && <AdminBitacoras data={data} showToast={showToast} />}
   </div>);
 }
 

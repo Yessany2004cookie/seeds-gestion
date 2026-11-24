@@ -8,6 +8,7 @@ import { ContabilidadPage } from "./contabilidad";
 import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
 import { SelectorFondo } from "./fondo";
+import { useModulos, ModulosPanel } from "./modulos";
 import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
@@ -688,7 +689,9 @@ export default function App() {
   // Administración que también da clases: puede cambiar a la vista docente
   const [vistaDocente, setVistaDocente] = useState(()=>{try{return localStorage.getItem("seeds_vista")==="docente";}catch(e){return false;}});
   // Recorrido guiado y novedades de administración
-  const recorrido = useRecorrido(rol.estado==="admin"&&!vistaDocente?session:null, "admin");
+  // Módulos activos de esta institución (Configuración → Sistema y respaldos)
+  const modulos = useModulos(session);
+  const recorrido = useRecorrido(rol.estado==="admin"&&!vistaDocente&&modulos.listo?session:null, "admin", (n)=>modulos.activo(n.modulo));
   const cambiarVista = (docente) => { setVistaDocente(docente); try{localStorage.setItem("seeds_vista",docente?"docente":"admin");}catch(e){} };
 
   const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
@@ -746,15 +749,17 @@ export default function App() {
   useEffect(() => { if(session && rol.estado==="admin") loadData(); }, [session, rol.estado, loadData]);
 
   // Contador de tiempo de trabajo real (solo en el panel de administración)
-  useContadorUso({ activo: !!session && rol.estado==="admin" && !(rol.perfil?.maestro_id && vistaDocente), seccion: page, userId: session?.user?.id });
+  useContadorUso({ activo: !!session && rol.estado==="admin" && modulos.listo && modulos.activo("contador") && !(rol.perfil?.maestro_id && vistaDocente), seccion: page, userId: session?.user?.id });
 
   const logout = async () => { await supabase.auth.signOut(); setSession(null); };
 
   if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC"}}><div style={{textAlign:"center"}}><img src={LOGO_SEEDS} alt="Seeds" style={{width:80,height:80,objectFit:"contain",marginBottom:12}}/><p style={{color:"#64748B"}}>Cargando Seeds...</p></div></div>;
   if (!session) return <LoginPage showToast={showToast} toast={toast} />;
   if (rol.estado === "cargando") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC",color:"#64748B",fontSize:14}}>Cargando…</div>;
+  if (rol.estado === "docente" && !modulos.listo) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC",color:"#64748B",fontSize:14}}>Cargando…</div>;
+  if (rol.estado === "docente" && !modulos.activo("docentes")) return <PantallaMensaje titulo="El portal docente no está activo" texto="Administración desactivó el portal docente en esta institución." onSalir={logout} />;
   if (rol.estado === "docente") return <DocenteApp session={session} perfil={rol.perfil} />;
-  if (rol.estado === "admin" && rol.perfil?.maestro_id && vistaDocente) return <DocenteApp session={session} perfil={rol.perfil} onVolver={()=>cambiarVista(false)} />;
+  if (rol.estado === "admin" && rol.perfil?.maestro_id && vistaDocente && modulos.activo("docentes")) return <DocenteApp session={session} perfil={rol.perfil} onVolver={()=>cambiarVista(false)} />;
   if (rol.estado === "sin_acceso") return <PantallaMensaje titulo="Tu usuario no tiene acceso" texto="Pide a administración de Seeds que te dé acceso al sistema." onSalir={logout} />;
 
   // Menú agrupado: cada grupo es un submenú que se abre y se cierra
@@ -762,23 +767,25 @@ export default function App() {
     {id:"inicio",label:null,items:[{id:"dashboard",label:"Inicio",icon:Home}]},
     {id:"escuela",label:"Escuela y alumnado",icon:GraduationCap,items:[
       {id:"secciones",label:"Secciones",icon:BookOpen},{id:"maestros",label:"Maestros",icon:GraduationCap},
-      {id:"alumnos",label:"Matrícula",icon:Users},{id:"docentes",label:"Gestión curricular",icon:ClipboardList}]},
+      {id:"alumnos",label:"Matrícula",icon:Users},{id:"docentes",label:"Gestión curricular",icon:ClipboardList,modulo:"docentes"}]},
     {id:"cobros",label:"Cobros",icon:FileText,items:[
       {id:"facturas",label:"Facturas y pagos",icon:FileText},{id:"historial",label:"Historial",icon:Calendar},
-      {id:"recordatorios",label:"Recordatorios",icon:Bell},{id:"materiales",label:"Materiales",icon:CreditCard},
-      {id:"graduacion",label:"Graduación",icon:Award}]},
+      {id:"recordatorios",label:"Recordatorios",icon:Bell,modulo:"recordatorios"},{id:"materiales",label:"Materiales",icon:CreditCard,modulo:"materiales"},
+      {id:"graduacion",label:"Graduación",icon:Award,modulo:"graduacion"}]},
     {id:"finanzas_g",label:"Finanzas",icon:DollarSign,items:[
-      {id:"alertas",label:"Alertas",icon:AlertCircle},{id:"finanzas",label:"Gastos, deudas y caja",icon:DollarSign},
-      {id:"ingresos",label:"Ingresos extra",icon:TrendingUp},{id:"reportes",label:"Reportes",icon:FileText}]},
-    {id:"contab_g",label:"Contabilidad",icon:BookOpen,items:[
+      {id:"alertas",label:"Alertas",icon:AlertCircle,modulo:"alertas"},{id:"finanzas",label:"Gastos, deudas y caja",icon:DollarSign},
+      {id:"ingresos",label:"Ingresos extra",icon:TrendingUp,modulo:"ingresos"},{id:"reportes",label:"Reportes",icon:FileText}]},
+    {id:"contab_g",label:"Contabilidad",icon:BookOpen,modulo:"contabilidad",items:[
       {id:"c_resultados",label:"Estado de resultados",icon:TrendingUp},{id:"c_balance",label:"Balance general",icon:BookOpen},
       {id:"c_flujo",label:"Flujo de efectivo",icon:DollarSign},{id:"c_diario",label:"Libro diario",icon:FileText},
       {id:"c_mayor",label:"Libro mayor",icon:FileText},{id:"c_cierre",label:"Cierre de mes",icon:Check},
       {id:"c_apertura",label:"Apertura",icon:Edit},{id:"c_catalogo",label:"Catálogo de cuentas",icon:ClipboardList}]},
     {id:"sistema_g",label:"Configuración",icon:Edit,items:[
       {id:"config",label:"Configuración",icon:Edit},{id:"sistema",label:"Sistema y respaldos",icon:LogIn}]},
-  ];
+  ].map(g=>modulos.activo(g.modulo)?{...g,items:g.items.filter(it=>modulos.activo(it.modulo))}:null).filter(g=>g&&g.items.length);
   const NAV = GRUPOS.flatMap(g=>g.items.map(it=>({...it,grupo:g.label})));
+  // Si la página abierta es de un módulo que se apagó, se muestra Inicio
+  const pageVisible = NAV.some(n=>n.id===page) ? page : "dashboard";
 
   // Vista de datos filtrada por la sucursal activa.
   // Como la sucursal vive en la sección, filtramos secciones y de ahí todo lo demás.
@@ -827,7 +834,7 @@ export default function App() {
     c_cierre:<ContabilidadPage key="cierre" data={data} showToast={showToast} tabFijo="cierre"/>,
     c_apertura:<ContabilidadPage key="apertura" data={data} showToast={showToast} tabFijo="apertura"/>,
     c_catalogo:<ContabilidadPage key="catalogo" data={data} showToast={showToast} tabFijo="catalogo"/>,
-    reportes:<><UsoSistemaPanel secciones={NAV} showToast={showToast}/><ReportesPage {...propsSuc}/></>,
+    reportes:<>{modulos.activo("contador")&&<UsoSistemaPanel secciones={NAV} showToast={showToast}/>}<ReportesPage {...propsSuc}/></>,
     docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
     config:<ConfiguracionPage {...props}/>,
     sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}/>,
@@ -872,18 +879,18 @@ export default function App() {
                 {data.sucursales.filter(s=>s.activa!==false).map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
             </div>}
-            {rol.perfil?.maestro_id&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1px solid #E7B48F",borderRadius:4,cursor:"pointer",padding:"5px 10px",color:"#C2571A",fontSize:12,fontWeight:600,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
-            <ContadorVisible/>
+            {rol.perfil?.maestro_id&&modulos.activo("docentes")&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1px solid #E7B48F",borderRadius:4,cursor:"pointer",padding:"5px 10px",color:"#C2571A",fontSize:12,fontWeight:600,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
+            {modulos.activo("contador")&&<ContadorVisible/>}
             <SelectorFondo/>
             <BotonAyuda onClick={recorrido.abrir}/>
             <button data-tour="refrescar" onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"#fff",border:"1px solid #CDD3DC",borderRadius:4,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
             <div style={{fontSize:12,color:"#64748B"}} className="hide-mobile">{session.user.email}</div>
           </div>
         </header>
-        <div style={{flex:1,overflow:"auto",padding:20}}>{pageMap[page]}</div>
+        <div style={{flex:1,overflow:"auto",padding:20}}>{pageMap[pageVisible]}</div>
       </main>
-      <AsistenteIA data={dataSuc} session={session} nombreSucursal={data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||""}/>
-      <Recorrido estado={recorrido} pasos={PASOS_ADMIN} abrirMenu={setSidebarOpen} irA={setPage}/>
+      {modulos.activo("asistente")&&<AsistenteIA data={dataSuc} session={session} nombreSucursal={data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||""}/>}
+      <Recorrido estado={recorrido} pasos={PASOS_ADMIN.filter(p=>modulos.activo(p.modulo))} abrirMenu={setSidebarOpen} irA={setPage}/>
       {toast&&<div className="vidrio-ahumado aviso-flotante" role="status">
         <span className="aviso-icono" style={{background:toast.type==="success"?"#10B981":"#EF4444"}}>{toast.type==="success"?"✓":"!"}</span>
         <span>{toast.msg}</span>
@@ -1133,6 +1140,7 @@ function LoginPage({showToast,toast}){
 
 // ── DASHBOARD ──
 function Dashboard({data,setPage,loadData,showToast}){
+  const modulos=useModulos(true);
   const ta=data.alumnos.filter(a=>a.estado==="activo").length;
   const ts=data.secciones.filter(s=>s.activa!==false).length;
   const pend=data.facturas.filter(f=>(f.estado==="pendiente"||f.estado==="parcial")&&(f.tipo_factura||"cobro")==="cobro").length;
@@ -1154,12 +1162,12 @@ function Dashboard({data,setPage,loadData,showToast}){
   const ganancia=ing-gastosTot;
   const stats=[{l:"Alumnos activos",v:ta,c:"#2563EB",i:Users,p:"alumnos"},{l:"Secciones",v:ts,c:"#F97316",i:BookOpen,p:"secciones"},{l:"Cobros pendientes",v:pend,c:"#DC2626",i:AlertCircle,p:"facturas"},{l:`Ingresos ${mes}`,v:`L ${ing.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:"#059669",i:DollarSign,p:"finanzas"},{l:`Gastos ${mes}`,v:`L ${gastosTot.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:"#DC2626",i:CreditCard,p:"finanzas"},{l:`Ganancia ${mes}`,v:`L ${ganancia.toLocaleString("es-HN",{maximumFractionDigits:2})}`,c:ganancia>=0?"#059669":"#DC2626",i:DollarSign,p:"finanzas"}];
   return(<div>
-    <AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>
+    {modulos.activo("asistencia")&&<AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
       {stats.map((s,i)=>{const Icon=s.i;return(<div key={i} className="tarjeta-kpi" onClick={()=>setPage(s.p)} style={{...card,cursor:"pointer",padding:"16px 18px",display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${tono(s.c)}`}}><div style={{background:tono(s.c)+"12",border:`1px solid ${tono(s.c)}30`,borderRadius:4,padding:10,display:"flex"}}><Icon size={20} color={tono(s.c)}/></div><div style={{minWidth:0}}><div style={{fontSize:11,color:"#5B6576",textTransform:"uppercase",letterSpacing:.6,fontWeight:600}}>{s.l}</div><div className="cifra" style={{fontSize:22,fontWeight:700,color:"#1B2A4A",marginTop:2}}>{s.v}</div></div></div>);})}
     </div>
     <ResumenFinanciero data={data}/>
-    <div style={card}><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Acciones rápidas</h3><div style={{display:"flex",flexWrap:"wrap",gap:10}}><button onClick={()=>setPage("alumnos")} style={btn("#2563EB")}><UserPlus size={15}/>Nueva matrícula</button><button onClick={()=>setPage("facturas")} style={btn("#059669")}><FileText size={15}/>Crear cobros</button><button onClick={()=>setPage("recordatorios")} style={btn("#7C3AED")}><Bell size={15}/>Recordatorios</button></div></div>
+    <div style={card}><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Acciones rápidas</h3><div style={{display:"flex",flexWrap:"wrap",gap:10}}><button onClick={()=>setPage("alumnos")} style={btn("#2563EB")}><UserPlus size={15}/>Nueva matrícula</button><button onClick={()=>setPage("facturas")} style={btn("#059669")}><FileText size={15}/>Crear cobros</button>{modulos.activo("recordatorios")&&<button onClick={()=>setPage("recordatorios")} style={btn("#7C3AED")}><Bell size={15}/>Recordatorios</button>}</div></div>
   </div>);
 }
 
@@ -1487,6 +1495,7 @@ function SeccionesPage({data,loadData,showToast,sucursalActiva}){
 // ── MAESTROS ──
 function MaestrosPage({data,loadData,showToast}){
   const {perfiles,recargar}=useAccesosDocentes();
+  const portal=useModulos(true).activo("docentes");
   const[modal,setModal]=useState(null);const[form,setForm]=useState({nombre:"",telefono:"",email:"",secciones_ids:[],salario:""});
   const open=(m=null)=>{setForm(m?{nombre:m.nombre,telefono:m.telefono||"",email:m.email||"",secciones_ids:m.secciones_ids||[],salario:m.salario||""}:{nombre:"",telefono:"",email:"",secciones_ids:[],salario:""});setModal(m?.id||"new");};
   const sv=async()=>{
@@ -1503,7 +1512,7 @@ function MaestrosPage({data,loadData,showToast}){
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><p style={{fontSize:13,color:"#64748B",margin:0}}>{data.maestros.length} maestros</p><button onClick={()=>open()} style={btn("#2563EB")}><Plus size={15}/>Nuevo maestro</button></div>
     {perfiles===null&&<AvisoActivarModulo showToast={showToast}/>}
-    <div style={card}>{data.maestros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay maestros</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Nombre","Teléfono","Email","Salario","Secciones","Portal docente",""].map(h=><th key={h} style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{data.maestros.map(m=>(<tr key={m.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"8px 10px",fontWeight:600}}>{m.nombre}</td><td style={{padding:"8px 10px"}}>{m.telefono||"—"}</td><td style={{padding:"8px 10px"}}>{m.email||"—"}</td><td style={{padding:"8px 10px",fontWeight:600,color:"#059669"}}>{m.salario?`L ${Number(m.salario).toLocaleString()}`:"—"}</td><td style={{padding:"8px 10px"}}>{(m.secciones_ids||[]).map(sid=>{const sec=data.secciones.find(s=>s.id===sid);return sec?<span key={sid} style={{...badge("#F97316"),marginRight:4}}>{sec.nombre}</span>:null;})}{(!m.secciones_ids||m.secciones_ids.length===0)&&"—"}</td><td style={{padding:"8px 10px"}}><AccesoDocente maestro={m} perfiles={perfiles} recargar={recargar} showToast={showToast}/></td><td style={{padding:"8px 10px",whiteSpace:"nowrap"}}><button onClick={()=>open(m)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>del(m.id)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Trash2 size={15} color="#EF4444"/></button></td></tr>))}</tbody></table></div>)}</div>
+    <div style={card}>{data.maestros.length===0?<p style={{fontSize:13,color:"#94A3B8",textAlign:"center",padding:20}}>No hay maestros</p>:(<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:"2px solid #E2E8F0"}}>{["Nombre","Teléfono","Email","Salario","Secciones",...(portal?["Portal docente"]:[]),""].map(h=><th key={h} style={{textAlign:"left",padding:"8px 10px",color:"#64748B",fontWeight:600}}>{h}</th>)}</tr></thead><tbody>{data.maestros.map(m=>(<tr key={m.id} style={{borderBottom:"1px solid #F1F5F9"}}><td style={{padding:"8px 10px",fontWeight:600}}>{m.nombre}</td><td style={{padding:"8px 10px"}}>{m.telefono||"—"}</td><td style={{padding:"8px 10px"}}>{m.email||"—"}</td><td style={{padding:"8px 10px",fontWeight:600,color:"#059669"}}>{m.salario?`L ${Number(m.salario).toLocaleString()}`:"—"}</td><td style={{padding:"8px 10px"}}>{(m.secciones_ids||[]).map(sid=>{const sec=data.secciones.find(s=>s.id===sid);return sec?<span key={sid} style={{...badge("#F97316"),marginRight:4}}>{sec.nombre}</span>:null;})}{(!m.secciones_ids||m.secciones_ids.length===0)&&"—"}</td>{portal&&<td style={{padding:"8px 10px"}}><AccesoDocente maestro={m} perfiles={perfiles} recargar={recargar} showToast={showToast}/></td>}<td style={{padding:"8px 10px",whiteSpace:"nowrap"}}><button onClick={()=>open(m)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Edit size={15} color="#64748B"/></button><button onClick={()=>del(m.id)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Trash2 size={15} color="#EF4444"/></button></td></tr>))}</tbody></table></div>)}</div>
     {modal&&<Modal title={modal==="new"?"Nuevo maestro":"Editar maestro"} onClose={()=>setModal(null)} onSave={sv}><Field label="Nombre" value={form.nombre} onChange={v=>setForm({...form,nombre:v})}/><Field label="Teléfono" value={form.telefono} onChange={v=>setForm({...form,telefono:v})}/><Field label="Email" value={form.email} onChange={v=>setForm({...form,email:v})} type="email"/><Field label="Salario mensual (L)" value={form.salario} onChange={v=>setForm({...form,salario:v})} type="number" placeholder="Ej: 5000"/><div><label style={label}>Secciones</label><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{data.secciones.map(s=>(<button key={s.id} onClick={()=>tog(s.id)} style={{padding:"6px 12px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"inherit",border:form.secciones_ids.includes(s.id)?"2px solid #F97316":"1px solid #D1D5DB",background:form.secciones_ids.includes(s.id)?"#FFF7ED":"#fff",color:form.secciones_ids.includes(s.id)?"#F97316":"#64748B",fontWeight:form.secciones_ids.includes(s.id)?600:400}}>{form.secciones_ids.includes(s.id)&&<Check size={12} style={{marginRight:4}}/>}{s.nombre}</button>))}{data.secciones.length===0&&<p style={{fontSize:12,color:"#94A3B8"}}>Crea secciones primero</p>}</div></div></Modal>}
   </div>);
 }
@@ -2837,6 +2846,7 @@ function SistemaPage({data,loadData,showToast,session}){
     e.target.value="";
   };
   return(<div>
+    <ModulosPanel showToast={showToast}/>
     <div style={card}>
       <h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 10px"}}>👤 Tu cuenta</h3>
       <p style={{fontSize:13,color:"#475569"}}>Sesión activa: <strong>{session.user.email}</strong></p>
