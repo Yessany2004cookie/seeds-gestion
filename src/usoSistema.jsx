@@ -14,13 +14,13 @@
 //     Cada minuto guarda lo acumulado en la tabla uso_sistema (por usuario,
 //     día, hora, sección y dispositivo).
 //
-//  2) UsoSistemaPanel: reporte para administradores con el total del mes por
-//     usuario, el registro por día y por hora, y descarga a Excel.
+//  2) UsoSistemaPanel: resumen para quien gestiona pagos: horas del mes por
+//     usuario, días con entrada y salida, y descarga a Excel.
 // ════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, btn, btnO } from "./estilo";
-import { Clock, FileSpreadsheet, Download, X, ChevronDown, ChevronRight, Monitor, Smartphone, RefreshCw } from "lucide-react";
+import { Clock, FileSpreadsheet, Download, X, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 
 const INACTIVO_MS = 2 * 60 * 1000;     // sin actividad por 2 min → deja de contar
 const LECTURA_MS = 5 * 60 * 1000;      // en pantallas de lectura (reportes, finanzas…) se espera hasta 5 min
@@ -226,7 +226,6 @@ const horaCorta = (iso) => iso ? new Date(iso).toLocaleTimeString("es-HN", { hou
 const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 const nombreMes = (ym) => { const [a, m] = ym.split("-"); return `${MESES[Number(m) - 1]} ${a}`; };
 const fechaBonita = (f) => { const [a, m, d] = f.split("-").map(Number); return new Date(a, m - 1, d).toLocaleDateString("es-HN", { weekday: "short", day: "numeric", month: "short" }); };
-const rangoHora = (h) => `${pad(h)}:00 – ${pad((h + 1) % 24)}:00`;
 
 function agrupar(filas, nombreSeccion) {
   const usuarios = new Map();
@@ -263,13 +262,20 @@ function agrupar(filas, nombreSeccion) {
   return [...usuarios.values()].sort((a, b) => b.seg - a.seg);
 }
 
+// Nota corta para quien paga: solo aparece si hay algo que revisar.
+const observacion = (u) => {
+  const n = [];
+  if (u.diasLentos > 0) n.push(`${u.diasLentos} ${u.diasLentos === 1 ? "día" : "días"} con ritmo muy bajo`);
+  if (u.desc >= 30 * 60 && u.desc > u.seg * 0.15) n.push(`${duracion(u.desc)} sin trabajo real descontado`);
+  return n.join(" · ");
+};
+
 export function UsoSistemaPanel({ secciones = [], showToast }) {
   const hoy = new Date();
   const [mes, setMes] = useState(`${hoy.getFullYear()}-${pad(hoy.getMonth() + 1)}`);
   const [filas, setFilas] = useState(null);
   const [error, setError] = useState("");
   const [abierto, setAbierto] = useState(null);     // usuario abierto
-  const [diaAbierto, setDiaAbierto] = useState(null);
   const [archivo, setArchivo] = useState(null);
   const [generando, setGenerando] = useState(false);
   const [recarga, setRecarga] = useState(0);
@@ -308,111 +314,80 @@ export function UsoSistemaPanel({ secciones = [], showToast }) {
       const titulo = (t) => ({ value: t, fontWeight: "bold", backgroundColor: "#FFEDD5", color: "#9A3412" });
       const horasDec = (s) => Math.round((s / 3600) * 100) / 100;
       const resumen = [
-        [{ value: `Tiempo de trabajo real · ${nombreMes(mes)}`, fontWeight: "bold", fontSize: 14 }],
+        [{ value: `Horas trabajadas · ${nombreMes(mes)}`, fontWeight: "bold", fontSize: 14 }],
+        [{ value: "Solo cuenta tiempo de trabajo real en el sistema." }],
         [],
-        ["Usuario", "Tiempo real", "Horas (decimal)", "Días trabajados", "Leyendo reportes/finanzas", "Compu", "Celular", "Descartado (sin trabajo real)", "Clics repetidos", "Días con ritmo bajo", "Clics", "Scrolls", "Teclas", "Envíos WhatsApp"].map(titulo),
-        ...usuarios.map((u) => [u.email, duracion(u.seg), horasDec(u.seg), u.dias.size, duracion(u.lectura), duracion(u.compu), duracion(u.celular), duracion(u.desc), u.rep, u.diasLentos, u.clics, u.scrolls, u.teclas, u.wa]),
-        [{ value: "TOTAL", fontWeight: "bold" }, { value: duracion(totalMes), fontWeight: "bold" }, { value: horasDec(totalMes), fontWeight: "bold" }],
+        ["Usuario", "Días trabajados", "Horas del mes", "Horas (decimal)", "Observación"].map(titulo),
+        ...usuarios.map((u) => [u.email, u.dias.size, duracion(u.seg), horasDec(u.seg), observacion(u)]),
+        [{ value: "TOTAL", fontWeight: "bold" }, "", { value: duracion(totalMes), fontWeight: "bold" }, { value: horasDec(totalMes), fontWeight: "bold" }],
       ];
-      const porDia = [["Usuario", "Fecha", "Primera actividad", "Última actividad", "Tiempo real", "Horas (decimal)", "Descartado", "Acciones por minuto", "Revisar", "Clics", "Envíos WhatsApp"].map(titulo)];
-      const porHora = [["Usuario", "Fecha", "Hora", "Sección", "Dispositivo", "Minutos reales", "Minutos descartados", "Clics repetidos", "Clics", "Scrolls", "Teclas", "Envíos WhatsApp"].map(titulo)];
+      const porDia = [["Usuario", "Fecha", "Entrada", "Salida", "Horas", "Horas (decimal)", "Observación"].map(titulo)];
       for (const u of usuarios) {
         for (const d of [...u.dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
-          porDia.push([u.email, d.fecha, horaCorta(d.primera), horaCorta(d.ultima), duracion(d.seg), horasDec(d.seg), duracion(d.desc), d.ritmo == null ? "" : Math.round(d.ritmo * 10) / 10, d.lento ? "Ritmo muy bajo" : "", d.clics, d.wa]);
+          porDia.push([u.email, d.fecha, horaCorta(d.primera), horaCorta(d.ultima), duracion(d.seg), horasDec(d.seg), d.lento ? "Revisar: ritmo muy bajo" : ""]);
         }
       }
-      for (const r of filas || []) {
-        porHora.push([r.email || "", r.fecha, rangoHora(r.hora), nombreSeccion(r.seccion), r.dispositivo === "celular" ? "Celular" : "Compu",
-          Math.round((r.segundos / 60) * 10) / 10, Math.round(((r.descartados || 0) / 60) * 10) / 10, r.repetidos || 0, r.clics, r.scrolls, r.teclas, r.whatsapp]);
-      }
       const blob = await writeExcelFile([
-        { data: resumen, sheet: "Resumen del mes", columns: [{ width: 34 }, { width: 16 }, { width: 14 }, { width: 14 }, { width: 22 }, { width: 14 }, { width: 14 }, { width: 24 }, { width: 14 }, { width: 18 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 16 }] },
-        { data: porDia, sheet: "Por día", stickyRowsCount: 1, columns: [{ width: 34 }, { width: 12 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 14 }, { width: 14 }, { width: 18 }, { width: 16 }, { width: 10 }, { width: 16 }] },
-        { data: porHora, sheet: "Por hora", stickyRowsCount: 1, columns: [{ width: 34 }, { width: 12 }, { width: 16 }, { width: 22 }, { width: 12 }, { width: 14 }, { width: 18 }, { width: 14 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 16 }] },
+        { data: resumen, sheet: "Resumen", columns: [{ width: 34 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 40 }] },
+        { data: porDia, sheet: "Por día", stickyRowsCount: 1, columns: [{ width: 34 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 14 }, { width: 16 }, { width: 26 }] },
       ], { fontFamily: "Calibri", fontSize: 11 }).toBlob();
-      const nombre = `Tiempo de trabajo ${nombreMes(mes)}.xlsx`;
+      const nombre = `Horas trabajadas ${nombreMes(mes)}.xlsx`;
       setArchivo({ url: URL.createObjectURL(blob), nombre });
     } catch (e) { showToast && showToast("No se pudo crear el Excel: " + e.message, "error"); }
     setGenerando(false);
   };
 
   const th = { padding: "8px 6px", fontSize: 11, color: "#64748B", fontWeight: 700, textAlign: "left", borderBottom: "1px solid #E2E8F0", whiteSpace: "nowrap" };
-  const td = { padding: "8px 6px", fontSize: 13, borderBottom: "1px solid #EEF2F7", whiteSpace: "nowrap" };
+  const td = { padding: "9px 6px", fontSize: 13, borderBottom: "1px solid #EEF2F7", whiteSpace: "nowrap" };
 
   return (<div style={card}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
       <Clock size={18} color="#EA580C" />
-      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#1E293B" }}>Tiempo de trabajo</h3>
+      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#1E293B" }}>Horas trabajadas</h3>
       <span style={{ flex: 1 }} />
       <input type="month" value={mes} max={`${hoy.getFullYear()}-${pad(hoy.getMonth() + 1)}`} onChange={(e) => e.target.value && setMes(e.target.value)} style={{ ...input, width: 170 }} />
       <button onClick={() => setRecarga((n) => n + 1)} title="Actualizar" style={{ ...btnO, padding: "8px 10px" }}><RefreshCw size={14} /></button>
       <button onClick={descargarExcel} disabled={!filas || !filas.length || generando} style={{ ...btn("#059669"), opacity: !filas || !filas.length || generando ? 0.5 : 1 }}><FileSpreadsheet size={15} />{generando ? "Creando…" : "Descargar Excel"}</button>
     </div>
-    <p style={{ fontSize: 12, color: "#64748B", margin: "0 0 12px" }}>
-      Solo cuenta trabajo real: clics, scroll, teclado, toques en el celular y envíos por WhatsApp. Si pasan 2 minutos sin una acción (5 en Reportes, Finanzas y Contabilidad), deja de contar. Mover el mouse sin hacer nada, o dar clics seguidos en el mismo lugar, queda como <strong>descartado</strong>. Los días con un ritmo muy por debajo del normal de la persona se marcan con ⚠ para revisar.
-    </p>
+    <p style={{ fontSize: 12, color: "#64748B", margin: "0 0 12px" }}>Resumen del mes para pagos. Solo cuenta tiempo de trabajo real en el sistema.</p>
 
     {error && <div style={{ color: "#B91C1C", fontSize: 13 }}>No se pudo cargar: {error}</div>}
     {!error && !filas && <div style={{ color: "#64748B", fontSize: 13 }}>Cargando…</div>}
-    {filas && !filas.length && <div style={{ color: "#64748B", fontSize: 13 }}>Todavía no hay tiempo registrado en {nombreMes(mes)}.</div>}
+    {filas && !filas.length && <div style={{ color: "#64748B", fontSize: 13 }}>Todavía no hay horas registradas en {nombreMes(mes)}.</div>}
 
-    {usuarios.length > 0 && <>
-      <div style={{ fontSize: 13, color: "#334155", marginBottom: 8 }}>Total del mes (todos los usuarios): <strong>{duracion(totalMes)}</strong></div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr><th style={th}></th><th style={th}>Usuario</th><th style={th}>Total del mes</th><th style={th}>Días</th><th style={th}>Leyendo</th><th style={th}>Descartado</th><th style={th}><Monitor size={12} /> Compu</th><th style={th}><Smartphone size={12} /> Celular</th><th style={th}>Clics</th><th style={th}>WhatsApp</th></tr></thead>
-          <tbody>
-            {usuarios.map((u) => {
-              const abiertoU = abierto === u.id;
-              const dias = [...u.dias.values()].sort((a, b) => b.fecha.localeCompare(a.fecha));
-              return [
-                <tr key={u.id} onClick={() => { setAbierto(abiertoU ? null : u.id); setDiaAbierto(null); }} style={{ cursor: "pointer" }}>
-                  <td style={td}>{abiertoU ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
-                  <td style={{ ...td, fontWeight: 700 }}>{u.email}</td>
-                  <td style={{ ...td, fontWeight: 800, color: "#EA580C" }}>{duracion(u.seg)}</td>
-                  <td style={td}>{u.dias.size}{u.diasLentos > 0 && <span title="Días con ritmo muy bajo" style={{ color: "#D97706", marginLeft: 6 }}>⚠ {u.diasLentos}</span>}</td>
-                  <td style={td}>{duracion(u.lectura)}</td>
-                  <td style={{ ...td, color: u.desc > 0 ? "#B45309" : "#94A3B8" }}>{duracion(u.desc)}{u.rep > 0 && <span style={{ fontSize: 11 }}> · {u.rep} repetidos</span>}</td>
-                  <td style={td}>{duracion(u.compu)}</td>
-                  <td style={td}>{duracion(u.celular)}</td>
-                  <td style={td}>{u.clics}</td>
-                  <td style={td}>{u.wa}</td>
-                </tr>,
-                abiertoU && <tr key={u.id + "-d"}><td colSpan={10} style={{ padding: "4px 0 12px 22px", background: "rgba(255,247,237,.5)" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead><tr><th style={th}>Día</th><th style={th}>Desde</th><th style={th}>Hasta</th><th style={th}>Trabajo real</th><th style={th}>Descartado</th><th style={th}>Ritmo</th><th style={th}>Clics</th><th style={th}>WhatsApp</th></tr></thead>
-                    <tbody>{dias.map((d) => {
-                      const abiertoD = diaAbierto === d.fecha;
-                      return [
-                        <tr key={d.fecha} onClick={() => setDiaAbierto(abiertoD ? null : d.fecha)} style={{ cursor: "pointer" }}>
-                          <td style={td}>{abiertoD ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {fechaBonita(d.fecha)}</td>
-                          <td style={td}>{horaCorta(d.primera)}</td>
-                          <td style={td}>{horaCorta(d.ultima)}</td>
-                          <td style={{ ...td, fontWeight: 700 }}>{duracion(d.seg)}</td>
-                          <td style={{ ...td, color: d.desc > 0 ? "#B45309" : "#94A3B8" }}>{duracion(d.desc)}</td>
-                          <td style={{ ...td, color: d.lento ? "#D97706" : "#475569", fontWeight: d.lento ? 700 : 400 }} title={d.lento ? "Ritmo muy por debajo de lo normal para esta persona: revisar" : "Acciones de trabajo por minuto"}>{d.ritmo == null ? "—" : `${d.ritmo.toFixed(1)}/min`}{d.lento && " ⚠"}</td>
-                          <td style={td}>{d.clics}</td>
-                          <td style={td}>{d.wa}</td>
-                        </tr>,
-                        abiertoD && [...d.horas.values()].sort((a, b) => a.hora - b.hora).map((h) =>
-                          <tr key={d.fecha + h.hora} style={{ fontSize: 12, color: "#475569" }}>
-                            <td style={{ ...td, fontSize: 12, paddingLeft: 26 }}>{rangoHora(h.hora)}</td>
-                            <td style={{ ...td, fontSize: 12, whiteSpace: "normal" }} colSpan={2}>{[...h.secciones.entries()].filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).map(([n, s]) => `${n} (${duracion(s)})`).join(", ") || "—"}</td>
-                            <td style={{ ...td, fontSize: 12 }}>{duracion(h.seg)}</td>
-                            <td style={{ ...td, fontSize: 12 }} colSpan={2}></td>
-                            <td style={{ ...td, fontSize: 12 }}>{h.clics}</td>
-                            <td style={{ ...td, fontSize: 12 }}>{h.wa}</td>
-                          </tr>),
-                      ];
-                    })}</tbody>
-                  </table>
-                </td></tr>,
-              ];
-            })}
-          </tbody>
-        </table>
-      </div>
-    </>}
+    {usuarios.length > 0 && <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead><tr><th style={th}></th><th style={th}>Usuario</th><th style={th}>Días</th><th style={th}>Horas del mes</th><th style={th}>Observación</th></tr></thead>
+        <tbody>
+          {usuarios.map((u) => {
+            const abiertoU = abierto === u.id;
+            const dias = [...u.dias.values()].sort((a, b) => b.fecha.localeCompare(a.fecha));
+            const obs = observacion(u);
+            return [
+              <tr key={u.id} onClick={() => setAbierto(abiertoU ? null : u.id)} style={{ cursor: "pointer" }} title="Ver días">
+                <td style={td}>{abiertoU ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
+                <td style={{ ...td, fontWeight: 700 }}>{u.email}</td>
+                <td style={td}>{u.dias.size}</td>
+                <td style={{ ...td, fontWeight: 800, color: "#EA580C" }}>{duracion(u.seg)}</td>
+                <td style={{ ...td, color: obs ? "#B45309" : "#94A3B8", whiteSpace: "normal", fontSize: 12 }}>{obs ? `⚠ ${obs}` : "—"}</td>
+              </tr>,
+              abiertoU && <tr key={u.id + "-d"}><td colSpan={5} style={{ padding: "4px 0 12px 22px", background: "rgba(255,247,237,.5)" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead><tr><th style={th}>Día</th><th style={th}>Entrada</th><th style={th}>Salida</th><th style={th}>Horas</th></tr></thead>
+                  <tbody>{dias.map((d) => <tr key={d.fecha}>
+                    <td style={td}>{fechaBonita(d.fecha)}</td>
+                    <td style={td}>{horaCorta(d.primera)}</td>
+                    <td style={td}>{horaCorta(d.ultima)}</td>
+                    <td style={{ ...td, fontWeight: 700 }}>{duracion(d.seg)}{d.lento && <span title="Ritmo muy por debajo de lo normal: revisar" style={{ color: "#D97706" }}> ⚠</span>}</td>
+                  </tr>)}</tbody>
+                </table>
+              </td></tr>,
+            ];
+          })}
+          <tr><td style={td}></td><td style={{ ...td, fontWeight: 800 }}>Total</td><td style={td}></td><td style={{ ...td, fontWeight: 800 }}>{duracion(totalMes)}</td><td style={td}></td></tr>
+        </tbody>
+      </table>
+    </div>}
 
     {archivo && <div onClick={() => setArchivo(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 22, padding: 24, width: "100%", maxWidth: 380, textAlign: "center", position: "relative" }}>
