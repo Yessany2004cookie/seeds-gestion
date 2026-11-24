@@ -9,6 +9,7 @@ import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
 import { SelectorFondo } from "./fondo";
 import { useModulos, ModulosPanel } from "./modulos";
+import { RespaldosAutomaticos } from "./respaldosAuto";
 import { useMarca, LogoEditable, TextoEditable, guardarMarca, guardarEtiqueta, mostrarPestana, ocultarPestana, ConfirmarConClave, PersonalizarPanel, ClaveSeguridadPanel, PESTANAS_FIJAS } from "./marca";
 import { DocenteApp, PESTANAS_DOCENTE, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
@@ -2888,11 +2889,12 @@ function SistemaPage({data,loadData,showToast,session,personalizar}){
     </div>
     <div style={card}>
       <h3 style={{fontSize:14,fontWeight:700,color:"#1E293B",margin:"0 0 10px"}}>💾 Respaldos</h3>
-      <p style={{fontSize:13,color:"#475569",marginBottom:12}}>Tus datos viven seguros en Supabase (nube). Aun así, descarga un respaldo cada mes como protección extra.</p>
+      <p style={{fontSize:13,color:"#475569",marginBottom:12}}>Tus datos viven seguros en Supabase (nube) y se copian solos una vez al mes. Aun así, de vez en cuando descarga un respaldo y guárdalo en tu computadora como protección extra.</p>
       <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
         <button onClick={exportar} style={btn("#059669")}><Download size={15}/>Descargar respaldo</button>
         <label style={{...btn("#2563EB"),cursor:"pointer"}}><Upload size={15}/>Restaurar respaldo<input type="file" accept=".json" onChange={importar} style={{display:"none"}}/></label>
       </div>
+      <RespaldosAutomaticos showToast={showToast}/>
       <div style={{background:"#FEF3C7",borderRadius:8,padding:12,fontSize:12,color:"#92400E",marginTop:14}}>
         ⚠️ <strong>Importante (plan gratuito de Supabase):</strong> si nadie entra a la app durante 7 días seguidos, Supabase "pausa" el proyecto (los datos NO se borran, solo se pausa). Para reactivarlo: entra a supabase.com → tu proyecto → botón "Restore". Con uso diario de la escuela esto no pasa; solo pendiente en vacaciones largas.
       </div>

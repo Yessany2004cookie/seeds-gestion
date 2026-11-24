@@ -1,0 +1,51 @@
+# ════════════════════════════════════════════════════════════════
+#  Copia mensual de la base de datos FUERA de Supabase
+#  Este archivo va en el repositorio PRIVADO de respaldos (no en
+#  seeds-gestion, que es público), en: .github/workflows/respaldo-mensual.yml
+#  Ver respaldo-externo/LEEME.md para los pasos.
+#
+#  El día 1 de cada mes (3:00 AM Honduras) pide a Supabase la copia del mes
+#  y la guarda como archivo JSON en la carpeta respaldos/ de ese repo.
+#  El archivo es el mismo formato que "Descargar respaldo" de la app.
+# ════════════════════════════════════════════════════════════════
+name: Respaldo mensual
+
+on:
+  schedule:
+    - cron: "0 9 1 * *"     # día 1 de cada mes, 9:00 UTC = 3:00 AM Honduras
+  workflow_dispatch: {}      # botón "Run workflow" para hacerlo a mano
+
+permissions:
+  contents: write
+
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Descargar copia desde Supabase
+        env:
+          SUPABASE_URL: https://vmrihjkdlrftkxapajpy.supabase.co
+          KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then echo "Falta el secreto SUPABASE_SERVICE_KEY"; exit 1; fi
+          mkdir -p respaldos
+          ARCHIVO="respaldos/seeds_respaldo_$(TZ=America/Tegucigalpa date +%Y-%m-%d).json"
+          AUTH=()
+          case "$KEY" in eyJ*) AUTH=(-H "Authorization: Bearer $KEY");; esac
+          curl -sS --fail-with-body -X POST "$SUPABASE_URL/rest/v1/rpc/respaldo_para_externo" \
+            -H "apikey: $KEY" "${AUTH[@]}" -H "Content-Type: application/json" -d '{}' \
+            -o "$ARCHIVO"
+          # Comprobar que la copia trae datos de verdad
+          jq -e '.alumnos | length > 0' "$ARCHIVO" > /dev/null || { echo "La copia vino vacía o con error:"; head -c 500 "$ARCHIVO"; exit 1; }
+          jq -r 'to_entries | map(select(.value|type=="array")) | map("\(.key): \(.value|length)") | .[]' "$ARCHIVO"
+          echo "ARCHIVO=$ARCHIVO" >> "$GITHUB_ENV"
+
+      - name: Guardar en el repositorio
+        run: |
+          git config user.name "respaldo-automatico"
+          git config user.email "respaldo-automatico@users.noreply.github.com"
+          git add "$ARCHIVO"
+          git commit -m "Respaldo $(TZ=America/Tegucigalpa date +%Y-%m-%d)" || echo "Sin cambios"
+          git push
