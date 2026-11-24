@@ -4,6 +4,7 @@ import { card, input, btn, btnO, label, badge } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
 import { AlertasFinanzasPage } from "./alertasFinanzas";
 import { ContabilidadPage } from "./contabilidad";
+import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
 import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
@@ -592,6 +593,8 @@ export default function App() {
   const [rol, setRol] = useState({ estado: "cargando", perfil: null });
   // Administración que también da clases: puede cambiar a la vista docente
   const [vistaDocente, setVistaDocente] = useState(()=>{try{return localStorage.getItem("seeds_vista")==="docente";}catch(e){return false;}});
+  // Recorrido guiado y novedades de administración
+  const recorrido = useRecorrido(rol.estado==="admin"&&!vistaDocente?session:null, "admin");
   const cambiarVista = (docente) => { setVistaDocente(docente); try{localStorage.setItem("seeds_vista",docente?"docente":"admin");}catch(e){} };
 
   const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
@@ -749,9 +752,9 @@ export default function App() {
             const abierto=!g.label||activoAqui||gruposAbiertos[g.id];
             const GIcon=g.icon;
             return(<div key={g.id} style={{marginBottom:4}}>
-              {g.label&&<button onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",borderRadius:12,cursor:"pointer",background:"transparent",color:activoAqui?"#FDBA74":"#E2E8F0",fontSize:12.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16}/><span style={{flex:1}}>{g.label}</span><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>}
+              {g.label&&<button data-tour={"g-"+g.id} onClick={()=>setGruposAbiertos(p=>({...p,[g.id]:!abierto}))} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",borderRadius:12,cursor:"pointer",background:"transparent",color:activoAqui?"#FDBA74":"#E2E8F0",fontSize:12.5,fontWeight:700,textAlign:"left",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:.6}}><GIcon size={16}/><span style={{flex:1}}>{g.label}</span><span style={{fontSize:11,opacity:.7,transform:abierto?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span></button>}
               {abierto&&g.items.map(n=>{const Icon=n.icon;const a=page===n.id;return(
-                <button key={n.id} className={"menu-item"+(a?" activo":"")} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:g.label?"8px 14px 8px 30px":"10px 14px",marginBottom:2,border:"none",borderRadius:14,cursor:"pointer",background:a?"linear-gradient(135deg,#FB923C,#EA580C)":"transparent",color:a?"#fff":"#CBD5E1",fontSize:13,fontWeight:a?700:500,textAlign:"left",boxShadow:a?"0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)":"none",fontFamily:"inherit"}}><Icon size={15}/>{n.label}</button>
+                <button key={n.id} data-tour={"n-"+n.id} className={"menu-item"+(a?" activo":"")} onClick={()=>{setPage(n.id);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:g.label?"8px 14px 8px 30px":"10px 14px",marginBottom:2,border:"none",borderRadius:14,cursor:"pointer",background:a?"linear-gradient(135deg,#FB923C,#EA580C)":"transparent",color:a?"#fff":"#CBD5E1",fontSize:13,fontWeight:a?700:500,textAlign:"left",boxShadow:a?"0 6px 16px rgba(234,88,12,.35), inset 0 1px 0 rgba(255,255,255,.4)":"none",fontFamily:"inherit"}}><Icon size={15}/>{n.label}</button>
               );})}
             </div>);
           })}
@@ -766,20 +769,22 @@ export default function App() {
             <h1 className="titulo-barra" style={{fontSize:17,fontWeight:700,color:"#1E293B",margin:0}}>{(()=>{const n=NAV.find(x=>x.id===page);return n?(n.grupo?`${n.grupo} · ${n.label}`:n.label):"";})()}</h1>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            {data.sucursales.length>0&&<div className="selector-sucursal" style={{display:"flex",alignItems:"center",gap:6,background:"rgba(245,243,255,.8)",border:"1px solid #DDD6FE",borderRadius:999,padding:"4px 10px",minWidth:0}}>
+            {data.sucursales.length>0&&<div data-tour="sucursal" className="selector-sucursal" style={{display:"flex",alignItems:"center",gap:6,background:"rgba(245,243,255,.8)",border:"1px solid #DDD6FE",borderRadius:999,padding:"4px 10px",minWidth:0}}>
               <BookOpen size={14} color="#7C3AED"/>
               <select value={sucursalActiva||""} onChange={e=>{setSucursalActiva(e.target.value);try{localStorage.setItem("seeds_sucursal",e.target.value);}catch(x){}}} style={{border:"none",background:"transparent",fontSize:13,fontWeight:700,color:"#6D28D9",cursor:"pointer",outline:"none",fontFamily:"inherit",maxWidth:160}}>
                 {data.sucursales.filter(s=>s.activa!==false).map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
             </div>}
             {rol.perfil?.maestro_id&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:8,cursor:"pointer",padding:"5px 10px",color:"#EA580C",fontSize:12,fontWeight:700,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
-            <button onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"rgba(255,255,255,.6)",border:"1px solid rgba(255,255,255,.85)",borderRadius:999,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
+            <BotonAyuda onClick={recorrido.abrir}/>
+            <button data-tour="refrescar" onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"rgba(255,255,255,.6)",border:"1px solid rgba(255,255,255,.85)",borderRadius:999,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
             <div style={{fontSize:12,color:"#64748B"}} className="hide-mobile">{session.user.email}</div>
           </div>
         </header>
         <div style={{flex:1,overflow:"auto",padding:20}}>{pageMap[page]}</div>
       </main>
       <AsistenteIA data={dataSuc} session={session} nombreSucursal={data.sucursales.find(s=>s.id===sucursalActiva)?.nombre||""}/>
+      <Recorrido estado={recorrido} pasos={PASOS_ADMIN} abrirMenu={setSidebarOpen} irA={setPage}/>
       {toast&&<div className="vidrio-ahumado aviso-flotante" role="status">
         <span className="aviso-icono" style={{background:toast.type==="success"?"#10B981":"#EF4444"}}>{toast.type==="success"?"✓":"!"}</span>
         <span>{toast.msg}</span>
@@ -961,7 +966,7 @@ function AsistenteIA({data,session,nombreSucursal}){
       @keyframes as-punto{0%,80%,100%{opacity:.25}40%{opacity:1}}
       .as-punto{display:inline-block;width:6px;height:6px;border-radius:50%;background:#EA580C;margin:0 2px;animation:as-punto 1.2s infinite}
     `}</style>
-    {!abierto&&<button onClick={()=>setAbierto(true)} title="Asistente financiero con IA" className="vidrio-ahumado" style={{position:"fixed",right:20,bottom:20,zIndex:90,display:"flex",alignItems:"center",gap:8,padding:"12px 18px",borderRadius:30,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>
+    {!abierto&&<button data-tour="asistente" onClick={()=>setAbierto(true)} title="Asistente financiero con IA" className="vidrio-ahumado" style={{position:"fixed",right:20,bottom:20,zIndex:90,display:"flex",alignItems:"center",gap:8,padding:"12px 18px",borderRadius:30,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>
       <MessageCircle size={18}/>Asistente IA
     </button>}
     {abierto&&<div style={{position:"fixed",right:ancho?0:20,bottom:ancho?0:20,top:ancho?0:"auto",left:ancho?0:"auto",zIndex:95,width:ancho?"100%":400,height:ancho?"100%":"min(640px, calc(100vh - 40px))",background:"#fff",borderRadius:ancho?0:16,boxShadow:"0 20px 60px rgba(15,23,42,.3)",display:"flex",flexDirection:"column",overflow:"hidden",border:"1px solid #E2E8F0"}}>
