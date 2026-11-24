@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import { card, input, btn, btnO, label, badge } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
+import { SELLO_SEEDS, FIRMA_ADMIN } from "./sello";
 import { AlertasFinanzasPage } from "./alertasFinanzas";
 import { ContabilidadPage } from "./contabilidad";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
@@ -231,68 +232,159 @@ const dibujarLogo = (c, x=18, y=16, size=58) => {
   } catch(e){}
 };
 
-// ── Imagen de factura (Canvas) ──
+// ── Sello y firma precargados para las facturas formales ──
+const selloImg = typeof Image !== "undefined" ? new Image() : null;
+if (selloImg) { selloImg.src = SELLO_SEEDS; }
+const firmaImg = typeof Image !== "undefined" ? new Image() : null;
+if (firmaImg) { firmaImg.src = FIRMA_ADMIN; }
+const dibujarImagen = (c, img, x, y, w, h, alpha=1, rot=0) => {
+  try {
+    if (!img || !img.complete || !img.naturalWidth) return;
+    c.save(); c.globalAlpha = alpha;
+    c.translate(x + w/2, y + h/2); if (rot) c.rotate(rot);
+    c.drawImage(img, -w/2, -h/2, w, h);
+    c.restore();
+  } catch(e){}
+};
+
+// ── Mensajes formales para WhatsApp ──
+// Saludo según la hora: días hasta 11:59, tardes hasta 6:59 p. m., noches después.
+const saludoHora = (d = new Date()) => {
+  const h = d.getHours();
+  if (h >= 5 && h < 12) return "Buenos días";
+  if (h >= 12 && h < 19) return "Buenas tardes";
+  return "Buenas noches";
+};
+const lempiras = (n) => `L ${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const FIRMA_MENSAJE = "Atentamente,\nAdministración, Seeds English School";
+
+// Texto que acompaña la factura de cobro o el comprobante de pago.
+const mensajeFactura = (f, al, padre, sec, mora, tipo) => {
+  const esPago = tipo === "comprobante";
+  const quien = padre?.nombre ? `estimado(a) ${padre.nombre}` : "estimado padre de familia";
+  const mes = String(f.mes_correspondiente||"").toLowerCase();
+  const alumno = al?.nombre ? ` de ${al.nombre}` : "";
+  const total = lempiras((Number(f.monto_total)||0) + (Number(mora)||0));
+  const saludo = `${saludoHora()}, ${quien}.\n\nReciba un cordial saludo de parte de Seeds English School.`;
+  if (esPago) {
+    return `${saludo} Confirmamos que recibimos su pago de ${total} por la mensualidad de ${mes}${alumno}. Le adjuntamos su comprobante N.º ${f.numero_factura}.\n\nAgradecemos su confianza y puntualidad. Que tenga un excelente día.\n\n${FIRMA_MENSAJE}`;
+  }
+  const dia = Math.min(Math.max(Number(sec?.dia_vencimiento)||28,1),31);
+  return `${saludo} Le compartimos la factura de cobro N.º ${f.numero_factura}, que corresponde a la mensualidad de ${mes}${alumno}, por un monto de ${total}, con fecha límite el ${dia} de ${mes}.\n\nAgradecemos de antemano su puntualidad. Quedamos a su disposición para cualquier consulta.\n\n${FIRMA_MENSAJE}`;
+};
+
+// ── Imagen de factura formal (Canvas) ──
+// Factura de cobro mensual y comprobante de pago, con sello y firma.
 const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
   const esPago = tipo === "comprobante";
-  const cv = document.createElement('canvas'); cv.width=600; cv.height=720;
-  const c = cv.getContext('2d');
-  c.fillStyle='#fff'; c.fillRect(0,0,600,720);
-  c.fillStyle=esPago?'#059669':'#1E293B'; c.fillRect(0,0,600,90);
-  // Logo sobre fondo blanco redondeado en la esquina
-  c.save(); c.fillStyle='#fff'; cajaRedonda(c,14,12,66,66,10); c.fill(); c.restore();
-  dibujarLogo(c, 18, 16, 58);
-  c.fillStyle=esPago?'#fff':'#F97316'; c.font='bold 24px Segoe UI,system-ui,sans-serif';
-  c.textAlign='center'; c.fillText('Seeds English School',300,38);
-  c.fillStyle=esPago?'#D1FAE5':'#94A3B8'; c.font='12px Segoe UI,sans-serif';
-  c.fillText('Jesús de Otoro, Intibucá, Honduras',300,60);
-  c.fillStyle=esPago?'#fff':'#CBD5E1'; c.font='11px Segoe UI,sans-serif';
-  c.fillText(String(f.fecha_emision||''),300,78);
-  c.fillStyle=esPago?'#059669':'#F97316'; c.fillRect(0,90,600,4);
-  c.fillStyle=esPago?'#059669':'#F97316'; c.font='bold 20px Segoe UI,sans-serif';
-  c.fillText(esPago?'COMPROBANTE DE PAGO':'FACTURA DE COBRO',300,125);
-  c.fillStyle='#1E293B'; c.font='bold 16px Segoe UI,sans-serif';
-  c.fillText(f.numero_factura,300,150);
-  c.strokeStyle='#E2E8F0'; c.lineWidth=1;
-  c.beginPath(); c.moveTo(40,168); c.lineTo(560,168); c.stroke();
-  c.textAlign='left'; c.fillStyle='#F97316'; c.font='bold 12px Segoe UI,sans-serif';
-  c.fillText('DATOS DEL ALUMNO',50,192);
-  c.fillStyle='#334155'; c.font='13px Segoe UI,sans-serif';
-  c.fillText(`Alumno:   ${al?.nombre||'—'}`,50,214);
-  c.fillText(`Padre:    ${padre?.nombre||'—'}`,50,234);
-  c.fillText(`Teléfono: ${padre?.telefono||'—'}`,50,254);
-  c.fillText(`Sección:  ${sec?.nombre||'—'}`,50,274);
-  c.fillStyle='#F97316'; c.font='bold 12px Segoe UI,sans-serif';
-  c.fillText('DETALLE',350,192);
-  c.fillStyle='#334155'; c.font='13px Segoe UI,sans-serif';
-  c.fillText(`Mes: ${f.mes_correspondiente}`,350,214);
-  if(esPago){c.fillText(`Fecha pago: ${f.fecha_pago||'—'}`,350,234);c.fillText(`Tipo pago: ${f.tipo_pago}`,350,254);}
-  else{c.fillText(`Límite: ${Math.min(Math.max(Number(sec?.dia_vencimiento)||28,1),31)} de ${f.mes_correspondiente}`,350,234);}
-  c.beginPath(); c.moveTo(40,300); c.lineTo(560,300); c.stroke();
-  c.fillStyle='#F1F5F9'; c.fillRect(40,310,520,32);
-  c.fillStyle='#475569'; c.font='bold 12px Segoe UI,sans-serif';
-  c.fillText('Concepto',55,331);
-  c.textAlign='right'; c.fillText('Monto',545,331);
-  c.textAlign='left'; c.fillStyle='#1E293B'; c.font='14px Segoe UI,sans-serif';
-  c.fillText(`Mensualidad ${f.mes_correspondiente}`,55,365);
-  c.textAlign='right'; c.fillText(`L ${(f.monto_total||0).toLocaleString()}`,545,365);
-  let y=390;
-  if(mora>0){c.textAlign='left';c.fillStyle='#DC2626';c.fillText('Mora por atraso',55,y);c.textAlign='right';c.fillText(`L ${mora.toLocaleString()}`,545,y);y+=30;}
-  c.beginPath();c.moveTo(40,y+5);c.lineTo(560,y+5);c.stroke();
-  y+=15;
-  c.fillStyle=esPago?'#059669':'#F97316'; c.fillRect(40,y,520,50);
-  c.fillStyle='#fff'; c.font='bold 20px Segoe UI,sans-serif';
-  c.textAlign='left'; c.fillText(esPago?'TOTAL PAGADO:':'TOTAL A PAGAR:',60,y+32);
-  c.textAlign='right'; c.fillText(`L ${((f.monto_total||0)+mora).toLocaleString()}`,540,y+32);
-  y+=70;
-  if(esPago){
-    c.save();c.translate(300,y+30);c.rotate(-0.15);
-    c.strokeStyle='#059669';c.lineWidth=4;c.font='bold 48px Segoe UI,sans-serif';c.textAlign='center';
-    c.strokeText('✓ PAGADO',0,0);c.restore();y+=60;
+  const W = 600, H = 780, K = 2; // se dibuja al doble para que se vea nítida
+  const cv = document.createElement('canvas'); cv.width = W*K; cv.height = H*K;
+  const c = cv.getContext('2d'); c.scale(K, K);
+  const AZUL = '#1B2A4A', NARANJA = '#EA580C', ACENTO = NARANJA, VERDE = '#166534', GRIS = '#475569', LINEA = '#CBD5E1';
+  const SERIF = 'Georgia,"Times New Roman",serif', SANS = '"Segoe UI",system-ui,sans-serif';
+  const linea = (x1,y1,x2,y2,col=LINEA,w=1) => { c.strokeStyle=col; c.lineWidth=w; c.beginPath(); c.moveTo(x1,y1); c.lineTo(x2,y2); c.stroke(); };
+
+  c.fillStyle = '#fff'; c.fillRect(0,0,W,H);
+  // Marco doble
+  c.strokeStyle = AZUL; c.lineWidth = 2; c.strokeRect(10,10,W-20,H-20);
+  c.lineWidth = 0.6; c.strokeRect(15,15,W-30,H-30);
+  c.fillStyle = NARANJA; c.fillRect(16,16,W-32,6);
+
+  // Encabezado: logo, nombre de la escuela y recuadro del documento
+  dibujarLogo(c, 32, 30, 84);
+  c.textAlign = 'left'; c.fillStyle = AZUL; c.font = `bold 19px ${SERIF}`;
+  c.fillText('SEEDS ENGLISH SCHOOL', 128, 60);
+  c.fillStyle = GRIS; c.font = `12px ${SANS}`;
+  c.fillText('Jesús de Otoro, Intibucá, Honduras', 128, 80);
+  c.fillText('Administración', 128, 97);
+
+  c.strokeStyle = ACENTO; c.lineWidth = 1.2; c.strokeRect(392, 30, 176, 78);
+  c.fillStyle = ACENTO; c.fillRect(392, 30, 176, 26);
+  c.textAlign = 'center'; c.fillStyle = '#fff'; c.font = `bold 12px ${SANS}`;
+  c.fillText(esPago ? 'COMPROBANTE DE PAGO' : 'FACTURA DE COBRO', 480, 48);
+  c.fillStyle = AZUL; c.font = `bold 15px ${SANS}`;
+  c.fillText(`N.º ${f.numero_factura||'—'}`, 480, 78);
+  c.fillStyle = GRIS; c.font = `11px ${SANS}`;
+  c.fillText(`Emisión: ${f.fecha_emision||'—'}`, 480, 97);
+
+  linea(32, 128, W-32, 128, AZUL, 1.5);
+  linea(32, 132, W-32, 132, ACENTO, 0.8);
+
+  // Datos del alumno y del documento
+  const etiqueta = (t, x, y) => { c.textAlign='left'; c.fillStyle=ACENTO; c.font=`bold 11px ${SANS}`; c.fillText(t, x, y); };
+  const dato = (k, v, x, y) => {
+    c.textAlign='left'; c.fillStyle=GRIS; c.font=`11px ${SANS}`; c.fillText(k, x, y);
+    c.fillStyle='#0F172A'; c.font=`13px ${SANS}`; c.fillText(String(v||'—'), x, y+16);
+  };
+  etiqueta('DATOS DEL ALUMNO', 40, 162);
+  dato('Alumno', al?.nombre, 40, 184);
+  dato('Padre o encargado', padre?.nombre, 40, 222);
+  dato('Teléfono', padre?.telefono, 40, 260);
+  dato('Sección', sec?.nombre, 40, 298);
+  etiqueta(esPago ? 'DATOS DEL PAGO' : 'DATOS DEL COBRO', 350, 162);
+  dato('Mes correspondiente', f.mes_correspondiente, 350, 184);
+  if (esPago) {
+    const tp = TIPOS_PAGO.find(t=>t.value===f.tipo_pago)?.label || f.tipo_pago;
+    dato('Fecha de pago', f.fecha_pago, 350, 222);
+    dato('Forma de pago', tp, 350, 260);
+  } else {
+    dato('Fecha límite de pago', `${Math.min(Math.max(Number(sec?.dia_vencimiento)||28,1),31)} de ${f.mes_correspondiente||''}`, 350, 222);
   }
-  c.fillStyle='#64748B'; c.font='11px Segoe UI,sans-serif'; c.textAlign='center';
-  if(!esPago) c.fillText('Envíe su comprobante de pago al número de administración.',300,y+15);
-  c.fillText('Seeds English School 🌱',300,y+(esPago?15:35));
-  c.strokeStyle='#E2E8F0'; c.lineWidth=2; c.strokeRect(1,1,598,718);
+
+  // Tabla de conceptos
+  let y = 340;
+  c.fillStyle = '#F1F5F9'; c.fillRect(32, y, W-64, 30);
+  linea(32, y, W-32, y, AZUL, 1); linea(32, y+30, W-32, y+30, NARANJA, 2);
+  c.fillStyle = AZUL; c.font = `bold 12px ${SANS}`;
+  c.textAlign='left'; c.fillText('CONCEPTO', 46, y+19);
+  c.textAlign='right'; c.fillText('MONTO', W-46, y+19);
+  y += 56;
+  c.fillStyle = '#0F172A'; c.font = `13px ${SANS}`;
+  c.textAlign='left'; c.fillText(`Mensualidad de ${f.mes_correspondiente||''}`, 46, y);
+  c.textAlign='right'; c.fillText(lempiras(f.monto_total), W-46, y);
+  if (mora > 0) {
+    y += 28;
+    c.textAlign='left'; c.fillText('Recargo por pago tardío', 46, y);
+    c.textAlign='right'; c.fillText(lempiras(mora), W-46, y);
+  }
+  y += 18; linea(32, y, W-32, y);
+
+  // Total
+  y += 14;
+  c.fillStyle = AZUL; c.fillRect(W-292, y, 260, 44);
+  c.fillStyle = NARANJA; c.fillRect(W-292, y, 6, 44);
+  c.fillStyle = '#fff'; c.font = `bold 13px ${SANS}`; c.textAlign='left';
+  c.fillText(esPago ? 'TOTAL PAGADO' : 'TOTAL A PAGAR', W-278, y+27);
+  c.font = `bold 18px ${SANS}`; c.textAlign='right';
+  c.fillText(lempiras((Number(f.monto_total)||0) + (Number(mora)||0)), W-46, y+28);
+  c.textAlign='left'; c.fillStyle = esPago ? VERDE : GRIS; c.font = `${esPago?'bold ':''}12px ${SANS}`;
+  c.fillText(esPago ? 'Estado: PAGADO' : 'Estado: Pendiente de pago', 40, y+27);
+
+  // Nota
+  y += 76;
+  c.fillStyle = GRIS; c.font = `italic 11.5px ${SERIF}`; c.textAlign='left';
+  if (esPago) {
+    c.fillText('Hacemos constar que se recibió el pago detallado en este comprobante.', 40, y);
+    c.fillText('Agradecemos su confianza y puntualidad.', 40, y+17);
+  } else {
+    c.fillText('Le agradecemos realizar su pago a más tardar en la fecha límite indicada', 40, y);
+    c.fillText('y enviar su comprobante al número de administración.', 40, y+17);
+  }
+
+  // Firma y sello
+  const yf = H - 210;
+  dibujarImagen(c, firmaImg, 78, yf, 170, 135);
+  linea(60, yf+130, 270, yf+130, NARANJA, 1.2);
+  c.textAlign='center'; c.fillStyle=AZUL; c.font=`bold 12px ${SANS}`;
+  c.fillText('Kerling Cantarero', 165, yf+148);
+  c.fillStyle=GRIS; c.font=`11px ${SANS}`;
+  c.fillText('Administración', 165, yf+164);
+  dibujarImagen(c, selloImg, 380, yf-6, 160, 160, 0.9, -0.12);
+
+  // Pie
+  linea(32, H-38, W-32, H-38, NARANJA, 1);
+  c.textAlign='center'; c.fillStyle='#64748B'; c.font=`10.5px ${SANS}`;
+  c.fillText('Documento emitido por Seeds English School · Jesús de Otoro, Intibucá, Honduras', W/2, H-22);
   return cv.toDataURL('image/png');
 };
 
@@ -1478,7 +1570,8 @@ function FacturasPage({data,loadData,showToast}){
     const sec=al?data.secciones.find(s=>s.id===al.seccion_id):null;
     const mora=f.tipo_factura==="comprobante"?moraCobrada(f):calcMora(f, data.secciones, data.alumnos);
     const dataUrl=generarImgFactura(f,al,padre,sec,mora,tipo);
-    setImgPreview({dataUrl,phone:padre?.telefono||"",destinatario:padre?.nombre||al?.nombre||"",numero:f.numero_factura});
+    const texto=mensajeFactura(f,al,padre,sec,mora,tipo);
+    setImgPreview({dataUrl,texto,phone:padre?.telefono||"",destinatario:padre?.nombre||al?.nombre||"",numero:f.numero_factura});
   };
 
   const openComp=(cobro=null)=>{if(cobro){const mora=calcMora(cobro, data.secciones, data.alumnos);const base=Number(cobro.saldo)>0?Number(cobro.saldo):Number(cobro.monto_total);setForm({alumno_id:cobro.alumno_id,cobro_id:cobro.id,fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:cobro.mes_correspondiente,monto_total:String(base),tipo_pago:"efectivo",notas:"",mora,cobrar_mora:mora>0});}else{setForm({alumno_id:"",fecha_pago:new Date().toISOString().split("T")[0],mes_correspondiente:MESES[new Date().getMonth()],monto_total:"",tipo_pago:"efectivo",notas:"",cobro_id:"",mora:0,cobrar_mora:false});}setModal("comprobante");};
@@ -1700,6 +1793,12 @@ function ImgPreviewModal({img,onClose}){
     }
   };
 
+  // Copia solo el mensaje (por si WhatsApp no lo dejó escrito)
+  const[msgCopiado,setMsgCopiado]=useState(false);
+  const copiarMensaje = async () => {
+    try{ await navigator.clipboard.writeText(img.texto||""); setMsgCopiado(true); setTimeout(()=>setMsgCopiado(false),2500); }catch(e){}
+  };
+
   // Descarga la imagen a la carpeta de Descargas
   const descargar = () => {
     const a=document.createElement('a');
@@ -1709,7 +1808,7 @@ function ImgPreviewModal({img,onClose}){
   // Copia + abre el chat del padre en la app de WhatsApp
   const abrirChat = async () => {
     await copiarImagen();
-    abrirWhatsApp(img.phone);
+    abrirWhatsApp(img.phone, img.texto||"");
   };
 
   // Menú de compartir del celular (adjunta la imagen directo)
@@ -1718,7 +1817,7 @@ function ImgPreviewModal({img,onClose}){
       const blob = await (await fetch(img.dataUrl)).blob();
       const file = new File([blob], `${img.numero}.png`, {type:'image/png'});
       if(navigator.canShare && navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], title:img.numero});
+        await navigator.share(img.texto?{files:[file], title:img.numero, text:img.texto}:{files:[file], title:img.numero});
       }else{
         alert("Este navegador no permite compartir directo. Usa 'Descargar' y adjunta la imagen en WhatsApp.");
       }
@@ -1740,6 +1839,15 @@ function ImgPreviewModal({img,onClose}){
 
       <img src={img.dataUrl} alt="Factura" style={{width:"100%",borderRadius:8,border:"1px solid #E2E8F0",marginBottom:10}}/>
 
+      {/* Mensaje formal que acompaña la factura */}
+      {img.texto && <div style={{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"10px 12px",fontSize:12,color:"#334155",marginBottom:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+          <strong style={{color:"#1E293B"}}>Mensaje que se enviará</strong>
+          <button onClick={copiarMensaje} style={{background:"none",border:"1px solid #CBD5E1",borderRadius:6,padding:"2px 8px",fontSize:11,cursor:"pointer",color:"#475569"}}>{msgCopiado?"✓ Copiado":"Copiar mensaje"}</button>
+        </div>
+        <div style={{whiteSpace:"pre-wrap",lineHeight:1.45}}>{img.texto}</div>
+      </div>}
+
       {/* Estado de la copia */}
       {estado==="copiado" && <div style={{background:"#ECFDF5",border:"1px solid #059669",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#059669",marginBottom:10,fontWeight:600}}>
         ✓ Imagen copiada. En el chat de WhatsApp pega con <strong>Ctrl+V</strong> y dale Enter.
@@ -1749,7 +1857,7 @@ function ImgPreviewModal({img,onClose}){
       </div>}
 
       <div style={{background:"#FEF3C7",borderRadius:8,padding:10,fontSize:12,color:"#92400E",marginBottom:12}}>
-        <strong>💻 En computadora:</strong> "Abrir chat" → se abre WhatsApp con el padre y la imagen queda copiada → <strong>Ctrl+V</strong> → Enter.<br/>
+        <strong>💻 En computadora:</strong> "Abrir chat" → se abre WhatsApp con el padre{img.texto?", el mensaje ya escrito":""} y la imagen queda copiada → <strong>Ctrl+V</strong> → Enter{img.texto?" (si el mensaje queda en la caja, Enter otra vez)":""}.<br/>
         <strong>📱 En celular:</strong> "Compartir imagen" → elegí WhatsApp → elegí el contacto.
       </div>
 
@@ -1762,7 +1870,7 @@ function ImgPreviewModal({img,onClose}){
       </div>
 
       {num && <div style={{fontSize:11,color:"#94A3B8",textAlign:"center"}}>
-        ¿No abrió la app? <a href={linkWhatsAppWeb(img.phone)} target="_blank" rel="noreferrer" style={{color:"#2563EB",fontWeight:600}}>Abrir en WhatsApp Web</a>
+        ¿No abrió la app? <a href={linkWhatsAppWeb(img.phone, img.texto||"")} target="_blank" rel="noreferrer" style={{color:"#2563EB",fontWeight:600}}>Abrir en WhatsApp Web</a>
       </div>}
     </div>
   </div>);
@@ -1814,7 +1922,8 @@ function HistorialPage({data,loadData,showToast}){
     const s=al?data.secciones.find(ss=>ss.id===al.seccion_id):null;
     const mora=f.tipo_factura==="comprobante"?moraCobrada(f):calcMora(f, data.secciones, data.alumnos);
     const dataUrl=generarImgFactura(f,al,p,s,mora,tipo);
-    setImgPreview({dataUrl,phone:p?.telefono||"",destinatario:p?.nombre||al?.nombre||"",numero:f.numero_factura});
+    const texto=mensajeFactura(f,al,p,s,mora,tipo);
+    setImgPreview({dataUrl,texto,phone:p?.telefono||"",destinatario:p?.nombre||al?.nombre||"",numero:f.numero_factura});
   };
 
   // Estado de cuenta anual (los 12 meses) para enviar al padre — PDF vía impresión
