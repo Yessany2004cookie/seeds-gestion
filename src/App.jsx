@@ -5,9 +5,11 @@ import { card, input, btn, btnO, label, badge, tono, AZUL as AZUL_MARCA, NARANJA
 import { LOGO_SEEDS } from "./logo";
 import { SELLO_SEEDS, FIRMA_ADMIN } from "./sello";
 import { AlertasFinanzasPage, logoParaExcel } from "./alertasFinanzas";
+import { encabezadoExcel } from "./documentoFormal";
 import { FinResumenExcel, FinMaestrosExcel, FinGastosExcel, IngresosExcel, DescargasFinanzas, hojasResumen, hojasMaestros, hojasGastos, hojasIngresos } from "./finanzasExcel";
 import { useVista, SelectorVista, EstilosVistas } from "./vistas";
 import { ContabilidadPage } from "./contabilidad";
+import { ResumenMesInicio } from "./resumenMesInicio";
 import { useContadorUso, UsoSistemaPanel, ContadorVisible } from "./usoSistema";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
 import { SelectorFondo } from "./fondo";
@@ -1201,6 +1203,7 @@ function Dashboard({data,setPage,loadData,showToast}){
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:24}}>
       {stats.map((s,i)=>{const Icon=s.i;return(<div key={i} className="tarjeta-kpi" onClick={()=>setPage(s.p)} style={{...card,cursor:"pointer",padding:"16px 18px",display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${tono(s.c)}`}}><div style={{background:tono(s.c)+"12",border:`1px solid ${tono(s.c)}30`,borderRadius:4,padding:10,display:"flex"}}><Icon size={20} color={tono(s.c)}/></div><div style={{minWidth:0}}><div style={{fontSize:11,color:"#5B6576",textTransform:"uppercase",letterSpacing:.6,fontWeight:600}}>{s.l}</div><div className="cifra" style={{fontSize:22,fontWeight:700,color:"#1B2A4A",marginTop:2}}>{s.v}</div></div></div>);})}
     </div>
+    <ResumenMesInicio data={data} setPage={setPage} verAlertas={modulos.activo("alertas")}/>
     <ResumenFinanciero data={data}/>
     <div style={card}><h3 style={{fontSize:15,fontWeight:700,color:"#1E293B",margin:"0 0 14px"}}>Acciones rápidas</h3><div style={{display:"flex",flexWrap:"wrap",gap:10}}><button onClick={()=>setPage("alumnos")} style={btn("#2563EB")}><UserPlus size={15}/>Nueva matrícula</button><button onClick={()=>setPage("facturas")} style={btn("#059669")}><FileText size={15}/>Crear cobros</button>{modulos.activo("recordatorios")&&<button onClick={()=>setPage("recordatorios")} style={btn("#7C3AED")}><Bell size={15}/>Recordatorios</button>}</div></div>
   </div>);
@@ -4619,7 +4622,7 @@ function ReportesPage({data,showToast}){
       const writeExcelFile=(await import("write-excel-file/browser")).default;
       // Encabezado formal: fila con el logo, nombre de la institución, título y fecha
       const logoXls=await logoParaExcel(marcaRep.logoSrc);
-      const encabezado=(t)=>[...(logoXls?[[{value:null,height:48}]]:[]),[{value:marcaRep.nombreO("Seeds English School"),fontWeight:"bold",fontSize:14,textColor:"#1B2A4A"}],[{value:`${t} — ${mesSel} ${anioSel}`,fontWeight:"bold",fontSize:12}],[{value:`Cifras en Lempiras · Generado el ${hoyTxt}`,textColor:"#5B6576"}],[]];
+      const encabezado=(t)=>encabezadoExcel("A",{ancho:5,logo:logoXls,nombre:marcaRep.nombreO("Seeds English School"),sub:"Finanzas · Reportes",titulo:t,periodo:`${mesSel} ${anioSel}`});
       const cols=[{width:46},{width:16},{width:16},{width:10},{width:60}];
       const resumen=[...encabezado("Resumen del mes"),
         [{value:"Concepto",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF"},{value:"Monto",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:"right"},{value:"%",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:"right"},null,{value:"Qué es",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF"}],
