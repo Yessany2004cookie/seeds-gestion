@@ -18,10 +18,12 @@ import { btn, btnO, vidrio } from "./estilo";
 export const NOVEDADES = [
   { id: "2026-11-menu-agrupado", rol: "admin", fecha: "2026-11-23", titulo: "Menú ordenado por áreas",
     texto: "El menú ahora se agrupa en Escuela y alumnado, Cobros, Finanzas, Contabilidad y Configuración. Toque un grupo para abrirlo." },
-  { id: "2026-11-alertas", rol: "admin", fecha: "2026-11-23", titulo: "Alertas financieras", ir: "alertas",
+  { id: "2026-11-alertas", rol: "admin", fecha: "2026-11-23", titulo: "Alertas financieras", ir: "alertas", modulo: "alertas",
     texto: "Avisos automáticos de cobros atrasados, gastos fuera de lo normal y otros puntos que conviene revisar." },
-  { id: "2026-11-contabilidad", rol: "admin", fecha: "2026-11-23", titulo: "Contabilidad", ir: "c_resultados",
+  { id: "2026-11-contabilidad", rol: "admin", fecha: "2026-11-23", titulo: "Contabilidad", ir: "c_resultados", modulo: "contabilidad",
     texto: "Estado de resultados, balance general, flujo de efectivo, libro diario y mayor, cierre de mes y catálogo de cuentas." },
+  { id: "2026-11-modulos", rol: "admin", fecha: "2026-11-24", titulo: "Activar y desactivar módulos", ir: "sistema",
+    texto: "En Configuración → Sistema y respaldos puede apagar las partes que no usa (portal docente, materiales, contabilidad…). No se borra ningún dato." },
   { id: "2026-11-recorrido", rol: "todos", fecha: "2026-11-23", titulo: "Recorrido guiado",
     texto: "El botón ? de la barra de arriba le muestra otra vez el recorrido por el sistema cuando lo necesite." },
 ];
@@ -30,18 +32,19 @@ export const NOVEDADES = [
 //  PASOS DE CADA RECORRIDO. objetivo: valor del atributo data-tour del
 //  elemento a resaltar (sin objetivo, la tarjeta sale al centro).
 //  menu: true si el elemento está en el menú lateral (en celular se abre).
+//  modulo: el paso se salta si ese módulo está apagado (ver modulos.jsx).
 // ════════════════════════════════════════════════════════════
 export const PASOS_ADMIN = [
   { titulo: "¡Bienvenida a Seeds!", texto: "Le mostramos en un minuto dónde está cada cosa. Puede saltar el recorrido cuando quiera y repetirlo con el botón ? de arriba." },
   { objetivo: "n-dashboard", menu: true, titulo: "Inicio", texto: "El resumen del día: alumnos activos, cobros pendientes y los números del mes de un vistazo." },
-  { objetivo: "g-escuela", menu: true, titulo: "Escuela y alumnado", texto: "Secciones, maestros, matrícula de alumnos y la gestión curricular (asistencia, parte mensual, bitácoras, reflections, check list y solicitudes de docentes)." },
-  { objetivo: "g-cobros", menu: true, titulo: "Cobros", texto: "Facturas y pagos de mensualidades, el historial de cada alumno, recordatorios por WhatsApp o correo, venta de materiales y cobros de graduación." },
-  { objetivo: "g-finanzas_g", menu: true, titulo: "Finanzas", texto: "Alertas financieras, gastos, deudas y caja, ingresos extra y los reportes en PDF para compartir." },
-  { objetivo: "g-contab_g", menu: true, titulo: "Contabilidad", texto: "Estados financieros, libro diario y mayor, cierre de mes y catálogo de cuentas." },
+  { objetivo: "g-escuela", menu: true, titulo: "Escuela y alumnado", texto: "Secciones, maestros, matrícula de alumnos y, si está activa, la gestión curricular de los docentes." },
+  { objetivo: "g-cobros", menu: true, titulo: "Cobros", texto: "Facturas y pagos de mensualidades, el historial de cada alumno y, según lo que tenga activo, recordatorios, materiales y graduación." },
+  { objetivo: "g-finanzas_g", menu: true, titulo: "Finanzas", texto: "Gastos, deudas y caja, los reportes en PDF para compartir y, si están activos, alertas e ingresos extra." },
+  { objetivo: "g-contab_g", menu: true, modulo: "contabilidad", titulo: "Contabilidad", texto: "Estados financieros, libro diario y mayor, cierre de mes y catálogo de cuentas." },
   { objetivo: "g-sistema_g", menu: true, titulo: "Configuración", texto: "Datos de la institución, sucursales y accesos, y en Sistema los respaldos de la información." },
   { objetivo: "sucursal", titulo: "Sucursal", texto: "Elija aquí la sucursal con la que trabaja. Todas las pantallas muestran solo los datos de esa sucursal." },
   { objetivo: "refrescar", titulo: "Actualizar datos", texto: "Si alguien más hizo cambios, toque aquí para ver la información más reciente." },
-  { objetivo: "asistente", titulo: "Asistente financiero", texto: "Pregúntele en palabras sencillas por sus números: cobros, gastos, utilidad o qué grupos conviene unir." },
+  { objetivo: "asistente", modulo: "asistente", titulo: "Asistente financiero", texto: "Pregúntele en palabras sencillas por sus números: cobros, gastos, utilidad o qué grupos conviene unir." },
   { objetivo: "ayuda", titulo: "¿Necesita repasar?", texto: "Con este botón vuelve a ver el recorrido cuando quiera. ¡Listo, a trabajar!" },
 ];
 
@@ -49,12 +52,12 @@ export const PASOS_DOCENTE = [
   { titulo: "¡Bienvenido al portal docente!", texto: "Le mostramos en un minuto dónde está cada cosa. Puede saltar el recorrido cuando quiera y repetirlo con el botón ? de arriba." },
   { objetivo: "n-inicio", menu: true, titulo: "Inicio", texto: "Su resumen: grupos, alumnos y lo que tiene pendiente." },
   { objetivo: "n-grupos", menu: true, titulo: "Mis grupos", texto: "Sus grupos con la lista de alumnos y los datos de contacto de los padres." },
-  { objetivo: "n-asistencia", menu: true, titulo: "Libreta de asistencia", texto: "Pase lista cada clase: presente, ausente o tarde." },
-  { objetivo: "n-parte", menu: true, titulo: "Parte mensual", texto: "El resumen de asistencia del mes de cada grupo, listo para descargar en Excel." },
-  { objetivo: "n-bitacora", menu: true, titulo: "Bitácora", texto: "Anote lo que trabajó en cada clase." },
-  { objetivo: "n-reflections", menu: true, titulo: "Reflections", texto: "Comparta sus reflexiones sobre las clases con coordinación." },
-  { objetivo: "n-reporte", menu: true, titulo: "Check list de la clase", texto: "Revise y envíe el check list de cada clase." },
-  { objetivo: "n-solicitudes", menu: true, titulo: "Solicitudes", texto: "Pida permisos, materiales u otras cosas a administración y vea si se aprobaron." },
+  { objetivo: "n-asistencia", menu: true, modulo: "asistencia", titulo: "Libreta de asistencia", texto: "Pase lista cada clase: presente, ausente o tarde." },
+  { objetivo: "n-parte", menu: true, modulo: "asistencia", titulo: "Parte mensual", texto: "El resumen de asistencia del mes de cada grupo, listo para descargar en Excel." },
+  { objetivo: "n-bitacora", menu: true, modulo: "bitacoras", titulo: "Bitácora", texto: "Anote lo que trabajó en cada clase." },
+  { objetivo: "n-reflections", menu: true, modulo: "reflections", titulo: "Reflections", texto: "Comparta sus reflexiones sobre las clases con coordinación." },
+  { objetivo: "n-reporte", menu: true, modulo: "reflections", titulo: "Check list de la clase", texto: "Revise y envíe el check list de cada clase." },
+  { objetivo: "n-solicitudes", menu: true, modulo: "solicitudes", titulo: "Solicitudes", texto: "Pida permisos, materiales u otras cosas a administración y vea si se aprobaron." },
   { objetivo: "ayuda", titulo: "¿Necesita repasar?", texto: "Con este botón vuelve a ver el recorrido cuando quiera. ¡Buenas clases!" },
 ];
 
@@ -64,12 +67,16 @@ const claveLocal = (uid, rol) => `seeds_recorrido_${uid}_${rol}`;
 // Decide qué mostrar al entrar y guarda lo que el usuario ya vio.
 // Devuelve { modo, novedades, abrir, cerrar }.
 // modo: null | "recorrido" | "repaso" (invitación mensual) | "novedades"
-export function useRecorrido(session, rol) {
+// visible(novedad): opcional; las novedades de módulos apagados no se muestran
+// ni se marcan como vistas (se avisan cuando el módulo se enciende).
+export function useRecorrido(session, rol, visible) {
   const uid = session?.user?.id;
   const [modo, setModo] = useState(null);
   const [novedades, setNovedades] = useState([]);
   const estadoRef = useRef(null);
   const sesionRef = useRef(session); sesionRef.current = session;
+  const visibleRef = useRef(visible); visibleRef.current = visible;
+  const deEsteRol = () => NOVEDADES.filter((n) => (n.rol === rol || n.rol === "todos") && (!visibleRef.current || visibleRef.current(n)));
 
   useEffect(() => {
     if (!uid) return;
@@ -78,7 +85,7 @@ export function useRecorrido(session, rol) {
     const remoto = sesionRef.current?.user?.user_metadata?.recorrido?.[rol] || null;
     const est = remoto || local || {};
     estadoRef.current = est;
-    const nuevas = NOVEDADES.filter((n) => (n.rol === rol || n.rol === "todos") && !(est.novedades || []).includes(n.id));
+    const nuevas = deEsteRol().filter((n) => !(est.novedades || []).includes(n.id));
     setNovedades(nuevas);
     const t = setTimeout(() => {
       if (!est.visto) setModo("recorrido");
@@ -92,7 +99,7 @@ export function useRecorrido(session, rol) {
     if (!uid) return;
     const est = {
       visto: true, mes: mesActual(),
-      novedades: NOVEDADES.filter((n) => n.rol === rol || n.rol === "todos").map((n) => n.id),
+      novedades: [...new Set([...(estadoRef.current?.novedades || []), ...deEsteRol().map((n) => n.id)])],
     };
     estadoRef.current = est;
     setNovedades([]);
