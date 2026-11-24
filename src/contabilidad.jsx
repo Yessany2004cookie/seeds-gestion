@@ -17,6 +17,8 @@ const L = (n) => { const v = Math.round((Number(n) || 0) * 100) / 100; const t =
 const clave = (a, m) => a * 12 + m;
 const th = { textAlign: "left", padding: "7px 8px", fontSize: 11, color: GRIS, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: "2px solid #E2E8F0" };
 const td = { padding: "6px 8px", borderBottom: "1px solid #F1F5F9", fontSize: 12.5, verticalAlign: "top" };
+// Recuadro "En palabras simples": resume un reporte contable en una o dos frases
+const Simple = ({ children }) => <div style={{ fontSize: 13, lineHeight: 1.55, color: "#1F2937", background: "#F5F7FA", border: "1px solid #DCE1E8", borderLeft: "3px solid #D9641E", borderRadius: 4, padding: "9px 12px", margin: "0 0 14px" }}><b>En palabras simples:</b> {children}</div>;
 const tdR = { ...td, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
 
 // Lista de meses desde el arranque hasta el mes actual
@@ -175,6 +177,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       {tab === "resultados" && <div style={card}>
         <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Estado de resultados — {MESES[sel.mes - 1]} {sel.anio}</h3>
         <p style={{ fontSize: 11.5, color: GRIS, margin: "0 0 12px" }}>Lo ganado y lo gastado <b>del mes</b>, aunque se cobre o se pague en otro mes.</p>
+        <Simple>{totIng === 0 && totGas === 0 ? "todavía no hay movimientos en este mes." : <>a la escuela le correspondieron {L(totIng)} y gastó {L(totGas)} en {MESES[sel.mes - 1]}. {resultado >= 0 ? <>Le quedó una <b style={{ color: VERDE }}>ganancia de {L(resultado)}</b>{totIng > 0 ? <> (L {Math.round(resultado / totIng * 100)} de cada L 100)</> : null}.</> : <>Gastó <b style={{ color: ROJO }}>{L(Math.abs(resultado))} más</b> de lo que le correspondió.</>}</>}</Simple>
         <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>
           <tr><td style={{ ...td, fontWeight: 700 }} colSpan={2}>Ingresos</td></tr>
           {ingresos.map((x) => <tr key={x.c.codigo}><td style={{ ...td, paddingLeft: 22 }}>{x.c.nombre}</td><td style={tdR}>{L(x.v)}</td></tr>)}
@@ -191,6 +194,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
       {tab === "balance" && <div style={card}>
         <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Balance general al {new Date(sel.anio, sel.mes, 0).getDate()} de {MESES[sel.mes - 1]} {sel.anio}</h3>
         <p style={{ fontSize: 11.5, color: GRIS, margin: "0 0 12px" }}>Lo que la escuela tiene, lo que debe y lo que es de la propietaria.</p>
+        <Simple>la escuela <b>tiene</b> {L(totA)} (dinero, lo que le deben y otras cosas) y <b>debe</b> {L(totP)}. Lo que queda, {L(totPat)}, es lo que realmente es de la escuela y su dueña.</Simple>
         <div style={{ display: "grid", gridTemplateColumns: window.innerWidth > 800 ? "1fr 1fr" : "1fr", gap: 20 }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>
             <tr><td style={{ ...td, fontWeight: 700 }} colSpan={2}>Activos (lo que tengo)</td></tr>
@@ -218,6 +222,7 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
 
       {tab === "flujo" && <div style={card}>
         <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Flujo de efectivo — {MESES[sel.mes - 1]} {sel.anio}</h3>
+        <Simple>el mes empezó con {L(dispIniFlujo)} en caja y banco. Entraron {L(totEnt)} y salieron {L(Math.abs(totSal))}, así que terminó con <b>{L(dispFinal)}</b>. Esto es el dinero de verdad, que no siempre es igual a la ganancia.</Simple>
         <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>
           <tr><td style={td}>Efectivo y bancos al iniciar el mes</td><td style={tdR}>{L(dispIniFlujo)}</td></tr>
           <tr><td style={{ ...td, fontWeight: 700, paddingTop: 12 }} colSpan={2}>Entradas de dinero</td></tr>

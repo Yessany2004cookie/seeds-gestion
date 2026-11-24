@@ -4012,6 +4012,9 @@ function ReportesPage({data,showToast}){
   const[anioSel,setAnioSel]=useState(ANIO_ACTUAL);
   // Qué rubros se desglosan (se recuerda en este navegador)
   const[desglose,setDesglose]=useState(()=>{try{return JSON.parse(localStorage.getItem("seeds_desglose"))||["salarios"];}catch(e){return["salarios"];}});
+  // Vista sencilla (explicada) o contable (estado de resultados); se recuerda en este navegador
+  const[vista,setVista]=useState(()=>{try{return localStorage.getItem("seeds_vista_reporte")||"sencilla";}catch(e){return"sencilla";}});
+  const cambiarVista=(v)=>{setVista(v);try{localStorage.setItem("seeds_vista_reporte",v);}catch(e){}};
   const toggleDesglose=(k)=>{const n=desglose.includes(k)?desglose.filter(x=>x!==k):[...desglose,k];setDesglose(n);try{localStorage.setItem("seeds_desglose",JSON.stringify(n));}catch(e){}};
 
   // Ingresos por mensualidades: cuentan en el mes en que ENTRÓ el pago (fecha_pago real)
@@ -4272,8 +4275,114 @@ function ReportesPage({data,showToast}){
     .grafica svg{max-width:760px;margin:0 auto}
     .pie{font-size:11px;color:#888888;margin-top:18px;line-height:1.5}`;
 
+  // ── VISTA SENCILLA (para quien no sabe de contabilidad) ──
+  // Usa exactamente las mismas cifras del estado de resultados; solo cambia
+  // cómo se explican: frases cortas, barras y palabras de todos los días.
+  const Ls=(n)=>`L ${Math.round(Number(n)||0).toLocaleString("es-HN")}`;
+  const deCien=(v)=>ingresoTotal>0?Math.round(v/ingresoTotal*100):0;
+  const fuentes=[
+    {t:"Mensualidades",e:`Lo que pagaron los padres por las clases (${compsMes.length} ${compsMes.length===1?"pago":"pagos"})`,v:ingMensualidades},
+    {t:"Recargos por pagar tarde",e:"Lo extra que pagaron quienes se atrasaron (mora)",v:ingMora},
+    {t:"Libros y materiales",e:"Lo que pagaron los padres por libros y materiales",v:ingMateriales},
+    {t:"Graduación",e:`Cuotas de graduación cobradas este mes (${gradMes.length} ${gradMes.length===1?"alumno":"alumnos"})`,v:ingGraduacion},
+    {t:"Otros ingresos",e:"Donaciones, eventos y otros ingresos registrados",v:ingExtra},
+  ].filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  const topOtros=detOtros.slice(0,3).map(x=>x.label).join(", ");
+  const usos=[
+    {t:"Salarios de maestros",e:`${detSalarios.length} ${detSalarios.length===1?"pago":"pagos"} de salario`,v:totSalarios},
+    {t:"Renta del local",e:"Lo que se paga por el lugar donde funciona la escuela",v:totRenta},
+    {t:"Otros gastos",e:topOtros?`Por ejemplo: ${topOtros}${detOtros.length>3?"…":""}`:"Servicios, compras y otros pagos",v:totOtros},
+    {t:"Compra de libros y materiales",e:"Lo que costaron a la editorial los libros que se vendieron",v:costoMateriales},
+    {t:"Gastos de la graduación",e:"Lo que se gastó en el evento este mes",v:costoGraduacion},
+  ].filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  const maxBarra=Math.max(ingresoTotal,totalEgresos,1);
+  const fila=(x,total,cls)=>`<div class="fila"><div class="txt"><b>${esc(x.t)}</b><span>${esc(x.e)}</span></div><div class="monto">${Ls(x.v)}<small>${total>0?Math.round(x.v/total*100):0}%</small></div><div class="barra"><i class="${cls}" style="width:${total>0?Math.max(x.v/total*100,1.5):0}%"></i></div></div>`;
+  const sinMov=ingresoTotal===0&&totalEgresos===0;
+  const titular=sinMov?`Todavía no hay movimientos registrados en ${mesSel}.`
+    :resultado>=0?`En ${mesSel} a la escuela le quedaron <b class="bien">${Ls(resultado)}</b> de ganancia.`
+    :`En ${mesSel} se gastó <b class="mal">${Ls(Math.abs(resultado))} más</b> de lo que entró.`;
+  const bajada=sinMov?"Cuando registres cobros y gastos de este mes, aquí verás el resumen."
+    :`Entraron ${Ls(ingresoTotal)} y se gastaron ${Ls(totalEgresos)}. `+(resultado>=0
+      ?(ingresoTotal>0?`De cada L 100 que entraron, quedaron L ${deCien(resultado)}.`:"")
+      :"Esa diferencia sale del dinero que había guardado de meses anteriores.");
+  const puntos=[];
+  if(totSalarios>0&&ingresoTotal>0)puntos.push(`Los salarios se llevan <b>L ${deCien(totSalarios)} de cada L 100</b> que entran.`);
+  if(resultado<0&&usos[0])puntos.push(`El gasto más grande del mes fue <b>${esc(usos[0].t.toLowerCase())}</b> (${Ls(usos[0].v)}).`);
+  if(totPorPagar>0)puntos.push(`Falta pagar <b>${Ls(totPorPagar)}</b> de este mes (${esc(porPagar.map(x=>x.label).join(", "))}). Todavía no está restado: cuando se pague, la ganancia del mes quedaría en <b>${resultado-totPorPagar<0?"−":""}${Ls(Math.abs(resultado-totPorPagar))}</b>.`);
+  if(totPorCobrar>0)puntos.push(`Todavía le deben a la escuela <b>${Ls(totPorCobrar)}</b> de este mes (${esc(porCobrar.map(x=>`${x.label.toLowerCase()} ${Ls(x.monto)}`).join(", "))}). Se sumará como ingreso cuando lo paguen.`);
+  if(!totPorPagar&&!totPorCobrar&&!sinMov)puntos.push("No hay cuentas pendientes: nadie le debe a la escuela y la escuela no debe nada de este mes.");
+  puntos.push(`Al cierre del mes debería haber <b>${cajaRep.saldo<0?"−":""}${Ls(Math.abs(cajaRep.saldo))}</b> en caja. La ganancia y la caja no siempre coinciden: a veces se pagan cosas de meses anteriores o se cobra por adelantado.`);
+  const GLOSARIO=[
+    ["Ingresos","Todo el dinero que entró a la escuela."],
+    ["Egresos","Todo lo que se gastó."],
+    ["Utilidad neta","La ganancia: lo que queda después de pagar todo. Si es negativa se llama pérdida."],
+    ["Margen neto","De cada L 100 que entran, cuántos quedan de ganancia."],
+    ["Costo de ventas","Lo que costó comprar lo que se vendió (libros, materiales, graduación)."],
+    ["Gastos de operación","Lo necesario para que la escuela funcione: salarios, renta, servicios."],
+    ["Cuentas por cobrar","Dinero que le deben a la escuela."],
+    ["Cuentas por pagar","Dinero que la escuela debe."],
+    ["Flujo de caja","Cuándo entró y salió el dinero de verdad, por fecha de pago."],
+    ["(L 1,000)","Un número entre paréntesis es una resta."],
+  ];
+  const sencilloHTML=(paraPdf=false)=>`<div class="sen${paraPdf?" pdf":""}">
+    <div class="titular"><h2>${titular}</h2><p>${bajada}</p></div>
+    <div class="tres">
+      <div class="caja"><span>Dinero que entró</span><strong class="bien">${Ls(ingresoTotal)}</strong><em>Mensualidades, libros, graduación y otros</em></div>
+      <div class="caja"><span>Dinero que se gastó</span><strong class="gasto">${Ls(totalEgresos)}</strong><em>Salarios, renta, compras y otros</em></div>
+      <div class="caja fuerte"><span>${resultado>=0?"Lo que quedó (ganancia)":"Lo que faltó (pérdida)"}</span><strong class="${resultado>=0?"bien":"mal"}">${resultado<0?"−":""}${Ls(Math.abs(resultado))}</strong><em>${ingresoTotal>0?(resultado>=0?`L ${deCien(resultado)} de cada L 100`:"Se gastó más de lo que entró"):"—"}</em></div>
+    </div>
+    <div class="balanza">
+      <div class="lin"><span>Entró</span><div class="barra"><i class="ent" style="width:${ingresoTotal/maxBarra*100}%"></i></div><b>${Ls(ingresoTotal)}</b></div>
+      <div class="lin"><span>Se gastó</span><div class="barra"><i class="sal" style="width:${totalEgresos/maxBarra*100}%"></i></div><b>${Ls(totalEgresos)}</b></div>
+    </div>
+    <div class="dos">
+      <div class="bloque"><h3>¿De dónde vino el dinero?</h3>${fuentes.length?fuentes.map(x=>fila(x,ingresoTotal,"ent")).join(""):`<p class="vacio">No entró dinero este mes.</p>`}</div>
+      <div class="bloque"><h3>¿En qué se gastó?</h3>${usos.length?usos.map(x=>fila(x,totalEgresos,"sal")).join(""):`<p class="vacio">No hay gastos registrados este mes.</p>`}</div>
+    </div>
+    <div class="bloque"><h3>Lo más importante</h3><ul>${puntos.map(p=>`<li>${p}</li>`).join("")}</ul></div>
+    ${paraPdf?`<div class="bloque glos"><h3>Palabras del reporte contable</h3>${GLOSARIO.map(([a,b])=>`<p><b>${a}:</b> ${b}</p>`).join("")}</div>`
+      :`<details class="bloque glos"><summary>¿Qué significan las palabras del reporte contable?</summary>${GLOSARIO.map(([a,b])=>`<p><b>${a}:</b> ${b}</p>`).join("")}</details>`}
+    <p class="pie">Son las mismas cifras del estado de resultados, explicadas de forma sencilla. Cifras en Lempiras, redondeadas.</p>
+  </div>`;
+  const SEN_CSS=`
+    .sen{--t:#1F2937;--s:#5B6576;--b:#DCE1E8;--sup:#FFFFFF;--sup2:#F5F7FA;--ent:#2A5E45;--sal:#D9641E;--mal:#8E3131;--az:#1B2A4A;font-family:'Source Serif 4',Georgia,serif;color:var(--t)}
+    html[data-fondo="oscuro"] .sen:not(.pdf){--t:#E3E8F0;--s:#9AA6B8;--b:#2A3852;--sup:#172238;--sup2:#1D2A44;--ent:#7FC9A3;--sal:#F0A46A;--mal:#EE9A9A;--az:#E3E8F0}
+    .sen h2,.sen h3,.sen strong{font-family:Lora,Georgia,serif}
+    .sen .titular{border-left:4px solid var(--sal);padding:4px 0 4px 14px;margin-bottom:16px}
+    .sen .titular h2{font-size:21px;font-weight:600;margin:0;color:var(--az);line-height:1.35}
+    .sen .titular p{font-size:14px;color:var(--s);margin:6px 0 0;line-height:1.5}
+    .sen .bien{color:var(--ent)} .sen .mal{color:var(--mal)} .sen .gasto{color:var(--sal)}
+    .sen .tres{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+    .sen .caja{border:1px solid var(--b);border-radius:6px;padding:12px 14px;background:var(--sup)}
+    .sen .caja.fuerte{background:var(--sup2)}
+    .sen .caja span{display:block;font-size:12px;color:var(--s)}
+    .sen .caja strong{display:block;font-size:24px;margin:2px 0}
+    .sen .caja em{display:block;font-size:11.5px;color:var(--s);font-style:normal}
+    .sen .balanza{border:1px solid var(--b);border-radius:6px;padding:12px 14px;margin-bottom:16px;background:var(--sup)}
+    .sen .lin{display:grid;grid-template-columns:70px 1fr 110px;gap:10px;align-items:center;font-size:13px;padding:4px 0}
+    .sen .lin b{text-align:right;font-variant-numeric:tabular-nums}
+    .sen .barra{height:12px;background:var(--sup2);border-radius:2px;overflow:hidden}
+    .sen .barra i{display:block;height:100%;border-radius:2px}
+    .sen .barra i.ent{background:var(--ent)} .sen .barra i.sal{background:var(--sal)}
+    .sen .dos{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .sen .bloque{border:1px solid var(--b);border-radius:6px;padding:12px 14px;margin-bottom:12px;background:var(--sup)}
+    .sen .bloque h3{font-size:15px;font-weight:600;margin:0 0 8px;color:var(--az)}
+    .sen .fila{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 0;border-bottom:1px solid var(--b)}
+    .sen .fila:last-child{border-bottom:none}
+    .sen .fila .txt b{display:block;font-size:13.5px}
+    .sen .fila .txt span{display:block;font-size:11.5px;color:var(--s);line-height:1.4}
+    .sen .fila .monto{text-align:right;font-weight:700;font-size:13.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .sen .fila .monto small{display:block;font-weight:400;font-size:11px;color:var(--s)}
+    .sen .fila .barra{grid-column:1/-1;height:8px;margin-top:4px}
+    .sen ul{margin:0;padding-left:18px} .sen li{font-size:13.5px;line-height:1.55;margin-bottom:6px}
+    .sen .vacio{font-size:13px;color:var(--s);margin:0}
+    .sen .glos summary{cursor:pointer;font-family:Lora,Georgia,serif;font-weight:600;font-size:14px;color:var(--az)}
+    .sen .glos p{font-size:13px;margin:6px 0 0;line-height:1.45}
+    .sen .pie{font-size:11px;color:var(--s);margin-top:6px}
+    @media (max-width:700px){.sen .tres,.sen .dos{grid-template-columns:1fr}.sen .lin{grid-template-columns:60px 1fr 90px}}`;
+
   // Documento completo del reporte (se usa para descargar el PDF y para imprimir)
-  const nombreArchivo=`Estado de resultados ${mesSel} ${anioSel}`;
+  const nombreArchivo=`${vista==="sencilla"?"Resumen del mes":"Estado de resultados"} ${mesSel} ${anioSel}`;
   const documentoHTML=()=>{
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${nombreArchivo}</title>
       <style>
@@ -4290,25 +4399,25 @@ function ReportesPage({data,showToast}){
         tr{page-break-inside:avoid}
         .firmas{display:flex;gap:60px;margin-top:50px}
         .firmas div{flex:1;border-top:1px solid #000000;padding-top:6px;text-align:center;font-size:11px;color:#000000}
-        ${EDO_CSS}
+        ${vista==="sencilla"?SEN_CSS:EDO_CSS}
       </style></head><body>
       <div class="head">
         <div style="width:140px;height:140px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#F2F2F2;border:1px solid #E5E5E5;border-radius:16px;padding:8px"><img src="${LOGO_SEEDS}" alt="Seeds English School" style="max-width:100%;max-height:100%;object-fit:contain"/></div>
         <div>
           <h1>Seeds English School</h1>
           <p>Jesús de Otoro, Intibucá, Honduras</p>
-          <p style="margin-top:6px;font-size:15px;font-weight:800;color:#000000">ESTADO DE RESULTADOS — ${mesSel.toUpperCase()} ${anioSel}</p>
+          <p style="margin-top:6px;font-size:15px;font-weight:800;color:#000000">${vista==="sencilla"?"RESUMEN DEL MES":"ESTADO DE RESULTADOS"} — ${mesSel.toUpperCase()} ${anioSel}</p>
           <p>Del 1 al ${new Date(anioSel,MESES.indexOf(mesSel)+1,0).getDate()} de ${mesSel} de ${anioSel} · Cifras en Lempiras · Generado el ${hoyTxt}</p>
         </div>
       </div>
-      <div class="cards">
+      ${vista==="sencilla"?sencilloHTML(true):`<div class="cards">
         <div class="card"><div class="lbl">Total ingresos</div><div class="val">${M(ingresoTotal)}</div></div>
         <div class="card"><div class="lbl">Total egresos</div><div class="val">${M(totalEgresos)}</div></div>
         <div class="card" style="border-color:${resultado>=0?"#15803D":"#B91C1C"}"><div class="lbl">${resultado>=0?"Utilidad neta":"Pérdida neta"}</div><div class="val" style="color:${resultado>=0?"#15803D":"#B91C1C"}">${resultado>=0?M(resultado):`(${M(Math.abs(resultado))})`}</div></div>
         <div class="card"><div class="lbl">Margen neto</div><div class="val">${margen}</div></div>
       </div>
       ${estadoHTML}
-      <div class="firmas"><div>Elaborado por</div><div>Revisado / Aprobado</div></div>
+      <div class="firmas"><div>Elaborado por</div><div>Revisado / Aprobado</div></div>`}
       </body></html>`;
   };
 
@@ -4334,7 +4443,7 @@ function ReportesPage({data,showToast}){
         image:{type:"jpeg",quality:0.96},
         html2canvas:{scale:2,useCORS:true,backgroundColor:"#F2F2F2",scrollY:0},
         jsPDF:{unit:"mm",format:"letter",orientation:"portrait"},
-        pagebreak:{mode:["css","legacy"],avoid:["tr",".grafica",".cards",".aviso",".firmas",".head"]},
+        pagebreak:{mode:["css","legacy"],avoid:["tr",".grafica",".cards",".aviso",".firmas",".head",".fila",".caja",".titular",".balanza",".glos p",".sen li"]},
       }).from(contenido,"string").outputPdf("blob");
       // Se genera el archivo y se muestra una ventana con el enlace de descarga:
       // el clic del usuario sobre el enlace es lo que más confiable funciona
@@ -4364,7 +4473,7 @@ function ReportesPage({data,showToast}){
 
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
-      <h3 style={{fontSize:16,fontWeight:700,color:"#000000",margin:0}}>📊 Estado de resultados — {mesSel} {anioSel}</h3>
+      <h3 style={{fontSize:16,fontWeight:700,color:"#000000",margin:0}}>📊 {vista==="sencilla"?"Resumen del mes":"Estado de resultados"} — {mesSel} {anioSel}</h3>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <select value={mesSel} onChange={e=>setMesSel(e.target.value)} style={{...input,width:160,cursor:"pointer"}}>
           {MESES.map(m=><option key={m} value={m}>{m}</option>)}
@@ -4375,6 +4484,18 @@ function ReportesPage({data,showToast}){
       </div>
     </div>
 
+    {/* Vista sencilla o contable */}
+    <div style={{...card,padding:"10px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+      <div role="tablist" style={{display:"inline-flex",border:"1px solid #CDD3DC",borderRadius:4,overflow:"hidden"}}>
+        {[["sencilla","Vista sencilla"],["contable","Vista contable"]].map(([k,t])=><button key={k} role="tab" className="vista-tab" aria-selected={vista===k} onClick={()=>cambiarVista(k)} style={{padding:"7px 14px",border:"none",borderRight:k==="sencilla"?"1px solid #CDD3DC":"none",background:vista===k?AZUL_MARCA:"#FFFFFF",color:vista===k?"#fff":"#344054",fontSize:13,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>{t}</button>)}
+      </div>
+      <style>{`html[data-fondo="oscuro"] .vista-tab[aria-selected="true"]{background:#D9641E!important;color:#fff!important}`}</style>
+      <span style={{fontSize:12,color:"#5B6576"}}>{vista==="sencilla"?"Explicado en palabras sencillas, sin términos contables.":"Formato profesional de estado de resultados, para contador o banco."}</span>
+    </div>
+
+    {vista==="sencilla"&&<div style={{...card,padding:"20px 22px"}}><style>{SEN_CSS}</style><div dangerouslySetInnerHTML={{__html:sencilloHTML(false)}}/></div>}
+
+    {vista==="contable"&&<>
     {/* Elegir qué egresos desglosar */}
     <div style={{...card,padding:"12px 16px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
       <span style={{fontSize:12,fontWeight:700,color:"#000000",marginRight:4}}>Desglosar egresos:</span>
@@ -4406,6 +4527,7 @@ function ReportesPage({data,showToast}){
       </div>
       <div style={{overflowX:"auto"}}><div style={{minWidth:520,fontFamily:"Georgia,'Times New Roman',serif"}} dangerouslySetInnerHTML={{__html:estadoHTML}}/></div>
     </div>
+    </>}
 
     {/* PDF listo: enlace de descarga */}
     {pdfListo&&<div onClick={cerrarPdf} style={{position:"fixed",inset:0,background:"rgba(15,23,42,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}}>
