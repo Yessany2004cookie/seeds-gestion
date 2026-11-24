@@ -215,13 +215,41 @@ const achDeSucursal = (sucursales, sucId) => {
 
 // ── Capa de base de datos (Supabase) ──
 const db = {
-  async all(table){ const {data,error}=await supabase.from(table).select("*").order("created_at",{ascending:true}); if(error)throw error; return data||[]; },
+  // Se lee por páginas: Supabase devuelve como máximo 1000 filas por consulta,
+  // y sin esto las facturas más nuevas dejarían de aparecer al pasar de 1000.
+  async all(table){
+    const todas=[];
+    for(let i=0;;i++){
+      const {data,error}=await supabase.from(table).select("*").order("created_at",{ascending:true}).order("id",{ascending:true}).range(i*1000,i*1000+999);
+      if(error)throw error;
+      todas.push(...(data||[]));
+      if(!data||data.length<1000)break;
+    }
+    return todas;
+  },
   async insert(table,row){ const {error}=await supabase.from(table).insert(row); if(error)throw error; },
   async insertMany(table,rows){ const {error}=await supabase.from(table).insert(rows); if(error)throw error; },
   async update(table,id,changes){ const {error}=await supabase.from(table).update(changes).eq("id",id); if(error)throw error; },
   async remove(table,id){ const {error}=await supabase.from(table).delete().eq("id",id); if(error)throw error; },
   async upsertMany(table,rows){ const {error}=await supabase.from(table).upsert(rows); if(error)throw error; },
 };
+
+// ── Número de la siguiente factura o comprobante ──
+// Antes se usaba la cantidad de facturas (+1): al borrar repetidas, o al filtrar
+// por sucursal, el número se repetía. Ahora se toma el número más alto guardado
+// en la base de datos (FC y CP comparten la misma numeración, como siempre).
+async function ultimoNumeroFactura(){
+  let max=0;
+  for(let i=0;;i++){
+    const {data,error}=await supabase.from("facturas").select("numero_factura").range(i*1000,i*1000+999);
+    if(error)throw error;
+    (data||[]).forEach(f=>{const m=/(\d+)\s*$/.exec(String(f.numero_factura||""));if(m)max=Math.max(max,Number(m[1]));});
+    if(!data||data.length<1000)break;
+  }
+  return max;
+}
+// Año al que corresponde una factura (si no se guardó, el de su fecha de emisión)
+const anioFactura=(f)=>Number(f.anio_correspondiente)||Number(String(f.fecha_emision||"").slice(0,4))||null;
 
 // ── Logo precargado para dibujarlo en las facturas ──
 const logoImg = typeof Image !== "undefined" ? new Image() : null;
@@ -1685,18 +1713,21 @@ function FacturasPage({data,loadData,showToast}){
     // Alumnos que ya NO necesitan cobro de este mes:
     //  - tienen un cobro de ese mes (pendiente o pagado), o
     //  - tienen un comprobante (pago) de ese mes  ← cubre pagos adelantados
-    const conCobro = data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.mes_correspondiente===mes&&f.estado!=="anulada").map(f=>f.alumno_id);
-    const conPago = data.facturas.filter(f=>f.tipo_factura==="comprobante"&&f.mes_correspondiente===mes&&f.estado!=="anulada").map(f=>f.alumno_id);
+    // Solo cuenta lo del mismo año (si no, en noviembre del otro año nadie recibiría cobro)
+    const anio = new Date().getFullYear();
+    const delAnio = (f)=>(anioFactura(f)??anio)===anio;
+    const conCobro = data.facturas.filter(f=>(f.tipo_factura||"cobro")==="cobro"&&f.mes_correspondiente===mes&&f.estado!=="anulada"&&delAnio(f)).map(f=>f.alumno_id);
+    const conPago = data.facturas.filter(f=>f.tipo_factura==="comprobante"&&f.mes_correspondiente===mes&&f.estado!=="anulada"&&delAnio(f)).map(f=>f.alumno_id);
     const yaCubierto = new Set([...conCobro, ...conPago]);
     // Se excluyen los becados y los que ya tienen cobro o pago de ese mes
     const sinCobro = alumnosSec.filter(a=>!yaCubierto.has(a.id) && a.beca!==true);
     if(sinCobro.length===0){showToast(`No hay cobros nuevos por crear para ${mes}`,"error");return;}
     try{
-      let count = data.facturas.length;
+      let count = await ultimoNumeroFactura();
       const rows = sinCobro.map(al=>{
         count++;
         const montoAl = (Number(al.monto_personalizado)>0) ? Number(al.monto_personalizado) : Number(sec.mensualidad);
-        return {id:uid(),numero_factura:`FC-${String(count).padStart(4,"0")}`,alumno_id:al.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:null,mes_correspondiente:mes,monto_total:montoAl,mora_cobrada:0,abono:0,saldo:montoAl,tipo_pago:"efectivo",estado:"pendiente",notas:"",cobro_id:null};
+        return {id:uid(),numero_factura:`FC-${String(count).padStart(4,"0")}`,alumno_id:al.id,tipo_factura:"cobro",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:null,mes_correspondiente:mes,anio_correspondiente:anio,monto_total:montoAl,mora_cobrada:0,abono:0,saldo:montoAl,tipo_pago:"efectivo",estado:"pendiente",notas:"",cobro_id:null};
       });
       await db.insertMany("facturas",rows);
       await loadData();
@@ -1710,8 +1741,10 @@ function FacturasPage({data,loadData,showToast}){
     try{
       const total=parseFloat(form.monto_total)||0;
       const moraVal=(form.cobrar_mora && Number(form.mora)>0)?Number(form.mora):0;
-      const num=`CP-${String(data.facturas.length+1).padStart(4,"0")}`;
-      const fac={id:uid(),numero_factura:num,alumno_id:form.alumno_id,tipo_factura:"comprobante",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:form.fecha_pago,mes_correspondiente:form.mes_correspondiente,monto_total:total,mora_cobrada:moraVal,abono:0,saldo:0,tipo_pago:form.tipo_pago,estado:"pagada",notas:form.notas,cobro_id:form.cobro_id||null};
+      const num=`CP-${String((await ultimoNumeroFactura())+1).padStart(4,"0")}`;
+      const cobroDe=form.cobro_id?data.facturas.find(f=>f.id===form.cobro_id):null;
+      const anioComp=(cobroDe&&anioFactura(cobroDe))||new Date().getFullYear();
+      const fac={id:uid(),numero_factura:num,alumno_id:form.alumno_id,tipo_factura:"comprobante",fecha_emision:new Date().toISOString().split("T")[0],fecha_pago:form.fecha_pago,mes_correspondiente:form.mes_correspondiente,anio_correspondiente:anioComp,monto_total:total,mora_cobrada:moraVal,abono:0,saldo:0,tipo_pago:form.tipo_pago,estado:"pagada",notas:form.notas,cobro_id:form.cobro_id||null};
       await db.insert("facturas",fac);
       if(form.cobro_id){await db.update("facturas",form.cobro_id,{estado:"pagada",fecha_pago:form.fecha_pago});}
       await loadData();setModal(null);
@@ -2169,7 +2202,7 @@ function HistorialPage({data,loadData,showToast}){
     try{
       const monto=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
       const moraVal=(pagoForm.cobrar_mora && Number(mora)>0)?Number(mora):0;
-      let n=data.facturas.length;
+      let n=await ultimoNumeroFactura();
       let cobroId;
       const nuevas=[];
       if(cobroExistente){
@@ -2200,7 +2233,7 @@ function HistorialPage({data,loadData,showToast}){
     PENDIENTES_EN_CURSO.add(clave);
     try{
       const monto=(Number(alumno.monto_personalizado)>0)?Number(alumno.monto_personalizado):Number(sec?.mensualidad)||0;
-      const n=data.facturas.length+1;
+      const n=(await ultimoNumeroFactura())+1;
       const cobro={id:uid(),numero_factura:`FC-${String(n).padStart(4,"0")}`,alumno_id:alumno.id,tipo_factura:"cobro",fecha_emision:`${anio}-${String(MESES.indexOf(mes)+1).padStart(2,"0")}-01`,fecha_pago:null,mes_correspondiente:mes,anio_correspondiente:anio,monto_total:monto,mora_cobrada:0,abono:0,saldo:monto,tipo_pago:"efectivo",estado:"pendiente",notas:"",cobro_id:null};
       await db.insert("facturas",cobro);
       await loadData();

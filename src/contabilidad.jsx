@@ -102,16 +102,27 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
   const [cargando, setCargando] = useState(true);
   const [sinModulo, setSinModulo] = useState(false);
   const [trabajando, setTrabajando] = useState(false);
+  const [listo, setListo] = useState(false); // ya terminó la primera carga
 
   const cargar = useCallback(async () => {
     setCargando(true);
+    // Los asientos se leen por páginas (la base devuelve máximo 1000 filas por consulta)
+    const leerAsientos = async () => {
+      const todos = [];
+      for (let i = 0; ; i++) {
+        const r = await supabase.from("contab_asientos").select("*, contab_lineas(*)").order("fecha").order("id").range(i * 1000, i * 1000 + 999);
+        if (r.error) return r;
+        todos.push(...(r.data || []));
+        if (!r.data || r.data.length < 1000) return { data: todos };
+      }
+    };
     const [c, p, a] = await Promise.all([
       supabase.from("contab_cuentas").select("*").order("codigo"),
       supabase.from("contab_periodos").select("*"),
-      supabase.from("contab_asientos").select("*, contab_lineas(*)").order("fecha").order("id"),
+      leerAsientos(),
     ]);
     if (c.error) { setSinModulo(true); setCargando(false); return; }
-    setCuentas(c.data || []); setPeriodos(p.data || []); setAsientos(a.data || []); setCargando(false);
+    setCuentas(c.data || []); setPeriodos(p.data || []); setAsientos(a.data || []); setCargando(false); setListo(true);
   }, []);
 
   const periodo = periodos.find((p) => p.anio === sel.anio && p.mes === sel.mes);
@@ -127,7 +138,9 @@ export function ContabilidadPage({ data, showToast, tabFijo }) {
   }, [sel, cargar, showToast]);
 
   useEffect(() => { cargar(); }, [cargar]);
-  useEffect(() => { if (!cargando && !sinModulo && !cerrado) generar(false); /* eslint-disable-next-line */ }, [sel.anio, sel.mes, sinModulo, cerrado]);
+  // Se regenera al abrir la pantalla (cuando termina la primera carga) y al cambiar de mes.
+  // Antes solo pasaba al cambiar de mes, y al entrar se veían asientos viejos.
+  useEffect(() => { if (listo && !sinModulo && !cerrado) generar(false); /* eslint-disable-next-line */ }, [listo, sel.anio, sel.mes, sinModulo, cerrado]);
 
   const nombreCta = (c) => cuentas.find((x) => x.codigo === c)?.nombre || c;
   const tipoCta = (c) => cuentas.find((x) => x.codigo === c)?.tipo;
