@@ -4,6 +4,7 @@ import { card, input, btn, btnO, label, badge, tono, AZUL as AZUL_MARCA, NARANJA
 import { LOGO_SEEDS } from "./logo";
 import { SELLO_SEEDS, FIRMA_ADMIN } from "./sello";
 import { AlertasFinanzasPage, logoParaExcel } from "./alertasFinanzas";
+import { encabezadoExcel } from "./documentoFormal";
 import { FinResumenExcel, FinMaestrosExcel, FinGastosExcel, IngresosExcel, DescargasFinanzas, hojasResumen, hojasMaestros, hojasGastos, hojasIngresos } from "./finanzasExcel";
 import { useVista, SelectorVista, EstilosVistas } from "./vistas";
 import { ContabilidadPage } from "./contabilidad";
@@ -4614,7 +4615,7 @@ function ReportesPage({data,showToast}){
       const writeExcelFile=(await import("write-excel-file/browser")).default;
       // Encabezado formal: fila con el logo, nombre de la institución, título y fecha
       const logoXls=await logoParaExcel(marcaRep.logoSrc);
-      const encabezado=(t)=>[...(logoXls?[[{value:null,height:48}]]:[]),[{value:marcaRep.nombreO("Seeds English School"),fontWeight:"bold",fontSize:14,textColor:"#1B2A4A"}],[{value:`${t} — ${mesSel} ${anioSel}`,fontWeight:"bold",fontSize:12}],[{value:`Cifras en Lempiras · Generado el ${hoyTxt}`,textColor:"#5B6576"}],[]];
+      const encabezado=(t)=>encabezadoExcel("A",{ancho:5,logo:logoXls,nombre:marcaRep.nombreO("Seeds English School"),sub:"Finanzas · Reportes",titulo:t,periodo:`${mesSel} ${anioSel}`});
       const cols=[{width:46},{width:16},{width:16},{width:10},{width:60}];
       const resumen=[...encabezado("Resumen del mes"),
         [{value:"Concepto",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF"},{value:"Monto",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:"right"},{value:"%",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF",align:"right"},null,{value:"Qué es",fontWeight:"bold",backgroundColor:"#1B2A4A",textColor:"#FFFFFF"}],

@@ -26,20 +26,40 @@ const generadoTxt = () => new Date().toLocaleString("es-HN", { dateStyle: "long"
 const archivoTxt = (r) => `${r.titulo}${r.periodo ? " " + r.periodo : ""}`.replace(/[\\/:*?"<>|]/g, "-");
 
 // ── Excel ──
-export async function crearExcelFormal(writeExcelFile, extraHoja, reporte, marca, logo) {
+// ── Encabezado del Excel ──
+// "A" membrete centrado: nombre y título centrados sobre toda la tabla, franja gris fina con periodo y fecha.
+// "B" ejecutivo a dos lados: logo y nombre a la izquierda, periodo y fecha a la derecha, línea azul fina.
+export function encabezadoExcel(estilo, { ancho, logo, nombre, sub, titulo, periodo, generado }) {
+  const vacia = (alto) => { const f = Array(ancho).fill(null); f[0] = { value: null, height: alto }; return f; };
+  const conAlto = (f, alto) => { f[0] = { ...(f[0] || { value: null }), height: alto }; return f; };
+  const fechaCorta = new Date().toLocaleDateString("es-HN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  if (estilo === "B") {
+    const izq = ancho > 1 ? ancho - 1 : 1;
+    const fila = (a, d, alto) => { const f = Array(ancho).fill(null); f[0] = { align: "left", ...a, columnSpan: izq, indent: logo ? 8 : undefined }; if (ancho > 1) f[ancho - 1] = { align: "right", ...d }; return conAlto(f, alto); };
+    const raya = Array(ancho).fill(0).map(() => ({ value: null, bottomBorderColor: AZUL, bottomBorderStyle: "thin" })); raya[0].height = 4;
+    return [
+      fila({ value: nombre, fontWeight: "bold", fontSize: 15, textColor: AZUL, alignVertical: "bottom" }, { value: periodo || "", fontWeight: "bold", fontSize: 11, textColor: AZUL, alignVertical: "bottom" }, 24),
+      fila({ value: sub, fontSize: 9.5, textColor: GRIS, alignVertical: "top" }, { value: `Emitido el ${fechaCorta}`, fontSize: 9, textColor: GRIS, alignVertical: "top" }, 15),
+      fila({ value: titulo, fontWeight: "bold", fontSize: 12.5, textColor: "#1F2937", alignVertical: "bottom" }, { value: "Cifras en Lempiras (L)", fontSize: 9, textColor: GRIS, alignVertical: "bottom" }, 22),
+      raya, vacia(10),
+    ];
+  }
+  const centro = (cel, alto) => { const f = Array(ancho).fill(null); f[0] = { align: "center", ...cel, columnSpan: ancho }; return conAlto(f, alto); };
+  const franja = Array(ancho).fill(null);
+  franja[0] = { value: [periodo ? `Periodo: ${periodo}` : null, `Emitido el ${fechaCorta}`, "Cifras en Lempiras (L)"].filter(Boolean).join("     |     "), columnSpan: ancho, align: "center", alignVertical: "center", fontSize: 9, textColor: GRIS, backgroundColor: BANDA, topBorderColor: "#C9D1DC", topBorderStyle: "thin", bottomBorderColor: "#C9D1DC", bottomBorderStyle: "thin", height: 20 };
+  return [
+    centro({ value: nombre, fontWeight: "bold", fontSize: 16, textColor: AZUL, alignVertical: "bottom" }, 28),
+    centro({ value: sub, fontSize: 9.5, textColor: GRIS, alignVertical: "top" }, 16),
+    centro({ value: titulo, fontWeight: "bold", fontSize: 12.5, textColor: "#1F2937", alignVertical: "center" }, 24),
+    vacia(6), franja, vacia(10),
+  ];
+}
+
+export async function crearExcelFormal(writeExcelFile, extraHoja, reporte, marca, logo, estilo = "A") {
   const generado = generadoTxt();
   const libro = reporte.hojas.map((h) => {
     const ancho = h.columnas.length;
-    const desde = logo ? 2 : 1, span = Math.max(1, ancho - desde + 1);
-    const fila = (cel, alto) => { const f = Array(ancho).fill(null); f[desde - 1] = { ...cel, columnSpan: span }; f[0] = { ...(f[0] || { value: null }), height: alto }; return f; };
-    const raya = Array(ancho).fill(0).map(() => ({ value: null, bottomBorderColor: NARANJA, bottomBorderStyle: "medium" })); raya[0].height = 6;
-    const enc = [
-      fila({ value: marca.nombre, fontWeight: "bold", fontSize: 16, textColor: AZUL, alignVertical: "bottom" }, 24),
-      fila({ value: `${reporte.modulo}${marca.sede ? " · " + marca.sede : ""}`, fontSize: 10, textColor: GRIS, alignVertical: "top" }, 15),
-      fila({ value: h.titulo || reporte.titulo, fontWeight: "bold", fontSize: 13, textColor: AZUL, alignVertical: "bottom" }, 20),
-      fila({ value: `${reporte.periodo ? reporte.periodo + " · " : ""}Generado el ${generado} · Cifras en Lempiras`, fontSize: 9, textColor: GRIS, alignVertical: "top", wrap: true }, 18),
-      raya, [],
-    ];
+    const enc = encabezadoExcel(estilo, { ancho, logo, nombre: marca.nombre, sub: `${reporte.modulo}${marca.sede ? " · " + marca.sede : ""}`, titulo: h.titulo || reporte.titulo, periodo: reporte.periodo, generado });
     const titulos = h.columnas.map((c) => ({ value: c.t, align: c.num || c.pct ? "right" : "left", fontWeight: "bold", textColor: "#FFFFFF", backgroundColor: AZUL, wrap: true, alignVertical: "center", height: 30 }));
     let par = 0;
     const cuerpo = h.filas.filter((f) => f.tipo !== "vacia").map((f) => {
