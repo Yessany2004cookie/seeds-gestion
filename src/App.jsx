@@ -4,6 +4,7 @@ import { card, input, btn, btnO, label, badge } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
 import { AlertasFinanzasPage } from "./alertasFinanzas";
 import { ContabilidadPage } from "./contabilidad";
+import { useContadorUso, UsoSistemaPanel } from "./usoSistema";
 import { DocenteApp, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
 import {
   LogIn, LogOut, Users, BookOpen, FileText, CreditCard, Bell,
@@ -647,6 +648,9 @@ export default function App() {
 
   useEffect(() => { if(session && rol.estado==="admin") loadData(); }, [session, rol.estado, loadData]);
 
+  // Contador de tiempo de trabajo real (solo en el panel de administración)
+  useContadorUso({ activo: !!session && rol.estado==="admin" && !(rol.perfil?.maestro_id && vistaDocente), seccion: page });
+
   const logout = async () => { await supabase.auth.signOut(); setSession(null); };
 
   if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8FAFC"}}><div style={{textAlign:"center"}}><img src={LOGO_SEEDS} alt="Seeds" style={{width:80,height:80,objectFit:"contain",marginBottom:12}}/><p style={{color:"#64748B"}}>Cargando Seeds...</p></div></div>;
@@ -709,7 +713,7 @@ export default function App() {
     alertas:<AlertasFinanzasPage data={dataSuc}/>,
     finanzas:<FinanzasPage {...propsSuc}/>,
     contabilidad:<ContabilidadPage data={data} showToast={showToast}/>,
-    reportes:<ReportesPage {...propsSuc}/>,
+    reportes:<><UsoSistemaPanel secciones={NAV} showToast={showToast}/><ReportesPage {...propsSuc}/></>,
     docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
     config:<ConfiguracionPage {...props}/>,
     sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}/>,
