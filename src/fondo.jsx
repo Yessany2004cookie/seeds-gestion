@@ -8,7 +8,7 @@ import { Palette, Check } from "lucide-react";
 
 export const FONDOS = [
   { id: "claro", nombre: "Claro", muestra: "#F3F4F7" },
-  { id: "oscuro", nombre: "Oscuro", muestra: "#161717" },
+  { id: "oscuro", nombre: "Oscuro", muestra: "#202225" },
   { id: "naranja", nombre: "Naranja suave", muestra: "#F8E9DC" },
   { id: "pulpo", nombre: "Pulpi y burbujas", muestra: "linear-gradient(135deg,#FFD6B0,#E9D5FF 55%,#BAE6FD)" },
 ];

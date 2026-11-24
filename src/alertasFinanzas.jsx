@@ -6,11 +6,12 @@
 //  3) Otras alertas: cuentas por pagar atrasadas y registros repetidos
 // ════════════════════════════════════════════════════════════
 import { useState, useMemo } from "react";
-import { card, input, label, badge, btnO } from "./estilo";
-import { AlertTriangle, Users, Phone, TrendingDown, CheckCircle, Info } from "lucide-react";
+import { input, label, btn, btnO } from "./estilo";
+import { useMarca } from "./marca";
+import { Phone, Info, FileSpreadsheet, FileText, Download, Eye, X } from "lucide-react";
+import "./alertasFinanzas.css";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-const ROJO = "#DC2626", AMARILLO = "#D97706", VERDE = "#059669", GRIS = "#64748B";
 const L = (n) => `L ${Math.round(Number(n) || 0).toLocaleString("es-HN")}`;
 const DIA = 1000 * 60 * 60 * 24;
 
@@ -50,19 +51,43 @@ function gastosFijosSugeridos(data) {
     + ultimo((r) => /agua/i.test(r.d || ""));
 }
 
-const Tarjeta = ({ color, titulo, valor, sub }) => (
-  <div style={{ ...card, marginBottom: 0, padding: 16, borderLeft: `4px solid ${color}` }}>
-    <div style={{ fontSize: 11, color: GRIS, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>{titulo}</div>
-    <div style={{ fontSize: 22, fontWeight: 800, color, marginTop: 4 }}>{valor}</div>
-    {sub && <div style={{ fontSize: 11, color: GRIS, marginTop: 2 }}>{sub}</div>}
+const CLASE = { rojo: "rojo", amarillo: "ambar", verde: "verde" };
+
+const Kpi = ({ c, t, v, s }) => (
+  <div className="af-kpi" style={{ "--af-c": c }}>
+    <div className="af-kpi-t">{t}</div>
+    <div className="af-kpi-v">{v}</div>
+    {s && <div className="af-kpi-s">{s}</div>}
   </div>
 );
 
-const th = { textAlign: "left", padding: "8px", fontSize: 11, color: GRIS, textTransform: "uppercase", letterSpacing: 0.4, whiteSpace: "nowrap" };
-const td = { padding: "7px 8px", borderBottom: "1px solid #F1F5F9", verticalAlign: "top" };
+// Logo para el Excel: se reduce a 56 px de alto (nítido) y se pasa a PNG.
+// Si no se puede leer (por ejemplo, un logo externo sin permiso), el Excel sale sin logo.
+async function logoParaExcel(src) {
+  try {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = src;
+    await img.decode();
+    const alto = 56, ancho = Math.min(84, Math.round((img.naturalWidth / img.naturalHeight) * alto));
+    const k = 3, cv = document.createElement("canvas");
+    cv.width = ancho * k; cv.height = alto * k;
+    const cx = cv.getContext("2d");
+    cx.imageSmoothingQuality = "high";
+    const esc = Math.min(cv.width / img.naturalWidth, cv.height / img.naturalHeight);
+    const w = img.naturalWidth * esc, h = img.naturalHeight * esc;
+    cx.drawImage(img, (cv.width - w) / 2, (cv.height - h) / 2, w, h);
+    const content = await new Promise((ok) => cv.toBlob(ok, "image/png"));
+    return content ? { content, contentType: "image/png", width: ancho, height: alto } : null;
+  } catch (e) { return null; }
+}
 
-export function AlertasFinanzasPage({ data }) {
+
+export function AlertasFinanzasPage({ data, showToast, sucursalActiva }) {
   const hoy = new Date();
+  const marca = useMarca();
+  const nombreInst = marca.nombreO("Seeds English School");
+  const sede = (data.sucursales || []).find((s) => s.id === sucursalActiva)?.nombre || "";
   const [tab, setTab] = useState("deudores");
   const [filtro, setFiltro] = useState("todos"); // todos | rojo | retirados
   const sugeridoFijos = useMemo(() => gastosFijosSugeridos(data), [data]);
@@ -162,114 +187,218 @@ export function AlertasFinanzasPage({ data }) {
   const rojosDeu = deudores.filter((d) => d.nivel === "rojo").length;
   const gruposRojo = grupos.filter((g) => g.nivel === "rojo").length;
   const gruposAmarillo = grupos.filter((g) => g.nivel === "amarillo").length;
-  const ancho = typeof window !== "undefined" ? window.innerWidth : 1200;
 
   const verDeudores = deudores.filter((d) => filtro === "todos" || (filtro === "rojo" ? d.nivel === "rojo" : d.retirado));
-  const msgWA = (d) => `Estimado padre de familia, le recordamos que ${d.al.nombre} tiene pendiente${d.meses.length > 1 ? "s" : ""} ${d.meses.length} mensualidad${d.meses.length > 1 ? "es" : ""} (${d.meses.join(", ")}), por un total de ${L(d.monto)}. Favor ponerse al día o comunicarse con administración. Seeds English School`;
+  const msgWA = (d) => `Estimado padre de familia, le recordamos que ${d.al.nombre} tiene pendiente${d.meses.length > 1 ? "s" : ""} ${d.meses.length} mensualidad${d.meses.length > 1 ? "es" : ""} (${d.meses.join(", ")}), por un total de ${L(d.monto)}. Favor ponerse al día o comunicarse con administración. ${nombreInst}`;
+  const totCxp = cxpAtrasadas.reduce((s, c) => s + (Number(c.monto) || 0), 0);
+  const tot = (k) => grupos.reduce((s, g) => s + (Number(g[k]) || 0), 0);
 
-  const Pestaña = ({ id, txt, n, c }) => (
-    <button onClick={() => setTab(id)} style={{ ...btnO, background: tab === id ? "#1E293B" : btnO.background, color: tab === id ? "#fff" : btnO.color, fontWeight: 700 }}>
-      {txt}{n > 0 && <span style={{ ...badge(c), background: tab === id ? "#fff" : badge(c).background }}>{n}</span>}
-    </button>
+  // ── Datos para exportar (Excel y PDF): lo mismo que ya se ve en pantalla ──
+  const armarDatos = () => {
+    const otras = [
+      ...cxpAtrasadas.map((c) => ({ tipo: "Cuenta por pagar atrasada", quien: c.descripcion, mes: `${c.mes_correspondiente || ""} ${c.anio_correspondiente || ""}`.trim(), doc: "", monto: Number(c.monto) || 0, accion: "Pagar desde Finanzas → Cuentas por pagar. El gasto sigue contando en su mes.", grave: false })),
+      ...repetidos.map(({ f }) => ({ tipo: "Cobro repetido", quien: alPorId[f.alumno_id]?.nombre || "—", mes: `${f.mes_correspondiente} ${anioDe(f)}`, doc: f.numero_factura || "", monto: Number(f.monto_total) || 0, accion: "Anular la copia. No se cuenta dos veces en «Quién debe».", grave: true })),
+      ...compRepetidos.map((v) => ({ tipo: `Pago guardado ${v.length} veces`, quien: alPorId[v[0].alumno_id]?.nombre || "—", mes: v[0].mes_correspondiente || "", doc: v[0].numero_factura || "", monto: (Number(v[0].monto_total) || 0) * (v.length - 1), accion: `Anular ${v.length - 1} copia${v.length > 2 ? "s" : ""}. El monto es lo que sobra.`, grave: true })),
+    ];
+    const datos = {
+      nombre: nombreInst, sede, generado: hoy.toLocaleString("es-HN", { dateStyle: "long", timeStyle: "short" }),
+      parametros: { fijos: fijosMes, margen: margenMin, mes: mesCob, anio: anioCob },
+      kpis: { deudores: deudores.length, urgentes: rojosDeu, totalDeuda: totDeuda, gruposRojo, gruposAmarillo, resultadoTotal: tot("resultado"), cxpN: cxpAtrasadas.length, cxpMonto: totCxp, repetidos: repetidos.length + compRepetidos.length },
+      deudores: deudores.map((d) => ({ nivel: d.nivel, alumno: d.al.nombre, grupo: d.sec?.nombre || "", padre: d.padre?.nombre || "", telefono: d.padre?.telefono || d.al.telefono || "", meses: d.meses.length, detalleMeses: d.meses.join(", "), dias: d.dias, monto: d.monto, observacion: [d.retirado && "Alumno retirado", d.revisar && `Revisar: ${d.meses.length} meses`].filter(Boolean).join(" · ") })),
+      grupos: grupos.map((g) => ({ nivel: g.nivel, grupo: g.s.nombre, alumnos: g.n, becas: g.becas, esperado: g.esperado, costoMaestro: g.costoMaestro, fijo: g.fijo, resultado: g.resultado, margen: g.margen, facturado: g.facturado, cobrado: g.cobrado, pctCob: g.pctCob, equilibrio: g.equilibrio, maestros: g.maestros.map((m) => m.nombre).join(", ") || "Sin maestro asignado", motivos: g.motivos.join(" · ") })),
+      otras,
+    };
+    return datos;
+  };
+  const rangoMeses = (m) => (m.length === 1 ? m[0] : `${m[0]} – ${m[m.length - 1]}`);
+
+  const [generando, setGenerando] = useState("");
+  const [archivo, setArchivo] = useState(null);
+  const [verPdf, setVerPdf] = useState(false);
+  const listo = (blob, ext, tipo) => {
+    if (archivo) URL.revokeObjectURL(archivo.url);
+    setArchivo({ url: URL.createObjectURL(blob), nombre: `Alertas de finanzas ${hoy.toISOString().slice(0, 10)}.${ext}`, tipo });
+    if (tipo === "PDF") setVerPdf(true); // el PDF se abre primero en vista previa
+  };
+  const descargarExcel = async () => {
+    if (generando) return; setGenerando("excel");
+    try {
+      const [{ default: writeExcelFile }, { crearExcelAlertas }] = await Promise.all([import("write-excel-file/browser"), import("./alertasExcel")]);
+      const logo = await logoParaExcel(marca.logoSrc);
+      listo(await (await crearExcelAlertas(writeExcelFile, armarDatos(), logo)).toBlob(), "xlsx", "Excel");
+    } catch (e) { showToast ? showToast("No se pudo crear el Excel: " + e.message, "error") : console.error(e); }
+    finally { setGenerando(""); }
+  };
+  const descargarPDF = async () => {
+    if (generando) return; setGenerando("pdf");
+    try {
+      const [{ default: html2pdf }, { documentoAlertas, OPCIONES_PDF }] = await Promise.all([import("html2pdf.js"), import("./alertasPdf")]);
+      const pdf = await html2pdf().set(OPCIONES_PDF).from(documentoAlertas(armarDatos(), marca.logoSrc), "string").toPdf().get("pdf");
+      // Número de página al pie de cada hoja
+      const total = pdf.internal.getNumberOfPages(), an = pdf.internal.pageSize.getWidth(), al = pdf.internal.pageSize.getHeight();
+      for (let i = 1; i <= total; i++) { pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(91, 101, 118); pdf.text(`Página ${i} de ${total}`, an - 9, al - 5, { align: "right" }); }
+      listo(new Blob([pdf.output("blob")], { type: "application/pdf" }), "pdf", "PDF");
+    } catch (e) { showToast ? showToast("No se pudo crear el PDF: " + e.message, "error") : console.error(e); }
+    finally { setGenerando(""); }
+  };
+
+  const Estado = ({ nivel, txt }) => <span className={`af-est ${CLASE[nivel]}`}>{txt}</span>;
+  const Pest = ({ id, txt, n }) => (
+    <button type="button" role="tab" aria-selected={tab === id} className="af-tab" onClick={() => setTab(id)}>{txt}<span className="af-num">{n}</span></button>
   );
+  const Cobranza = ({ g }) => g.pctCob === null ? <span className="chico">Sin cobros en {mesCob}</span> : (
+    <div className="af-cob">
+      <div className="nowrap"><span className={g.pctCob < 70 ? "rojo fuerte" : "fuerte"}>{g.pctCob.toFixed(0)}%</span> <span className="chico">· {L(g.cobrado)} de {L(g.facturado)}</span></div>
+      <div className="af-cob-barra"><i className={g.pctCob < 70 ? "bajo" : ""} style={{ width: `${Math.min(100, g.pctCob)}%` }} /></div>
+    </div>
+  );
+  const etqGrupo = { rojo: "Pierde", amarillo: "En riesgo", verde: "Sostenible" };
 
-  return (<div>
-    <div style={{ ...card, display: "flex", gap: 10, alignItems: "flex-start", background: "rgba(239,246,255,.75)" }}>
-      <Info size={18} color="#2563EB" style={{ flexShrink: 0, marginTop: 2 }} />
-      <div style={{ fontSize: 12.5, color: "#1E3A8A", lineHeight: 1.5 }}>
-        <b>Finanzas</b> sirve para decidir y actuar: quién debe, qué grupo no se sostiene y qué hay que pagar. Esta pantalla solo lee datos; no cambia nada.
-        Las cifras contables oficiales (ganancia, balance) saldrán del módulo de <b>Contabilidad</b>.
+  return (<div className="af">
+    <div className="af-aviso">
+      <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+      <div>Quién debe, qué grupo no se sostiene y qué hay que pagar. <b>Solo lectura</b>: esta pantalla no cambia datos.</div>
+    </div>
+
+    <div className="af-kpis">
+      <Kpi c={deudores.length ? "var(--af-rojo)" : "var(--af-verde)"} t="Padres con deuda vencida" v={deudores.length} s={`${rojosDeu} urgentes (2+ meses o retirados)`} />
+      <Kpi c={totDeuda ? "var(--af-ambar)" : "var(--af-verde)"} t="Total vencido por cobrar" v={L(totDeuda)} s="Sin contar cobros repetidos" />
+      <Kpi c={gruposRojo ? "var(--af-rojo)" : "var(--af-verde)"} t="Grupos que pierden dinero" v={`${gruposRojo} de ${grupos.length}`} s={`${gruposAmarillo} más en riesgo`} />
+      <Kpi c={nOtras ? "var(--af-ambar)" : "var(--af-verde)"} t="Otras alertas" v={nOtras} s="Pagos atrasados y registros repetidos" />
+    </div>
+
+    <div className="af-barra">
+      <div className="af-tabs" role="tablist">
+        <Pest id="deudores" txt="Quién debe" n={deudores.length} />
+        <Pest id="grupos" txt="Sostenibilidad por grupo" n={gruposRojo + gruposAmarillo} />
+        <Pest id="otras" txt="Otras alertas" n={nOtras} />
+      </div>
+      <div className="af-acciones">
+        <button type="button" onClick={descargarPDF} disabled={!!generando} style={{ ...btnO, opacity: generando ? 0.7 : 1, cursor: generando ? "wait" : "pointer" }}><FileText size={15} />{generando === "pdf" ? "Preparando PDF…" : "PDF"}</button>
+        <button type="button" onClick={descargarExcel} disabled={!!generando} style={{ ...btnO, opacity: generando ? 0.7 : 1, cursor: generando ? "wait" : "pointer" }}><FileSpreadsheet size={15} />{generando === "excel" ? "Preparando Excel…" : "Excel"}</button>
+        {archivo?.tipo === "PDF" && <button type="button" onClick={() => setVerPdf(true)} style={btnO}><Eye size={15} />Vista previa</button>}
+        {archivo && <a href={archivo.url} download={archivo.nombre} onClick={() => setTimeout(() => setArchivo(null), 500)} style={{ ...btn("#15803D"), textDecoration: "none" }}><Download size={14} />Guardar {archivo.tipo}</a>}
       </div>
     </div>
 
-    <div style={{ display: "grid", gridTemplateColumns: ancho > 900 ? "repeat(4,1fr)" : ancho > 520 ? "repeat(2,1fr)" : "1fr", gap: 12, marginBottom: 16 }}>
-      <Tarjeta color={ROJO} titulo="Padres con deuda vencida" valor={deudores.length} sub={`${rojosDeu} con 2+ meses o retirados`} />
-      <Tarjeta color={AMARILLO} titulo="Total vencido por cobrar" valor={L(totDeuda)} sub="Sin contar cobros repetidos" />
-      <Tarjeta color={gruposRojo ? ROJO : VERDE} titulo="Grupos que pierden dinero" valor={gruposRojo} sub={`${gruposAmarillo} en riesgo`} />
-      <Tarjeta color={nOtras ? AMARILLO : VERDE} titulo="Otras alertas" valor={nOtras} sub="Pagos atrasados y repetidos" />
-    </div>
-
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-      <Pestaña id="deudores" txt="Quién debe" n={deudores.length} c={ROJO} />
-      <Pestaña id="grupos" txt="Sostenibilidad por grupo" n={gruposRojo + gruposAmarillo} c={gruposRojo ? ROJO : AMARILLO} />
-      <Pestaña id="otras" txt="Otras alertas" n={nOtras} c={AMARILLO} />
-    </div>
-
-    {tab === "deudores" && <div style={card}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", margin: 0, display: "flex", alignItems: "center", gap: 6 }}><Users size={16} color={ROJO} />Padres con mensualidades vencidas</h3>
+    {tab === "deudores" && <section className="af-panel">
+      <div className="af-panel-cab">
+        <div><h3 className="af-h">Padres con mensualidades vencidas</h3><div className="af-sub">{verDeudores.length} alumnos · {L(verDeudores.reduce((s, d) => s + d.monto, 0))} vencido · de mayor a menor deuda</div></div>
         <select value={filtro} onChange={(e) => setFiltro(e.target.value)} style={{ ...input, width: "auto", cursor: "pointer" }}>
           <option value="todos">Todos ({deudores.length})</option>
           <option value="rojo">Urgentes: 2+ meses o retirados ({rojosDeu})</option>
           <option value="retirados">Alumnos retirados con deuda ({deudores.filter((d) => d.retirado).length})</option>
         </select>
       </div>
-      {verDeudores.length === 0 ? <p style={{ fontSize: 13, color: VERDE, textAlign: "center", padding: 20 }}>✓ Nadie en esta lista</p> :
-        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-          <thead><tr style={{ borderBottom: "2px solid #E2E8F0" }}>{["", "Alumno", "Grupo", "Meses vencidos", "Atraso", "Debe", "Padre", ""].map((h, i) => <th key={i} style={{ ...th, textAlign: h === "Debe" ? "right" : "left" }}>{h}</th>)}</tr></thead>
+      {verDeudores.length === 0 ? <p className="af-vacio">✓ Nadie en esta lista</p> :
+        <div className="af-tabla-caja"><table>
+          <thead><tr><th>Estado</th><th>Alumno</th><th>Meses vencidos</th><th className="der">Atraso</th><th className="der">Debe</th><th>Encargado</th><th className="cen" aria-label="WhatsApp"></th></tr></thead>
           <tbody>{verDeudores.map((d) => {
             const tel = telWA(d.padre?.telefono || d.al.telefono);
             return (<tr key={d.al.id}>
-              <td style={td}><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 5, background: d.nivel === "rojo" ? ROJO : AMARILLO }} /></td>
-              <td style={{ ...td, fontWeight: 600 }}>{d.al.nombre}{d.retirado && <div><span style={badge(ROJO)}>Retirado</span></div>}{d.revisar && <div><span style={badge(GRIS)}>Revisar: {d.meses.length} meses</span></div>}</td>
-              <td style={td}>{d.sec?.nombre || "—"}</td>
-              <td style={td}><b>{d.meses.length}</b> <span style={{ color: GRIS, fontSize: 11 }}>{d.meses.length <= 4 ? d.meses.join(", ") : `${d.meses.slice(0, 2).join(", ")} … ${d.meses[d.meses.length - 1]}`}</span></td>
-              <td style={{ ...td, whiteSpace: "nowrap", color: d.dias > 60 ? ROJO : d.dias > 30 ? AMARILLO : "#334155" }}>{d.dias} días</td>
-              <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{L(d.monto)}</td>
-              <td style={td}>{d.padre?.nombre || "—"}</td>
-              <td style={{ ...td, textAlign: "center" }}>{tel ? <a href={`https://wa.me/${tel}?text=${encodeURIComponent(msgWA(d))}`} target="_blank" rel="noreferrer" title="Enviar recordatorio por WhatsApp" style={{ background: "#25D366", padding: "5px 8px", borderRadius: 6, display: "inline-flex" }}><Phone size={13} color="#fff" /></a> : <span style={{ fontSize: 11, color: ROJO }}>Sin tel.</span>}</td>
+              <td><Estado nivel={d.nivel} txt={d.nivel === "rojo" ? "Urgente" : "Vencido"} /></td>
+              <td className="af-corto"><div className="fuerte" title={d.al.nombre}>{d.al.nombre}</div><div className="chico">{d.sec?.nombre || "Sin grupo"}{d.retirado && <span className="rojo"> · Retirado</span>}{d.revisar && <span className="ambar"> · Revisar</span>}</div></td>
+              <td className="nowrap" title={d.meses.join(", ")}><b>{d.meses.length}</b> <span className="chico" style={{ display: "inline" }}>· {rangoMeses(d.meses)}</span></td>
+              <td className={`der nowrap ${d.dias > 60 ? "rojo fuerte" : d.dias > 30 ? "ambar" : ""}`}>{d.dias} días</td>
+              <td className="der fuerte nowrap">{L(d.monto)}</td>
+              <td className="af-corto" title={[d.padre?.nombre, d.padre?.telefono || d.al.telefono].filter(Boolean).join(" · ")}>{d.padre?.nombre || "—"}</td>
+              <td className="cen">{tel ? <a className="af-wa" href={`https://wa.me/${tel}?text=${encodeURIComponent(msgWA(d))}`} target="_blank" rel="noreferrer" title="Enviar recordatorio por WhatsApp"><Phone size={14} /></a> : <span className="chico" title="Sin teléfono registrado">—</span>}</td>
             </tr>);
           })}</tbody>
+          <tfoot><tr><td colSpan={2}>Total ({verDeudores.length})</td><td className="nowrap">{verDeudores.reduce((s, d) => s + d.meses.length, 0)} meses</td><td /><td className="der nowrap">{L(verDeudores.reduce((s, d) => s + d.monto, 0))}</td><td colSpan={2} /></tr></tfoot>
         </table></div>}
-      <p style={{ fontSize: 11, color: GRIS, margin: "10px 0 0" }}>Solo cuenta mensualidades que ya pasaron su fecha límite. Rojo: 2 o más meses, o alumno retirado. Amarillo: 1 mes. "Revisar" marca 6 meses o más, que puede ser un cobro cargado por error.</p>
-    </div>}
+      <p className="af-nota">Solo cuenta mensualidades que ya pasaron su fecha límite. <b>Urgente:</b> 2 o más meses, o alumno retirado. <b>Vencido:</b> 1 mes. <b>Revisar</b> marca 6 meses o más, que puede ser un cobro cargado por error.</p>
+    </section>}
 
-    {tab === "grupos" && <div style={card}>
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", margin: "0 0 12px", display: "flex", alignItems: "center", gap: 6 }}><TrendingDown size={16} color={ROJO} />¿Cada grupo se paga solo?</h3>
-      <div style={{ display: "grid", gridTemplateColumns: ancho > 700 ? "1fr 1fr 1fr" : "1fr", gap: 12, marginBottom: 14 }}>
+    {tab === "grupos" && <section className="af-panel">
+      <div className="af-panel-cab">
+        <div><h3 className="af-h">¿Cada grupo se paga solo?</h3><div className="af-sub">{grupos.length} grupos · resultado mensual total <span className={tot("resultado") < 0 ? "rojo fuerte" : "verde fuerte"}>{tot("resultado") < 0 ? "−" : ""}{L(Math.abs(tot("resultado")))}</span></div></div>
+      </div>
+      <div className="af-param">
         <div><label style={label}>Gastos fijos al mes (renta, luz, internet)</label>
           <input type="number" value={fijos > 0 ? fijos : ""} placeholder={`Sugerido: ${Math.round(sugeridoFijos)}`} onChange={(e) => setFijos(e.target.value)} style={input} />
-          <div style={{ fontSize: 10.5, color: GRIS, marginTop: 3 }}>Se reparten por alumno entre todos los grupos. Vacío = usa lo último registrado ({L(sugeridoFijos)}).</div></div>
+          <div className="af-ayuda">Se reparten por alumno entre todos los grupos. Vacío = usa lo último registrado ({L(sugeridoFijos)}).</div></div>
         <div><label style={label}>Ganancia mínima sana por grupo (%)</label>
-          <input type="number" value={margenMin} onChange={(e) => setMargen(e.target.value)} style={input} /></div>
+          <input type="number" value={margenMin} onChange={(e) => setMargen(e.target.value)} style={input} />
+          <div className="af-ayuda">Debajo de este margen el grupo queda «En riesgo».</div></div>
         <div><label style={label}>Mes para medir la cobranza</label>
-          <select value={mesCob} onChange={(e) => setMesCob(e.target.value)} style={{ ...input, cursor: "pointer" }}>{MESES.map((m) => <option key={m}>{m}</option>)}</select></div>
+          <select value={mesCob} onChange={(e) => setMesCob(e.target.value)} style={{ ...input, cursor: "pointer" }}>{MESES.map((m) => <option key={m}>{m}</option>)}</select>
+          <div className="af-ayuda">Compara lo cobrado contra lo facturado de {mesCob} {anioCob}.</div></div>
       </div>
-      <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-        <thead><tr style={{ borderBottom: "2px solid #E2E8F0" }}>{["", "Grupo", "Alumnos", "Cobra al mes", "Maestro", "Gastos fijos", "Resultado", `Cobrado ${mesCob.slice(0, 3)}`, "Equilibrio", "Por qué"].map((h, i) => <th key={i} style={{ ...th, textAlign: ["Cobra al mes", "Maestro", "Gastos fijos", "Resultado"].includes(h) ? "right" : "left" }}>{h}</th>)}</tr></thead>
-        <tbody>{grupos.map((g) => (<tr key={g.s.id}>
-          <td style={td}>{g.nivel === "verde" ? <CheckCircle size={14} color={VERDE} /> : <AlertTriangle size={14} color={g.nivel === "rojo" ? ROJO : AMARILLO} />}</td>
-          <td style={{ ...td, fontWeight: 600 }}>{g.s.nombre}</td>
-          <td style={td}>{g.n}{g.becas > 0 && <span style={{ color: GRIS, fontSize: 11 }}> ({g.becas} beca{g.becas > 1 ? "s" : ""})</span>}</td>
-          <td style={{ ...td, textAlign: "right" }}>{L(g.esperado)}</td>
-          <td style={{ ...td, textAlign: "right" }} title={g.maestros.map((m) => `${m.nombre}: ${L(m.salario)} entre ${m.secciones_ids.length} grupo(s)`).join("\n")}>{L(g.costoMaestro)}{g.maestros.length > 1 && <div style={{ fontSize: 10.5, color: GRIS }}>{g.maestros.length} maestros</div>}</td>
-          <td style={{ ...td, textAlign: "right" }}>{L(g.fijo)}</td>
-          <td style={{ ...td, textAlign: "right", fontWeight: 800, color: g.resultado < 0 ? ROJO : VERDE }}>{g.resultado < 0 ? "−" : ""}{L(Math.abs(g.resultado))}<div style={{ fontSize: 10.5, fontWeight: 600, color: GRIS }}>{g.esperado > 0 ? `${g.margen.toFixed(0)}%` : ""}</div></td>
-          <td style={{ ...td, color: g.pctCob !== null && g.pctCob < 70 ? ROJO : "#334155" }}>{g.pctCob === null ? "—" : `${L(g.cobrado)} (${g.pctCob.toFixed(0)}%)`}</td>
-          <td style={td}>{g.equilibrio === null ? "—" : <span title="Alumnos pagando que necesita para no perder">{g.equilibrio} pagando</span>}</td>
-          <td style={{ ...td, fontSize: 11.5, color: g.nivel === "rojo" ? ROJO : g.nivel === "amarillo" ? AMARILLO : VERDE }}>{g.motivos.length ? g.motivos.join(" · ") : "Sostenible"}</td>
-        </tr>))}</tbody>
+
+      <div className="af-tabla-caja af-solo-ancho"><table>
+        <thead><tr><th>Estado</th><th>Grupo</th><th className="der">Cobra al mes</th><th className="der">Costos al mes</th><th className="der">Resultado</th><th>Cobranza {mesCob.slice(0, 3)}</th><th className="der">Equilibrio</th></tr></thead>
+        <tbody>{grupos.map((g) => [
+          <tr key={g.s.id} className={g.motivos.length ? "af-sinlinea" : ""}>
+            <td><Estado nivel={g.nivel} txt={etqGrupo[g.nivel]} /></td>
+            <td><div className="fuerte">{g.s.nombre}</div><div className="chico">{g.n} alumnos{g.becas > 0 && ` · ${g.becas} beca${g.becas > 1 ? "s" : ""}`}{g.maestros.length > 0 && ` · ${g.maestros.map((m) => m.nombre).join(", ")}`}</div></td>
+            <td className="der nowrap">{L(g.esperado)}</td>
+            <td className="der nowrap" title={g.maestros.map((m) => `${m.nombre}: ${L(m.salario)} entre ${m.secciones_ids.length} grupo(s)`).join("\n")}>{L(g.costoMaestro + g.fijo)}<div className="chico">Maestro {L(g.costoMaestro)} · Fijos {L(g.fijo)}</div></td>
+            <td className={`der nowrap fuerte ${g.resultado < 0 ? "rojo" : "verde"}`}>{g.resultado < 0 ? "−" : ""}{L(Math.abs(g.resultado))}<div className="chico">{g.esperado > 0 ? `Margen ${g.margen.toFixed(0)}%` : "Sin cobro"}</div></td>
+            <td><Cobranza g={g} /></td>
+            <td className="der nowrap">{g.equilibrio === null ? "—" : <span title="Alumnos pagando que necesita para no perder">{g.equilibrio} pagando</span>}<div className="chico">tiene {g.n - g.becas}</div></td>
+          </tr>,
+          g.motivos.length > 0 && <tr key={g.s.id + "m"} className="af-motivo"><td /><td colSpan={6}><div className={`af-motivos ${CLASE[g.nivel]}`}>{g.motivos.map((m, i) => <span key={i}>{m}</span>)}</div></td></tr>,
+        ])}</tbody>
+        <tfoot><tr><td colSpan={2}>Total ({tot("n")} alumnos)</td><td className="der nowrap">{L(tot("esperado"))}</td><td className="der nowrap">{L(tot("costoMaestro") + tot("fijo"))}</td><td className={`der nowrap ${tot("resultado") < 0 ? "rojo" : "verde"}`}>{tot("resultado") < 0 ? "−" : ""}{L(Math.abs(tot("resultado")))}</td><td className="nowrap">{tot("facturado") > 0 ? `${((tot("cobrado") / tot("facturado")) * 100).toFixed(0)}% · ${L(tot("cobrado"))}` : "—"}</td><td /></tr></tfoot>
       </table></div>
-      <p style={{ fontSize: 11, color: GRIS, margin: "10px 0 0", lineHeight: 1.5 }}>
+
+      <div className="af-tarjetas">{grupos.map((g) => (
+        <div key={g.s.id} className="af-tg">
+          <div className="af-tg-cab"><div><div className="fuerte">{g.s.nombre}</div><div className="chico">{g.n} alumnos{g.becas > 0 && ` · ${g.becas} becas`}</div></div><Estado nivel={g.nivel} txt={etqGrupo[g.nivel]} /></div>
+          <dl className="af-tg-dl">
+            <dt>Cobra al mes</dt><dd>{L(g.esperado)}</dd>
+            <dt>Maestro</dt><dd>{L(g.costoMaestro)}</dd>
+            <dt>Gastos fijos</dt><dd>{L(g.fijo)}</dd>
+            <dt className="fuerte">Resultado</dt><dd className={`fuerte ${g.resultado < 0 ? "rojo" : "verde"}`}>{g.resultado < 0 ? "−" : ""}{L(Math.abs(g.resultado))}{g.esperado > 0 && ` (${g.margen.toFixed(0)}%)`}</dd>
+            <dt>Cobranza {mesCob.slice(0, 3)}</dt><dd>{g.pctCob === null ? "—" : `${g.pctCob.toFixed(0)}%`}</dd>
+            <dt>Equilibrio</dt><dd>{g.equilibrio === null ? "—" : `${g.equilibrio} pagando`}</dd>
+          </dl>
+          {g.motivos.length > 0 && <div className={`af-motivos ${CLASE[g.nivel]}`} style={{ marginTop: 8 }}>{g.motivos.map((m, i) => <span key={i}>{m}</span>)}</div>}
+        </div>))}
+      </div>
+
+      <p className="af-nota">
         <b>Resultado</b> = lo que cobra al mes (sin becados) − salario del maestro repartido entre sus grupos − su parte de gastos fijos.
         <b> Equilibrio</b> = cuántos alumnos pagando necesita para no perder. El costo del maestro depende de que cada maestro tenga bien marcados sus grupos en Maestros.
       </p>
-    </div>}
+    </section>}
 
-    {tab === "otras" && <div style={card}>
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", margin: "0 0 12px", display: "flex", alignItems: "center", gap: 6 }}><AlertTriangle size={16} color={AMARILLO} />Otras alertas</h3>
-      {nOtras === 0 && <p style={{ fontSize: 13, color: VERDE, textAlign: "center", padding: 20 }}>✓ Sin alertas</p>}
-      {cxpAtrasadas.length > 0 && <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Cuentas por pagar de meses anteriores sin pagar ({L(cxpAtrasadas.reduce((s, c) => s + (Number(c.monto) || 0), 0))})</div>
-        {cxpAtrasadas.map((c) => <div key={c.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "6px 0", borderBottom: "1px solid #F1F5F9" }}><span>{c.descripcion} <span style={{ color: GRIS }}>({c.mes_correspondiente})</span></span><b style={{ color: AMARILLO }}>{L(c.monto)}</b></div>)}
-        <div style={{ fontSize: 11, color: GRIS, marginTop: 4 }}>Se pagan desde Finanzas → Cuentas por pagar. Al pagarlas, el gasto sigue contando en su mes.</div>
+    {tab === "otras" && <section className="af-panel">
+      <div className="af-panel-cab"><div><h3 className="af-h">Otras alertas</h3><div className="af-sub">Pagos atrasados de la escuela y registros guardados dos veces</div></div></div>
+      {nOtras === 0 && <p className="af-vacio">✓ Sin alertas</p>}
+      {cxpAtrasadas.length > 0 && <div className="af-bloque">
+        <div className="af-lista-t"><span>Cuentas por pagar de meses anteriores sin pagar</span><span className="ambar nowrap">{L(totCxp)}</span></div>
+        <div className="af-tabla-caja"><table>
+          <thead><tr><th>Concepto</th><th>Mes</th><th className="der">Monto</th></tr></thead>
+          <tbody>{cxpAtrasadas.map((c) => <tr key={c.id}><td>{c.descripcion}</td><td className="nowrap">{c.mes_correspondiente} {c.anio_correspondiente || ""}</td><td className="der fuerte nowrap">{L(c.monto)}</td></tr>)}</tbody>
+        </table></div>
+        <div className="af-ayuda" style={{ marginTop: 6 }}>Se pagan desde Finanzas → Cuentas por pagar. Al pagarlas, el gasto sigue contando en su mes.</div>
       </div>}
-      {(repetidos.length > 0 || compRepetidos.length > 0) && <div>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: ROJO }}>Registros repetidos (inflan deudas o ingresos)</div>
-        {repetidos.map(({ f }) => <div key={f.id} style={{ fontSize: 12.5, padding: "6px 0", borderBottom: "1px solid #F1F5F9" }}>Cobro repetido: <b>{alPorId[f.alumno_id]?.nombre || "—"}</b>, {f.mes_correspondiente} {anioDe(f)} ({f.numero_factura}, {L(f.monto_total)})</div>)}
-        {compRepetidos.map((v) => <div key={v[0].id} style={{ fontSize: 12.5, padding: "6px 0", borderBottom: "1px solid #F1F5F9" }}>Pago guardado {v.length} veces: <b>{alPorId[v[0].alumno_id]?.nombre || "—"}</b>, {v[0].mes_correspondiente} ({v[0].numero_factura}, {L(v[0].monto_total)} c/u; {L(v[0].monto_total * (v.length - 1))} de más)</div>)}
-        <div style={{ fontSize: 11, color: GRIS, marginTop: 4 }}>Hay que anular las copias. Estas alertas no las cuentan dos veces en "Quién debe".</div>
+      {(repetidos.length > 0 || compRepetidos.length > 0) && <div className="af-bloque">
+        <div className="af-lista-t"><span className="rojo">Registros repetidos (inflan deudas o ingresos)</span><span className="nowrap">{repetidos.length + compRepetidos.length}</span></div>
+        <div className="af-tabla-caja"><table>
+          <thead><tr><th>Tipo</th><th>Alumno</th><th>Mes</th><th>Documento</th><th className="der">Monto</th></tr></thead>
+          <tbody>
+            {repetidos.map(({ f }) => <tr key={f.id}><td><Estado nivel="rojo" txt="Cobro repetido" /></td><td className="fuerte">{alPorId[f.alumno_id]?.nombre || "—"}</td><td className="nowrap">{f.mes_correspondiente} {anioDe(f)}</td><td className="nowrap">{f.numero_factura || "—"}</td><td className="der nowrap">{L(f.monto_total)}</td></tr>)}
+            {compRepetidos.map((v) => <tr key={v[0].id}><td><Estado nivel="rojo" txt={`Pago guardado ${v.length} veces`} /></td><td className="fuerte">{alPorId[v[0].alumno_id]?.nombre || "—"}</td><td className="nowrap">{v[0].mes_correspondiente}</td><td className="nowrap">{v[0].numero_factura || "—"}</td><td className="der nowrap">{L(v[0].monto_total * (v.length - 1))}<div className="chico">de más ({L(v[0].monto_total)} c/u)</div></td></tr>)}
+          </tbody>
+        </table></div>
+        <div className="af-ayuda" style={{ marginTop: 6 }}>Hay que anular las copias. Estas alertas no se cuentan dos veces en «Quién debe».</div>
       </div>}
+    </section>}
+
+    {verPdf && archivo?.tipo === "PDF" && <div className="af-modal" role="dialog" aria-label="Vista previa del PDF" onClick={(e) => e.target === e.currentTarget && setVerPdf(false)}>
+      <div className="af-modal-caja">
+        <div className="af-modal-cab">
+          <b>Vista previa · {archivo.nombre}</b>
+          <div className="af-acciones">
+            <a href={archivo.url} download={archivo.nombre} onClick={() => setTimeout(() => { setVerPdf(false); setArchivo(null); }, 500)} style={{ ...btn("#15803D"), textDecoration: "none" }}><Download size={14} />Guardar PDF</a>
+            <button type="button" onClick={() => setVerPdf(false)} style={btnO} aria-label="Cerrar"><X size={15} />Cerrar</button>
+          </div>
+        </div>
+        <iframe title="Vista previa del PDF" src={archivo.url + "#view=FitH"} className="af-modal-pdf" />
+      </div>
     </div>}
   </div>);
 }
