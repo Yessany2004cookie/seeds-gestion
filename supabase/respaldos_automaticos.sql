@@ -15,7 +15,8 @@
 --  Para deshacer:
 --    select cron.unschedule('respaldo-mensual');
 --    drop function public.respaldos_lista(); drop function public.respaldo_descargar(bigint);
---    drop function public.respaldo_hacer_ahora(); drop schema respaldos cascade;
+--    drop function public.respaldo_hacer_ahora(); drop function public.respaldo_para_externo();
+--    drop schema respaldos cascade;
 --  (No toca ninguna tabla existente.)
 -- ════════════════════════════════════════════════════════════════
 
@@ -101,6 +102,26 @@ begin
   if not public.es_admin() then return null; end if;
   return respaldos.hacer_copia('manual');
 end $$;
+
+-- Para la copia FUERA de Supabase (repo privado de GitHub, ver
+-- respaldo-externo/LEEME.md). Solo la puede usar la clave secreta
+-- (service_role), nunca la app. Devuelve la copia automática de las últimas
+-- 6 horas o, si no hay, hace una nueva.
+create or replace function public.respaldo_para_externo()
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v jsonb;
+begin
+  select datos into v from respaldos.copias
+  where tipo = 'automatico' and creado > now() - interval '6 hours'
+  order by creado desc limit 1;
+  if v is null then
+    select datos into v from respaldos.copias where id = respaldos.hacer_copia('automatico');
+  end if;
+  return v;
+end $$;
+revoke all on function public.respaldo_para_externo() from public, anon, authenticated;
+grant execute on function public.respaldo_para_externo() to service_role;
 
 revoke all on function public.respaldos_lista() from public, anon;
 revoke all on function public.respaldo_descargar(bigint) from public, anon;
