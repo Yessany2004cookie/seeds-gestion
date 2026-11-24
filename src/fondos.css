@@ -392,3 +392,41 @@ html[data-fondo="oscuro"] [style*="solid rgb(0, 0, 0)"] { border-color: #5A5D5D 
 html[data-fondo="oscuro"] [style^="color: rgb(21, 128, 61)"], html[data-fondo="oscuro"] [style*="; color: rgb(21, 128, 61)"],
 html[data-fondo="oscuro"] [style^="color: rgb(22, 163, 74)"], html[data-fondo="oscuro"] [style*="; color: rgb(22, 163, 74)"] { color: #7FC9A3 !important; }
 html[data-fondo="oscuro"] div[style*="background: rgb(27, 42, 74)"] { background: var(--sup-2) !important; }
+
+/* ── Libretas del portal docente (asistencia y bitácora) en modo oscuro ──
+   Las hojas tienen papel crema escrito directo en la pantalla. Con el modo
+   oscuro las letras se aclaraban pero el papel seguía claro, y no se leían
+   los nombres. Aquí el papel también pasa a oscuro. */
+html[data-fondo="oscuro"] [style*="background: rgb(251, 247, 239)"] { background: #22201D !important; }
+html[data-fondo="oscuro"] [style*="background: rgb(255, 254, 249)"],
+html[data-fondo="oscuro"] .bt-cara { background: #1D1F1F !important; }
+html[data-fondo="oscuro"] [style*="rgb(231, 220, 200)"],
+html[data-fondo="oscuro"] [style*="rgb(237, 228, 211)"] { border-color: #34312C !important; }
+html[data-fondo="oscuro"] span[style*="background: rgb(231, 220, 200)"] { background: #34312C !important; }
+html[data-fondo="oscuro"] .bt-renglones {
+  background-color: #1D1F1F;
+  background-image: linear-gradient(to right, transparent 46px, #6E3A3A 46px, #6E3A3A 48px, transparent 48px), repeating-linear-gradient(to bottom, transparent 0, transparent 31px, #2C3136 31px, #2C3136 32px);
+}
+html[data-fondo="oscuro"] .bt-texto { color: #E9EDEF; }
+html[data-fondo="oscuro"] .bt-titulo { color: #F2B27E; }
+html[data-fondo="oscuro"] input.bt-titulo { background: transparent !important; color: #F2B27E !important; }
+html[data-fondo="oscuro"] .bt-indice button:hover { background: #382B20; }
+/* Rosado de la paleta de la bitácora, más claro sobre oscuro */
+html[data-fondo="oscuro"] [style^="color: rgb(219, 39, 119)"], html[data-fondo="oscuro"] [style*="; color: rgb(219, 39, 119)"] { color: #F09AC0 !important; }
+/* Resaltador de la bitácora: el mismo color, translúcido, para que la letra clara se lea */
+html[data-fondo="oscuro"] .bt-texto [style*="background-color: rgb(254, 240, 138)"] { background-color: rgba(250, 204, 21, .3) !important; }
+html[data-fondo="oscuro"] .bt-texto [style*="background-color: rgb(187, 247, 208)"] { background-color: rgba(34, 197, 94, .28) !important; }
+html[data-fondo="oscuro"] .bt-texto [style*="background-color: rgb(191, 219, 254)"] { background-color: rgba(59, 130, 246, .3) !important; }
+html[data-fondo="oscuro"] .bt-texto [style*="background-color: rgb(251, 207, 232)"] { background-color: rgba(236, 72, 153, .3) !important; }
+html[data-fondo="oscuro"] .bt-texto [style*="background-color: rgb(254, 215, 170)"] { background-color: rgba(249, 115, 22, .3) !important; }
+
+/* Celdas fijas de tablas con blanco translúcido (columna Alumno del parte mensual) */
+html[data-fondo="oscuro"] td[style*="background: rgba(255, 255, 255, 0."],
+html[data-fondo="oscuro"] th[style*="background: rgba(255, 255, 255, 0."] { background: var(--sup) !important; }
+
+/* Avisos con degradado pastel (Check list de la clase) */
+html[data-fondo="oscuro"] [style*="background: linear-gradient(135deg, rgb(255, 247, 237)"] { background: #382B20 !important; }
+html[data-fondo="oscuro"] [style*="background: linear-gradient(135deg, rgb(236, 253, 245)"] { background: #173326 !important; }
+
+/* Círculos decorativos sobre encabezados de color: se quedan blancos translúcidos */
+html[data-fondo="oscuro"] div[aria-hidden][style*="background: rgba(255, 255, 255, 0."] { background: rgba(255, 255, 255, .14) !important; }
