@@ -9,7 +9,8 @@
 //  Solo arma archivos: no lee ni escribe en la base de datos.
 //
 //  reporte = { titulo, periodo, modulo, hojas: [{ nombre, titulo, columnas, filas, pie }] }
-//  columnas = [{ t, num?, pct?, ancho? }] · filas = [{ tipo?: sec|it|det|tot|gran|vacia, c: [...], color? }]
+//  columnas = [{ t, num?, pct?, ent?, ancho? }] (ent = cantidad entera, p. ej. alumnos)
+//  reporte.moneda = false quita "Cifras en Lempiras" del encabezado (reportes de conteos) · filas = [{ tipo?: sec|it|det|tot|gran|vacia, c: [...], color? }]
 // ════════════════════════════════════════════════════════════
 import { useState } from "react";
 import { FileSpreadsheet, FileText, Download, X } from "lucide-react";
@@ -31,7 +32,7 @@ const archivoTxt = (r) => `${r.titulo}${r.periodo ? " " + r.periodo : ""}`.repla
 // ── Encabezado del Excel ──
 // "A" membrete centrado: nombre y título centrados sobre toda la tabla, franja gris fina con periodo y fecha.
 // "B" ejecutivo a dos lados: logo y nombre a la izquierda, periodo y fecha a la derecha, línea azul fina.
-export function encabezadoExcel(estilo, { ancho, logo, nombre, sub, titulo, periodo, generado }) {
+export function encabezadoExcel(estilo, { ancho, logo, nombre, sub, titulo, periodo, generado, moneda = true }) {
   const vacia = (alto) => { const f = Array(ancho).fill(null); f[0] = { value: null, height: alto }; return f; };
   const conAlto = (f, alto) => { f[0] = { ...(f[0] || { value: null }), height: alto }; return f; };
   const fechaCorta = new Date().toLocaleDateString("es-HN", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -42,13 +43,13 @@ export function encabezadoExcel(estilo, { ancho, logo, nombre, sub, titulo, peri
     return [
       fila({ value: nombre, fontWeight: "bold", fontSize: 15, textColor: AZUL, alignVertical: "bottom" }, { value: periodo || "", fontWeight: "bold", fontSize: 11, textColor: AZUL, alignVertical: "bottom" }, 24),
       fila({ value: sub, fontSize: 9.5, textColor: GRIS, alignVertical: "top" }, { value: `Emitido el ${fechaCorta}`, fontSize: 9, textColor: GRIS, alignVertical: "top" }, 15),
-      fila({ value: titulo, fontWeight: "bold", fontSize: 12.5, textColor: "#1F2937", alignVertical: "bottom" }, { value: "Cifras en Lempiras (L)", fontSize: 9, textColor: GRIS, alignVertical: "bottom" }, 22),
+      fila({ value: titulo, fontWeight: "bold", fontSize: 12.5, textColor: "#1F2937", alignVertical: "bottom" }, { value: moneda ? "Cifras en Lempiras (L)" : "", fontSize: 9, textColor: GRIS, alignVertical: "bottom" }, 22),
       raya, vacia(10),
     ];
   }
   const centro = (cel, alto) => { const f = Array(ancho).fill(null); f[0] = { align: "center", ...cel, columnSpan: ancho }; return conAlto(f, alto); };
   const franja = Array(ancho).fill(null);
-  franja[0] = { value: [periodo ? `Periodo: ${periodo}` : null, `Emitido el ${fechaCorta}`, "Cifras en Lempiras (L)"].filter(Boolean).join("     |     "), columnSpan: ancho, align: "center", alignVertical: "center", fontSize: 9, textColor: GRIS, backgroundColor: BANDA, topBorderColor: "#C9D1DC", topBorderStyle: "thin", bottomBorderColor: "#C9D1DC", bottomBorderStyle: "thin", height: 20 };
+  franja[0] = { value: [periodo ? `Periodo: ${periodo}` : null, `Emitido el ${fechaCorta}`, moneda ? "Cifras en Lempiras (L)" : null].filter(Boolean).join("     |     "), columnSpan: ancho, align: "center", alignVertical: "center", fontSize: 9, textColor: GRIS, backgroundColor: BANDA, topBorderColor: "#C9D1DC", topBorderStyle: "thin", bottomBorderColor: "#C9D1DC", bottomBorderStyle: "thin", height: 20 };
   return [
     centro({ value: nombre, fontWeight: "bold", fontSize: 16, textColor: AZUL, alignVertical: "bottom" }, 28),
     centro({ value: sub, fontSize: 9.5, textColor: GRIS, alignVertical: "top" }, 16),
@@ -61,8 +62,8 @@ export async function crearExcelFormal(writeExcelFile, extraHoja, reporte, marca
   const generado = generadoTxt();
   const libro = reporte.hojas.map((h) => {
     const ancho = h.columnas.length;
-    const enc = encabezadoExcel(estilo, { ancho, logo, nombre: marca.nombre, sub: `${reporte.modulo}${marca.sede ? " · " + marca.sede : ""}`, titulo: h.titulo || reporte.titulo, periodo: reporte.periodo, generado });
-    const titulos = h.columnas.map((c) => ({ value: c.t, align: c.num || c.pct ? "right" : "left", fontWeight: "bold", textColor: "#FFFFFF", backgroundColor: AZUL, wrap: true, alignVertical: "center", height: 30 }));
+    const enc = encabezadoExcel(estilo, { ancho, logo, nombre: marca.nombre, sub: `${reporte.modulo}${marca.sede ? " · " + marca.sede : ""}`, titulo: h.titulo || reporte.titulo, periodo: reporte.periodo, generado, moneda: reporte.moneda !== false });
+    const titulos = h.columnas.map((c) => ({ value: c.t, align: c.num || c.pct || c.ent ? "right" : "left", fontWeight: "bold", textColor: "#FFFFFF", backgroundColor: AZUL, wrap: true, alignVertical: "center", height: 30 }));
     let par = 0;
     const cuerpo = h.filas.filter((f) => f.tipo !== "vacia").map((f) => {
       const t = f.tipo || "it"; const neg = ["sec", "tot", "gran"].includes(t);
@@ -72,6 +73,7 @@ export async function crearExcelFormal(writeExcelFile, extraHoja, reporte, marca
         const v = (f.c || [])[i];
         const base = { fontWeight: neg ? "bold" : undefined, backgroundColor: fondo, textColor: t === "det" ? GRIS : (c.num && f.color) || undefined, alignVertical: "top", indent: i === 0 && t === "det" ? 2 : i === 0 && t === "it" && h.sangria !== false ? 1 : undefined, ...lin };
         if (c.num && typeof v === "number") return { ...base, value: Math.round(v * 100) / 100, type: Number, format: FMT_L, fontFamily: MONO };
+        if (c.ent && typeof v === "number") return { ...base, value: v, type: Number, format: "0", align: "right", fontFamily: MONO };
         if (c.pct && typeof v === "number") return { ...base, value: v / 100, type: Number, format: "0.0%", align: "right", fontFamily: MONO };
         return { ...base, value: v === undefined || v === null || v === "" ? null : String(v), type: String, wrap: i === 0 || !c.ancho };
       });
@@ -106,7 +108,7 @@ const CSS = `
 .pf .salto{page-break-before:always;break-before:page;margin-top:0}
 .pf h2{font-family:"IBM Plex Sans",Arial,sans-serif;font-size:13px;margin:0 0 6px;color:${AZUL}}
 .pf table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-.pf th{background:${AZUL};color:#fff;font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:.3px;padding:6px 7px;text-align:left}
+.pf th{background:${AZUL} !important;color:#fff !important;font-weight:600;font-size:9px !important;border-bottom:0 !important;text-transform:uppercase;letter-spacing:.3px;padding:6px 7px;text-align:left}
 .pf th.der{text-align:right}
 .pf td{padding:4px 7px;border-bottom:1px solid #E4E8EE;vertical-align:top}
 .pf tr.it:nth-child(even) td{background:#F6F7F9}
@@ -125,12 +127,12 @@ const CSS = `
 `;
 export function documentoFormal(reporte, marca) {
   const celda = (c, v) => (c.num && typeof v === "number" ? Lh(v) : c.pct && typeof v === "number" ? `${v.toFixed(1)}%` : esc(v ?? ""));
-  const tabla = (h) => `<table><thead><tr>${h.columnas.map((c) => `<th class="${c.num || c.pct ? "der" : ""}"${c.ancho ? ` style="width:${c.ancho}px"` : ""}>${esc(c.t)}</th>`).join("")}</tr></thead><tbody>
+  const tabla = (h) => `<table><thead><tr>${h.columnas.map((c) => `<th class="${c.num || c.pct || c.ent ? "der" : ""}"${c.ancho ? ` style="width:${c.ancho}px"` : ""}>${esc(c.t)}</th>`).join("")}</tr></thead><tbody>
     ${h.filas.map((f) => { const t = f.tipo || "it"; if (t === "vacia") return `<tr class="vacia"><td colspan="${h.columnas.length}"></td></tr>`;
-      return `<tr class="${t}">${h.columnas.map((c, i) => `<td class="${i === 0 ? "c0" + (h.sangria !== false ? " sg" : "") : ""} ${c.num || c.pct ? "der" : ""}"${f.color && c.num ? ` style="color:${f.color}"` : ""}>${celda(c, (f.c || [])[i])}</td>`).join("")}</tr>`; }).join("")}
+      return `<tr class="${t}">${h.columnas.map((c, i) => `<td class="${i === 0 ? "c0" + (h.sangria !== false ? " sg" : "") : ""} ${c.num || c.pct || c.ent ? "der" : ""}"${f.color && c.num ? ` style="color:${f.color}"` : ""}>${celda(c, (f.c || [])[i])}</td>`).join("")}</tr>`; }).join("")}
   </tbody></table>${h.pie ? `<div class="nota">${esc(h.pie)}</div>` : ""}`;
   const cab = `<div class="cab">${marca.logo ? `<img src="${esc(marca.logo)}" alt="">` : ""}<div class="t"><div class="n">${esc(marca.nombre)}</div><div class="s">${esc(reporte.modulo)}${marca.sede ? " · " + esc(marca.sede) : ""}</div><div class="d">${esc(reporte.titulo)}</div></div>
-    <div class="p">${reporte.periodo ? `Periodo: <b>${esc(reporte.periodo)}</b><br>` : ""}Generado el <b>${esc(generadoTxt())}</b><br>Cifras en Lempiras (L)</div></div>`;
+    <div class="p">${reporte.periodo ? `Periodo: <b>${esc(reporte.periodo)}</b><br>` : ""}Generado el <b>${esc(generadoTxt())}</b>${reporte.moneda === false ? "" : "<br>Cifras en Lempiras (L)"}</div></div>`;
   const secciones = reporte.hojas.map((h, i) => `<div class="sec${i > 0 && reporte.hojas.length > 1 && h.filas.length > 18 ? " salto" : ""}">${reporte.hojas.length > 1 || h.titulo !== reporte.titulo ? `<h2>${esc(h.titulo || h.nombre)}</h2>` : ""}${tabla(h)}</div>`).join("");
   const firmas = reporte.firmas ? `<div class="firmas"><div>Elaborado por</div><div>Revisado por</div><div>Administración</div></div>` : "";
   return `<div class="pf"><style>${CSS}</style>${cab}${secciones}${firmas}<div class="pie"><span>${esc(marca.nombre)} · ${esc(reporte.modulo)} · ${esc(reporte.titulo)}</span><span>Documento generado por el sistema</span></div></div>`;
