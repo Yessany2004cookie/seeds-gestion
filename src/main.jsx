@@ -5,6 +5,7 @@ import Burbujas from './burbujas.jsx'
 import './glass.css'
 import './fondos.css'
 import { leerFondo, aplicarFondo } from './fondo.jsx'
+import { EncuestaPublica } from './desercion.jsx'
 
 // El fondo que escogió la persona se pone antes de pintar, para que no parpadee
 aplicarFondo(leerFondo())
@@ -31,4 +32,7 @@ const etiquetarTablas = () => {
 new MutationObserver(() => { if (!pendiente) { pendiente = true; requestAnimationFrame(etiquetarTablas) } })
   .observe(document.getElementById('root'), { childList: true, subtree: true, characterData: true })
 
-ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><Burbujas /><App /></React.StrictMode>)
+// Enlace público de la encuesta de deserción (lo abre el padre, sin sesión)
+const tokenEncuesta = new URLSearchParams(window.location.search).get('encuesta')
+
+ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode>{tokenEncuesta ? <EncuestaPublica token={tokenEncuesta} /> : <><Burbujas /><App /></>}</React.StrictMode>)
