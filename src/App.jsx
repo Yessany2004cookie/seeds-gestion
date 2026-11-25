@@ -18,6 +18,7 @@ import { useRecorrido, Recorrido, BotonAyuda, PASOS_ADMIN } from "./recorrido";
 import { SelectorFondo } from "./fondo";
 import { useModulos, ModulosPanel } from "./modulos";
 import { RespaldosAutomaticos } from "./respaldosAuto";
+import { MarketingApp, MarketingPanel } from "./marketing";
 import { ResumenMatricula, EncuestasDesercion, EnviarEncuesta, useEncuestas, encuestaDeAlumno } from "./desercion";
 import { useMarca, LogoEditable, TextoEditable, guardarMarca, guardarEtiqueta, mostrarPestana, ocultarPestana, ConfirmarConClave, PersonalizarPanel, ClaveSeguridadPanel, PESTANAS_FIJAS } from "./marca";
 import { DocenteApp, PESTANAS_DOCENTE, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
@@ -26,7 +27,7 @@ import {
   Plus, Trash2, Edit, Search, Calendar, X, Eye,
   Send, Home, UserPlus, GraduationCap, Phone, Mail, DollarSign,
   Check, AlertCircle, Menu, RefreshCw, Download, Upload, Award, MessageCircle, Sparkles, ClipboardList,
-  ChevronLeft as AtrasIcon, TrendingUp,
+  ChevronLeft as AtrasIcon, TrendingUp, Heart,
 } from "lucide-react";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -785,7 +786,7 @@ export default function App() {
       if (!vivo) return;
       if (error) setRol({ estado: "admin", perfil: null });
       else if (!perfil) setRol({ estado: "sin_acceso", perfil: null });
-      else setRol({ estado: perfil.rol === "docente" ? "docente" : "admin", perfil });
+      else setRol({ estado: perfil.rol === "docente" ? "docente" : perfil.rol === "marketing" ? "marketing" : "admin", perfil });
     });
     return () => { vivo = false; };
   }, [session]);
@@ -804,6 +805,7 @@ export default function App() {
   if (rol.estado === "docente" && !modulos.activo("docentes")) return <PantallaMensaje titulo="El portal docente no está activo" texto="Administración desactivó el portal docente en esta institución." onSalir={logout} />;
   if (rol.estado === "docente") return <DocenteApp session={session} perfil={rol.perfil} />;
   if (rol.estado === "admin" && rol.perfil?.maestro_id && vistaDocente && modulos.activo("docentes")) return <DocenteApp session={session} perfil={rol.perfil} onVolver={()=>cambiarVista(false)} />;
+  if (rol.estado === "marketing") return <MarketingApp session={session} perfil={rol.perfil} />;
   if (rol.estado === "sin_acceso") return <PantallaMensaje titulo="Tu usuario no tiene acceso" texto="Pide a administración que te dé acceso al sistema." onSalir={logout} />;
 
   // Menú agrupado: cada grupo es un submenú que se abre y se cierra
@@ -811,7 +813,7 @@ export default function App() {
     {id:"inicio",label:null,items:[{id:"dashboard",label:"Inicio",icon:Home}]},
     {id:"escuela",label:"Escuela y alumnado",icon:GraduationCap,items:[
       {id:"secciones",label:"Secciones",icon:BookOpen},{id:"maestros",label:"Maestros",icon:GraduationCap},
-      {id:"alumnos",label:"Matrícula",icon:Users},{id:"docentes",label:"Gestión curricular",icon:ClipboardList,modulo:"docentes"}]},
+      {id:"alumnos",label:"Matrícula",icon:Users},{id:"docentes",label:"Gestión curricular",icon:ClipboardList,modulo:"docentes"},{id:"marketing",label:"Marketing relacional",icon:Heart}]},
     {id:"cobros",label:"Cobros",icon:FileText,items:[
       {id:"facturas",label:"Facturas y pagos",icon:FileText},{id:"historial",label:"Historial",icon:Calendar},
       {id:"recordatorios",label:"Recordatorios",icon:Bell,modulo:"recordatorios"},{id:"materiales",label:"Materiales",icon:CreditCard,modulo:"materiales"},
@@ -889,6 +891,7 @@ export default function App() {
     c_catalogo:<ContabilidadPage key="catalogo" data={data} showToast={showToast} tabFijo="catalogo"/>,
     reportes:<>{modulos.activo("contador")&&<UsoSistemaPanel secciones={[...NAV,...GRUPOS_TODOS.filter(g=>g.label).map(g=>({id:"grupo:"+g.id,label:g.label}))]} showToast={showToast}/>}<ReportesPage {...propsSuc}/></>,
     docentes:<AdminDocentesPage data={dataSuc} showToast={showToast}/>,
+    marketing:<MarketingPanel data={data} showToast={showToast}/>,
     config:<ConfiguracionPage {...props}/>,
     sistema:<SistemaPage data={data} loadData={loadData} showToast={showToast} session={session}
       personalizar={{grupos:GRUPOS_TODOS.filter(g=>g.label),pestanas:GRUPOS_TODOS.flatMap(g=>g.items),pestanasDocente:modulos.activo("docentes")?PESTANAS_DOCENTE.filter(n=>modulos.activo(n.modulo)):[],onEditarMenu:()=>{setPersonalizando(true);setSidebarOpen(true);}}}/>,

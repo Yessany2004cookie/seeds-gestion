@@ -213,9 +213,9 @@ export function EnviarEncuesta({ alumno, padre, encuesta, onCerrar, onEnviada })
 }
 
 // ── Panel de encuestas (admin) ──
-export function EncuestasDesercion({ data, filterSec, encuestas }) {
+export function EncuestasDesercion({ data, filterSec, encuestas, abiertoInicial }) {
   const { lista, recargar } = encuestas;
-  const [abierto, setAbierto] = useState(false);
+  const [abierto, setAbierto] = useState(!!abiertoInicial);
   const [enviar, setEnviar] = useState(null);
   if (lista === null) return null;
   if (lista === false) {

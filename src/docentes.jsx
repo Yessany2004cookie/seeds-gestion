@@ -914,19 +914,26 @@ export function useAccesosDocentes() {
 
 export function AccesoDocente({ maestro, perfiles, recargar, showToast }) {
   const [modal, setModal] = useState(null); // "crear" | "contrasena"
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({ email: "", password: "", tipo: "docente" });
   const [ocupado, setOcupado] = useState(false);
   if (perfiles === null) return <span style={{ fontSize: 11, color: "#94A3B8" }}>—</span>;
   const acceso = perfiles.find((p) => p.maestro_id === maestro.id);
   const sugerirClave = () => "Seeds-" + Math.random().toString(36).slice(2, 6) + Math.floor(1000 + Math.random() * 9000);
-  const abrir = (tipo) => { setForm({ email: maestro.email || "", password: sugerirClave() }); setModal(tipo); };
+  const abrir = (tipo) => { setForm({ email: maestro.email || "", password: sugerirClave(), tipo: "docente" }); setModal(tipo); };
   const enviar = async () => {
     setOcupado(true);
     try {
       let r;
-      if (modal === "crear") r = await llamarApiDocentes({ accion: "crear", maestro_id: maestro.id, email: form.email, password: form.password });
+      if (modal === "crear") {
+        r = await llamarApiDocentes({ accion: "crear", maestro_id: maestro.id, email: form.email, password: form.password });
+        // Acceso de Marketing relacional: la cuenta se crea igual y se le cambia el rol
+        if (form.tipo === "marketing" && !r?.vinculado) {
+          const { error: eR } = await supabase.from("perfiles").update({ rol: "marketing" }).eq("maestro_id", maestro.id).eq("rol", "docente");
+          if (eR) throw new Error("La cuenta se creó como docente, pero no se pudo pasar a Marketing relacional: " + eR.message + ". ¿Ya se ejecutó supabase/marketing_relacional.sql?");
+        }
+      }
       else r = await llamarApiDocentes({ accion: "contrasena", maestro_id: maestro.id, password: form.password });
-      showToast(r?.vinculado ? `✓ Cuenta de administración vinculada a ${maestro.nombre}. Recarga la página (Ctrl + Shift + R) y usa el botón “Vista docente” de arriba.` : modal === "crear" ? `✓ Acceso creado para ${maestro.nombre}` : "✓ Contraseña cambiada");
+      showToast(r?.vinculado ? `✓ Cuenta de administración vinculada a ${maestro.nombre}. Recarga la página (Ctrl + Shift + R) y usa el botón “Vista docente” de arriba.` : modal === "crear" ? `✓ Acceso ${form.tipo === "marketing" ? "de Marketing relacional " : ""}creado para ${maestro.nombre}` : "✓ Contraseña cambiada");
       setModal(null); recargar();
     } catch (e) { showToast(e.message, "error"); }
     setOcupado(false);
@@ -937,12 +944,12 @@ export function AccesoDocente({ maestro, perfiles, recargar, showToast }) {
     try { await llamarApiDocentes({ accion: "quitar", maestro_id: maestro.id }); showToast("Acceso quitado", "error"); recargar(); }
     catch (e) { showToast(e.message, "error"); }
   };
-  const copiar = () => { const t = `Portal docente Seeds\n${window.location.origin}\nCorreo: ${modal === "crear" ? form.email : acceso?.email}\nContraseña: ${form.password}`; navigator.clipboard?.writeText(t).then(() => showToast("✓ Datos copiados para enviar al docente")).catch(() => {}); };
+  const copiar = () => { const t = `${(modal === "crear" ? form.tipo : acceso?.rol) === "marketing" ? "Marketing relacional" : "Portal docente"} Seeds\n${window.location.origin}\nCorreo: ${modal === "crear" ? form.email : acceso?.email}\nContraseña: ${form.password}`; navigator.clipboard?.writeText(t).then(() => showToast("✓ Datos copiados para enviar al docente")).catch(() => {}); };
 
   return (<>
     {acceso ? (
       <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
-        <span title={acceso.email} style={badge(acceso.rol === "admin" ? "#7C3AED" : "#059669")}>{acceso.rol === "admin" ? "★ Admin · " : "✓ "}{acceso.email}</span>
+        <span title={acceso.email} style={badge(acceso.rol === "admin" ? "#7C3AED" : acceso.rol === "marketing" ? "#D9641E" : "#059669")}>{acceso.rol === "admin" ? "★ Admin · " : acceso.rol === "marketing" ? "♥ Marketing · " : "✓ "}{acceso.email}</span>
         {acceso.rol !== "admin" && <button onClick={() => abrir("contrasena")} title="Cambiar contraseña" style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}><KeyRound size={14} color="#64748B" /></button>}
         <button onClick={quitar} title="Quitar acceso" style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}><X size={14} color="#EF4444" /></button>
       </div>
@@ -951,9 +958,18 @@ export function AccesoDocente({ maestro, perfiles, recargar, showToast }) {
     )}
     {modal && <div onClick={() => setModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 150, padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: 420, padding: 20 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px", color: "#1E293B" }}>{modal === "crear" ? "Dar acceso al portal docente" : "Cambiar contraseña"}</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px", color: "#1E293B" }}>{modal === "crear" ? "Dar acceso al sistema" : "Cambiar contraseña"}</h3>
         <p style={{ fontSize: 12, color: "#64748B", margin: "0 0 14px" }}>{maestro.nombre}</p>
-        {modal === "crear" && <div style={{ marginBottom: 12 }}><label style={label}>Correo del docente</label><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={input} placeholder="docente@correo.com" /></div>}
+        {modal === "crear" && <div style={{ marginBottom: 12 }}><label style={label}>Tipo de acceso</label>
+          <div style={{ display: "grid", gap: 6 }}>
+            {[["docente", "Portal docente", "Sus grupos: asistencia, bitácora, reflections, solicitudes."], ["marketing", "Marketing relacional", "Alumnos dados de baja y encuestas a las familias. Si tiene grupos, también ve su portal docente. Sin cobros ni finanzas."]].map(([v, t, d]) => (
+              <label key={v} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 10px", border: "1px solid " + (form.tipo === v ? "#EAB28C" : "#E2E8F0"), background: form.tipo === v ? "#FFF8F2" : "#fff", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
+                <input type="radio" name="tipo-acceso" checked={form.tipo === v} onChange={() => setForm({ ...form, tipo: v })} style={{ accentColor: NAR, marginTop: 3 }} />
+                <span><b style={{ color: "#1E293B" }}>{t}</b><span style={{ display: "block", fontSize: 11.5, color: "#64748B" }}>{d}</span></span>
+              </label>
+            ))}
+          </div></div>}
+        {modal === "crear" && <div style={{ marginBottom: 12 }}><label style={label}>Correo</label><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={input} placeholder="docente@correo.com" /></div>}
         <div style={{ marginBottom: 6 }}><label style={label}>Contraseña {modal === "crear" ? "temporal" : "nueva"}</label><input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} style={input} /></div>
         <p style={{ fontSize: 11, color: "#94A3B8", margin: "0 0 14px" }}>Mínimo 8 caracteres. Copia los datos y envíaselos al docente por WhatsApp.{modal === "crear" && " Si el correo es de una cuenta de administración, no se crea otra: se vincula y esa persona usa el botón “Vista docente” (la contraseña de aquí se ignora)."}</p>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>

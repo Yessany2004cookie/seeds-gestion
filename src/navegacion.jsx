@@ -15,6 +15,7 @@ export const DESCRIPCIONES = {
   maestros: "Datos de cada maestro, su salario mensual y las secciones que tiene asignadas.",
   alumnos: "Matricule alumnos nuevos, cámbielos de sección, registre a sus padres y vea quién está activo o de baja.",
   docentes: "Revise lo que envían los docentes: solicitudes, asistencia y parte mensual, reflections, check list de clase y bitácoras.",
+  marketing: "Relación con las familias: encuesta a los alumnos dados de baja y encuestas de satisfacción a toda la escuela, por WhatsApp.",
   facturas: "Envíe los cobros de mensualidad a los padres y confirme los pagos que entran, con su comprobante.",
   historial: "Consulte todo lo que ha pagado y debe cada alumno, mes por mes.",
   recordatorios: "Mande recordatorios de pago por WhatsApp a los padres que tienen cobros pendientes.",

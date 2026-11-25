@@ -6,6 +6,7 @@ import './glass.css'
 import './fondos.css'
 import { leerFondo, aplicarFondo } from './fondo.jsx'
 import { EncuestaPublica } from './desercion.jsx'
+import { SatisfaccionPublica } from './marketing.jsx'
 
 // El fondo que escogió la persona se pone antes de pintar, para que no parpadee
 aplicarFondo(leerFondo())
@@ -33,6 +34,9 @@ new MutationObserver(() => { if (!pendiente) { pendiente = true; requestAnimatio
   .observe(document.getElementById('root'), { childList: true, subtree: true, characterData: true })
 
 // Enlace público de la encuesta de deserción (lo abre el padre, sin sesión)
-const tokenEncuesta = new URLSearchParams(window.location.search).get('encuesta')
+const params = new URLSearchParams(window.location.search)
+const tokenEncuesta = params.get('encuesta')
+// Enlace público de la encuesta de satisfacción (Marketing relacional)
+const tokenSatisfaccion = params.get('satisfaccion')
 
-ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode>{tokenEncuesta ? <EncuestaPublica token={tokenEncuesta} /> : <><Burbujas /><App /></>}</React.StrictMode>)
+ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode>{tokenEncuesta ? <EncuestaPublica token={tokenEncuesta} /> : tokenSatisfaccion ? <SatisfaccionPublica token={tokenSatisfaccion} /> : <><Burbujas /><App /></>}</React.StrictMode>)
