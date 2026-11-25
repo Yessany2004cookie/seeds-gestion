@@ -209,7 +209,7 @@ export function ContadorVisible() {
   const estado = repit ? { c: "#D97706", f: "#FFFBEB", b: "#FDE68A", l: "Clics repetidos: no cuentan" }
     : contando ? { c: "#059669", f: "#ECFDF5", b: "#A7F3D0", l: "Contando tiempo de trabajo" }
       : { c: "#94A3B8", f: "#F8FAFC", b: "#E2E8F0", l: "En pausa: sin actividad" };
-  return (<div title={`${estado.l}. Hoy llevas ${duracion(vivo.base + vivo.local + enCurso)} de trabajo real.`}
+  return (<div className="contador-barra" title={`${estado.l}. Hoy llevas ${duracion(vivo.base + vivo.local + enCurso)} de trabajo real.`}
     style={{ display: "flex", alignItems: "center", gap: 6, background: estado.f, border: `1px solid ${estado.b}`, borderRadius: 999, padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>
     <span style={{ width: 8, height: 8, borderRadius: 999, background: estado.c, boxShadow: contando && !repit ? `0 0 0 3px ${estado.c}33` : "none" }} />
     <Clock size={13} color={estado.c} />

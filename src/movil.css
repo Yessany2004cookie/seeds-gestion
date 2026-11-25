@@ -1,0 +1,109 @@
+/* ════════════════════════════════════════════════════════════
+   VISTA EN TELÉFONO
+   - Barra superior en dos filas: arriba menú, atrás, título, ayuda y
+     refrescar; abajo sede, vista docente, contador y fondo.
+   - Botón del menú (hamburguesa) con un brillo naranja suave.
+   - Botones y campos de al menos 44 px de alto para tocarlos con el dedo.
+   ════════════════════════════════════════════════════════════ */
+
+/* Botón del menú: también se usa en tableta */
+.boton-menu {
+  position: relative; flex-shrink: 0; width: 44px; height: 44px; padding: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 12px; border: 1px solid rgba(217, 100, 30, .35);
+  background: linear-gradient(145deg, #FFF7F1, #FCE9DC);
+  color: #C2571A;
+  box-shadow: 0 0 0 0 rgba(217, 100, 30, .35), 0 2px 8px rgba(217, 100, 30, .18);
+  animation: brilloMenu 2.8s ease-in-out infinite;
+  -webkit-tap-highlight-color: transparent;
+}
+.boton-menu:active { transform: scale(.94); }
+@keyframes brilloMenu {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 100, 30, .30), 0 2px 8px rgba(217, 100, 30, .16); }
+  50%      { box-shadow: 0 0 0 5px rgba(217, 100, 30, 0), 0 2px 14px rgba(217, 100, 30, .34); }
+}
+html[data-fondo="oscuro"] .boton-menu {
+  background: linear-gradient(145deg, #3A332E, #33363B); color: #F0A46A; border-color: rgba(240, 164, 106, .40);
+}
+@media (prefers-reduced-motion: reduce) { .boton-menu { animation: none; } }
+
+@media (max-width: 768px) {
+  /* ── Barra superior en dos filas ── */
+  header.barra-app {
+    display: flex !important; flex-wrap: wrap; align-items: center;
+    padding: 8px 12px 10px !important; gap: 8px !important; row-gap: 8px !important;
+    position: relative; z-index: 30;
+  }
+  header.barra-app > div { display: contents !important; }
+  header.barra-app::after { content: ""; order: 6; flex-basis: 100%; height: 0; }
+
+  header.barra-app .boton-menu { order: 1; }
+  header.barra-app .boton-atras { order: 2; width: 44px; height: 44px; border-radius: 12px; }
+  header.barra-app .titulo-barra { order: 3; flex: 1 1 0; min-width: 0; font-size: 17px !important; padding-left: 2px; }
+  header.barra-app .boton-ayuda { order: 4; }
+  header.barra-app .boton-refrescar { order: 5; }
+
+  header.barra-app .selector-sucursal { order: 7; flex: 1 1 0; }
+  /* "Vista docente" y "Administración" pasan al menú lateral en el teléfono */
+  header.barra-app .boton-vista-docente,
+  header.barra-app .boton-volver-admin { display: none !important; }
+  header.barra-app .contador-barra { order: 9; }
+  header.barra-app .caja-fondo { order: 10; }
+
+  /* Botones redondos de la barra: 44 px */
+  header.barra-app .boton-ayuda,
+  header.barra-app .boton-refrescar,
+  header.barra-app .boton-fondo {
+    width: 44px !important; height: 44px !important; padding: 0 !important; border-radius: 12px !important;
+    display: inline-flex !important; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  header.barra-app .boton-ayuda { font-size: 17px !important; }
+  header.barra-app .boton-refrescar svg,
+  header.barra-app .boton-fondo svg { width: 18px; height: 18px; }
+
+  /* Selector de sede: ocupa lo que queda de la segunda fila */
+  header.barra-app .selector-sucursal {
+    min-height: 44px; box-sizing: border-box; padding: 0 12px !important; border-radius: 12px !important; min-width: 0;
+  }
+  header.barra-app .selector-sucursal svg { display: block !important; flex-shrink: 0; }
+  header.barra-app .selector-sucursal select {
+    flex: 1; width: 100%; max-width: none !important; min-height: 42px; font-size: 15px !important;
+  }
+
+  header.barra-app .contador-barra { min-height: 44px; box-sizing: border-box; padding: 0 12px !important; flex-shrink: 0; border-radius: 12px !important; font-size: 13px !important; }
+  header.barra-app .contador-barra svg { display: none; }
+  header.barra-app .boton-ayuda { border: 1px solid #CDD3DC !important; background: #fff !important; }
+  html[data-fondo="oscuro"] header.barra-app .boton-ayuda { background: var(--sup-2) !important; border-color: var(--borde) !important; color: #F0A46A !important; }
+
+  /* ── Botones y campos cómodos para el dedo ── */
+  main button,
+  div[style*="position: fixed"] button { min-height: 44px; }
+  main input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  main select,
+  div[style*="position: fixed"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  div[style*="position: fixed"] select { min-height: 44px; box-sizing: border-box; }
+  main input[type="checkbox"], main input[type="radio"],
+  div[style*="position: fixed"] input[type="checkbox"], div[style*="position: fixed"] input[type="radio"] { width: 22px; height: 22px; }
+  /* Botones que son solo un icono: también 44 px de ancho */
+  main button:not(:has(span, b, strong)):has(> svg:only-child) { min-width: 44px; justify-content: center; }
+  /* Donde la cuadrícula es muy apretada (asistencia, calendarios) no se agranda */
+  main table[data-tarjetas="no"] button { min-height: 0; min-width: 0; }
+
+  /* Menú lateral: opciones más altas */
+  .vidrio-menu nav .menu-item { min-height: 46px; font-size: 14px !important; }
+  .vidrio-menu nav button[aria-expanded] { width: 46px !important; }
+  .vidrio-menu > button { min-height: 52px; font-size: 14px !important; }
+
+  /* Pestañas y filtros en fila: se deslizan de lado en vez de apretarse */
+  main [role="tablist"] { overflow-x: auto; flex-wrap: nowrap !important; -webkit-overflow-scrolling: touch; }
+}
+
+/* Selector de sede en modo oscuro: sin cuadro claro adentro */
+html[data-fondo="oscuro"] header.barra-app .selector-sucursal select { background: transparent !important; }
+html[data-fondo="oscuro"] header.barra-app .selector-sucursal svg { color: #F0A46A; stroke: #F0A46A; }
+
+/* En el teléfono el título muestra solo la pantalla actual (el botón atrás lleva a la categoría) */
+@media (max-width: 768px) {
+  header.barra-app .titulo-barra .miga,
+  header.barra-app .titulo-barra .miga-sep { display: none; }
+}

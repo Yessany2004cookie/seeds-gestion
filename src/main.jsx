@@ -4,6 +4,7 @@ import App from './App.jsx'
 import Burbujas from './burbujas.jsx'
 import './glass.css'
 import './fondos.css'
+import './movil.css'
 import { leerFondo, aplicarFondo } from './fondo.jsx'
 import { EncuestaPublica } from './desercion.jsx'
 

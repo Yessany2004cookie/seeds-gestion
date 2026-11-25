@@ -161,7 +161,7 @@ export function useRecorrido(session, rol, visible) {
 // Botón "?" de la barra superior para repetir el recorrido
 export function BotonAyuda({ onClick }) {
   return (
-    <button data-tour="ayuda" onClick={onClick} title="Ver el recorrido guiado" aria-label="Ver el recorrido guiado"
+    <button data-tour="ayuda" className="boton-ayuda" onClick={onClick} title="Ver el recorrido guiado" aria-label="Ver el recorrido guiado"
       style={{ background: "rgba(255,255,255,.6)", border: "1px solid rgba(255,255,255,.85)", borderRadius: 999, cursor: "pointer", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#EA580C", fontFamily: "inherit", flexShrink: 0 }}>?</button>
   );
 }

@@ -937,14 +937,15 @@ export default function App() {
             </div>);
           })}
         </nav>
+        {window.innerWidth<=768&&rol.perfil?.maestro_id&&modulos.activo("docentes")&&<button className="menu-vista-docente" onClick={()=>{setSidebarOpen(false);cambiarVista(true);}} style={{display:"flex",alignItems:"center",gap:8,padding:"14px 20px",border:"none",borderTop:"1px solid rgba(255,255,255,.08)",background:"transparent",color:"#F0A46A",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit"}}><GraduationCap size={16}/>Cambiar a vista docente</button>}
         <button onClick={logout} style={{display:"flex",alignItems:"center",gap:8,padding:"14px 20px",border:"none",borderTop:"1px solid rgba(255,255,255,.08)",background:"transparent",color:"#FCA5A5",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}><LogOut size={16}/>Cerrar sesión</button>
       </aside>
       <main style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
-        <header className="vidrio-barra" style={{padding:"10px 20px",margin:0,borderRadius:0,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <header className="vidrio-barra barra-app" style={{padding:"10px 20px",margin:0,borderRadius:0,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             {window.innerWidth<=768&&page!=="dashboard"&&<button onClick={()=>history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20}/></button>}
-            {window.innerWidth<=768&&<button onClick={()=>setSidebarOpen(true)} aria-label="Menú" style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Menu size={22} color="#475569"/></button>}
-            <h1 className="titulo-barra" style={{fontSize:18,fontWeight:600,color:"#1B2A4A",margin:0}}>{(()=>{if(grupoPagina)return grupoPagina.label;const n=NAV.find(x=>x.id===page);return n?(n.grupo?<><button onClick={()=>setPage("grupo:"+n.grupoId)} className="miga" title={"Ver todo lo de "+n.grupo}>{n.grupo}</button> · {n.label}</>:n.label):"";})()}</h1>
+            {window.innerWidth<=768&&<button onClick={()=>setSidebarOpen(true)} aria-label="Abrir menú" title="Menú" className="boton-menu"><Menu size={22}/></button>}
+            <h1 className="titulo-barra" style={{fontSize:18,fontWeight:600,color:"#1B2A4A",margin:0}}>{(()=>{if(grupoPagina)return grupoPagina.label;const n=NAV.find(x=>x.id===page);return n?(n.grupo?<><button onClick={()=>setPage("grupo:"+n.grupoId)} className="miga" title={"Ver todo lo de "+n.grupo}>{n.grupo}</button><span className="miga-sep"> · </span>{n.label}</>:n.label):"";})()}</h1>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {data.sucursales.length>0&&<div data-tour="sucursal" className="selector-sucursal" style={{display:"flex",alignItems:"center",gap:6,background:"#F5F7FA",border:"1px solid #CDD3DC",borderRadius:4,padding:"4px 10px",minWidth:0}}>
@@ -953,11 +954,11 @@ export default function App() {
                 {data.sucursales.filter(s=>s.activa!==false).map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
             </div>}
-            {rol.perfil?.maestro_id&&modulos.activo("docentes")&&<button onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1px solid #E7B48F",borderRadius:4,cursor:"pointer",padding:"5px 10px",color:"#C2571A",fontSize:12,fontWeight:600,fontFamily:"inherit"}}><GraduationCap size={14}/>Vista docente</button>}
+            {rol.perfil?.maestro_id&&modulos.activo("docentes")&&<button className="boton-vista-docente" onClick={()=>cambiarVista(true)} title="Cambiar a la vista docente" aria-label="Vista docente" style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1px solid #E7B48F",borderRadius:4,cursor:"pointer",padding:"5px 10px",color:"#C2571A",fontSize:12,fontWeight:600,fontFamily:"inherit"}}><GraduationCap size={14}/><span className="txt-vista-docente">Vista docente</span></button>}
             {modulos.activo("contador")&&<ContadorVisible/>}
             <SelectorFondo/>
             <BotonAyuda onClick={recorrido.abrir}/>
-            <button data-tour="refrescar" onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" style={{background:"#fff",border:"1px solid #CDD3DC",borderRadius:4,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
+            <button data-tour="refrescar" className="boton-refrescar" onClick={()=>{loadData();showToast("Datos actualizados");}} title="Refrescar datos" aria-label="Refrescar datos" style={{background:"#fff",border:"1px solid #CDD3DC",borderRadius:4,cursor:"pointer",padding:"5px 8px",display:"flex",alignItems:"center"}}><RefreshCw size={14} color="#64748B"/></button>
             <div style={{fontSize:12,color:"#64748B"}} className="hide-mobile">{session.user.email}</div>
           </div>
         </header>
