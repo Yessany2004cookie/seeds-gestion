@@ -321,7 +321,7 @@ const mensajeFactura = (f, al, padre, sec, mora, tipo) => {
 };
 
 // ── Imagen de factura formal (Canvas) ──
-// Factura de cobro mensual y comprobante de pago, con sello (sin firma manuscrita).
+// Factura de cobro mensual y comprobante de pago, solo con sello (sin firma ni nombre).
 const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
   const esPago = tipo === "comprobante";
   const W = 600, H = 780, K = 2; // se dibuja al doble para que se vea nítida
@@ -418,13 +418,8 @@ const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
     c.fillText('y enviar su comprobante al número de administración.', 40, y+17);
   }
 
-  // Responsable y sello (sin firma manuscrita)
+  // Sello (sin firma ni nombre de quien firma)
   const yf = H - 210;
-  linea(60, yf+130, 270, yf+130, NARANJA, 1.2);
-  c.textAlign='center'; c.fillStyle=AZUL; c.font=`bold 12px ${SANS}`;
-  c.fillText('Kerling Cantarero', 165, yf+148);
-  c.fillStyle=GRIS; c.font=`11px ${SANS}`;
-  c.fillText('Administración', 165, yf+164);
   dibujarImagen(c, selloImg, 380, yf-6, 160, 160, 0.9, -0.12);
 
   // Pie
