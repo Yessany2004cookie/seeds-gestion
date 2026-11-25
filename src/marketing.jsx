@@ -29,13 +29,11 @@ import "./marketing.css";
 // tipo: estrellas (1 a 5) · nps (0 a 10) · opcion (una de varias) · abierta (texto)
 export const PREGUNTAS_BASE = [
   { id: "general", tipo: "estrellas", texto: "¿Qué tan satisfecho está, en general, con Seeds English?", obligatoria: true },
-  { id: "ensenanza", tipo: "estrellas", texto: "Calidad de la enseñanza y lo que ha aprendido su hijo(a)" },
   { id: "docentes", tipo: "estrellas", texto: "Trato y atención de los maestros" },
   { id: "comunicacion", tipo: "estrellas", texto: "Comunicación de la escuela con los padres" },
   { id: "administracion", tipo: "estrellas", texto: "Atención en administración (secretaría y pagos)" },
   { id: "instalaciones", tipo: "estrellas", texto: "Limpieza, seguridad e instalaciones" },
   { id: "actividades", tipo: "estrellas", texto: "Actividades y eventos de la escuela" },
-  { id: "precio", tipo: "estrellas", texto: "Relación entre lo que paga y lo que recibe" },
   { id: "recomendaria", tipo: "nps", texto: "Del 0 al 10, ¿qué tanto recomendaría Seeds a otra familia?" },
   { id: "continuara", tipo: "opcion", texto: "¿Piensa inscribir a su hijo(a) el próximo año?", opciones: ["Sí", "No", "Aún no sé"] },
   { id: "medio", tipo: "opcion", texto: "¿Por qué medio prefiere recibir avisos?", opciones: ["WhatsApp", "Llamada", "Correo", "Agenda del alumno"] },
