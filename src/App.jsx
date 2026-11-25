@@ -3,7 +3,7 @@ import { supabase } from "./supabaseClient";
 import { useAjuste, registrarRecordatorios, ultimosRecordatorios } from "./ajustes";
 import { card, input, btn, btnO, label, badge, tono, AZUL as AZUL_MARCA, NARANJA as NARANJA_MARCA } from "./estilo";
 import { LOGO_SEEDS } from "./logo";
-import { SELLO_SEEDS, FIRMA_ADMIN } from "./sello";
+import { SELLO_SEEDS } from "./sello";
 import { AlertasFinanzasPage, logoParaExcel } from "./alertasFinanzas";
 import { encabezadoExcel } from "./documentoFormal";
 import { FinResumenExcel, FinMaestrosExcel, FinGastosExcel, IngresosExcel, DescargasFinanzas, hojasResumen, hojasMaestros, hojasGastos, hojasIngresos } from "./finanzasExcel";
@@ -273,11 +273,9 @@ const dibujarLogo = (c, x=18, y=16, size=58) => {
   } catch(e){}
 };
 
-// ── Sello y firma precargados para las facturas formales ──
+// ── Sello precargado para las facturas formales ──
 const selloImg = typeof Image !== "undefined" ? new Image() : null;
 if (selloImg) { selloImg.src = SELLO_SEEDS; }
-const firmaImg = typeof Image !== "undefined" ? new Image() : null;
-if (firmaImg) { firmaImg.src = FIRMA_ADMIN; }
 const dibujarImagen = (c, img, x, y, w, h, alpha=1, rot=0) => {
   try {
     if (!img || !img.complete || !img.naturalWidth) return;
@@ -323,7 +321,7 @@ const mensajeFactura = (f, al, padre, sec, mora, tipo) => {
 };
 
 // ── Imagen de factura formal (Canvas) ──
-// Factura de cobro mensual y comprobante de pago, con sello y firma.
+// Factura de cobro mensual y comprobante de pago, con sello (sin firma manuscrita).
 const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
   const esPago = tipo === "comprobante";
   const W = 600, H = 780, K = 2; // se dibuja al doble para que se vea nítida
@@ -420,9 +418,8 @@ const generarImgFactura = (f, al, padre, sec, mora, tipo) => {
     c.fillText('y enviar su comprobante al número de administración.', 40, y+17);
   }
 
-  // Firma y sello
+  // Responsable y sello (sin firma manuscrita)
   const yf = H - 210;
-  dibujarImagen(c, firmaImg, 78, yf, 170, 135);
   linea(60, yf+130, 270, yf+130, NARANJA, 1.2);
   c.textAlign='center'; c.fillStyle=AZUL; c.font=`bold 12px ${SANS}`;
   c.fillText('Kerling Cantarero', 165, yf+148);
