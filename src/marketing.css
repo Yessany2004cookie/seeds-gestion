@@ -106,3 +106,4 @@ html[data-fondo="oscuro"] .mk-aviso.on .mk-aviso-i { background: #3A2D22; }
 .mk-check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
 .mk-check input { accent-color: #D9641E; }
 .mk-sel-chico { border: 1px solid var(--rm-borde); border-radius: 6px; padding: 4px 6px; font: 12.5px Inter, sans-serif; background: var(--rm-sup); color: var(--rm-texto); }
+.mk-menu-cont { background: #D9641E; color: #fff; border-radius: 10px; font: 700 11px Inter, sans-serif; padding: 1px 7px; }

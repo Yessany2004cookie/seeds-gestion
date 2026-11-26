@@ -19,6 +19,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SEEDS } from "./logo";
 import { BarraDescargas } from "./documentoFormal";
+import { useMarca } from "./marca";
 import "./resumenMes.css";
 import "./desercion.css";
 
@@ -283,6 +284,22 @@ export function EncuestasDesercion({ data, filterSec, encuestas, abiertoInicial 
   );
 }
 
+// ── Membrete de las encuestas que abre el padre ──
+// Mismo estándar de los reportes ("A · membrete centrado"): logo, nombre de
+// la institución, título del documento y franja gris con la fecha.
+export function MembreteEncuesta({ titulo }) {
+  const m = useMarca();
+  const hoy = new Date().toLocaleDateString("es-HN", { day: "numeric", month: "long", year: "numeric" });
+  return (
+    <header className="ep-membrete">
+      <img src={m.logoSrc || LOGO_SEEDS} alt="" />
+      <div className="ep-m-nombre">{m.nombreO("Seeds English School")}</div>
+      <div className="ep-m-titulo">{titulo}</div>
+      <div className="ep-m-franja">{hoy}</div>
+    </header>
+  );
+}
+
 // ── Página pública que abre el padre ──
 export function EncuestaPublica({ token }) {
   const [info, setInfo] = useState(undefined);
@@ -347,7 +364,7 @@ export function EncuestaPublica({ token }) {
   return (
     <div className="ep">
       <div className="ep-tarjeta">
-        <div className="ep-marca"><img src={LOGO_SEEDS} alt="" /><div><b>Seeds English</b><span>Encuesta breve</span></div></div>
+        <MembreteEncuesta titulo="Encuesta de salida" />
         {cuerpo}
       </div>
     </div>

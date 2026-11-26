@@ -79,3 +79,13 @@ html[data-fondo="oscuro"] .ep-txt { color: #B8BEC6; }
 html[data-fondo="oscuro"] .ep-op, html[data-fondo="oscuro"] .ep-input { background: #33363B; border-color: #40444A; color: #E9EDEF; }
 html[data-fondo="oscuro"] .ep-op.sel { background: #3A2D22; }
 .dm-cab-der { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Membrete centrado de las encuestas (mismo estándar que los reportes) */
+.ep-membrete { text-align: center; margin: -4px 0 20px; }
+.ep-membrete img { width: 84px; height: 84px; object-fit: contain; display: block; margin: 0 auto 8px; background: #fff; border-radius: 12px; }
+.ep-m-nombre { font: 700 18px "IBM Plex Sans", Manrope, Inter, sans-serif; color: #1B2A4A; letter-spacing: .2px; }
+.ep-m-sub { font: 400 12px "IBM Plex Sans", Inter, sans-serif; color: #5B6576; margin-top: 2px; }
+.ep-m-titulo { font: 600 14px "IBM Plex Sans", Inter, sans-serif; color: #D9641E; text-transform: uppercase; letter-spacing: 1.2px; margin-top: 10px; }
+.ep-m-franja { margin: 10px -24px 0; padding: 6px 12px; background: #F1F3F6; border-top: 1px solid #C9D1DC; border-bottom: 1px solid #C9D1DC; font: 400 11.5px "IBM Plex Sans", Inter, sans-serif; color: #5B6576; }
+html[data-fondo="oscuro"] .ep-m-nombre { color: #E9EDEF; }
+html[data-fondo="oscuro"] .ep-m-franja { background: #33363B; border-color: #40444A; color: #B8BEC6; }

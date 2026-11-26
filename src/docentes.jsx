@@ -11,6 +11,8 @@ import { ParteMensual } from "./parteMensual";
 import { useRecorrido, Recorrido, BotonAyuda, PASOS_DOCENTE } from "./recorrido";
 import { useModulos } from "./modulos";
 import { useMarca } from "./marca";
+import "./navegacion.css";
+import "./inicioSoft.css";
 
 // Pestañas del portal docente (administración puede cambiarles el nombre en Sistema y respaldos)
 export const PESTANAS_DOCENTE = [
@@ -188,7 +190,7 @@ export function DocenteApp({ session, perfil, onVolver }) {
       {menu && <div onClick={() => setMenu(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.25)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 40 }} />}
       <aside className="vidrio-menu" style={{ position: "fixed", left: menu ? 10 : -280, top: 10, bottom: 10, width: 240, color: "#fff", zIndex: 50, transition: "left 0.25s cubic-bezier(.2,.8,.2,1)", display: "flex", flexDirection: "column", borderRadius: 6, overflow: "hidden", ...(escritorio ? { position: "relative", left: 0, top: 0, bottom: 0, margin: 0, borderRadius: 0 } : {}) }}>
         <div style={{ padding: "20px 16px", borderBottom: "1px solid rgba(255,255,255,.08)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-          <div style={{ background: "#fff", borderRadius: 4, padding: 6 }}><img src={marca.logoSrc} alt={marca.nombreO("Seeds English")} style={{ width: 88, height: 88, objectFit: "contain" }} /></div>
+          <div style={{ background: "#fff", borderRadius: 4, padding: 6 }}><img src={marca.logoSrc} alt={marca.nombreO("Seeds English")} style={{ width: 96, height: 96, objectFit: "contain", display: "block" }} /></div>
           <div style={{ textAlign: "center" }}>
             <div className="titulo-marca" style={{ fontWeight: 700, fontSize: 17, color: "#fff", letterSpacing: .3 }}>{marca.nombreO("Seeds English")}</div>
             <div style={{ fontSize: 10.5, color: "#F0A46A", textTransform: "uppercase", letterSpacing: 1.4, marginTop: 3, fontWeight: 600 }}>Portal docente</div>
@@ -250,19 +252,25 @@ function InicioDocente({ datos, setPage }) {
     { id: "reflections", t: "Escribir reflection", d: "Anota el avance o la conducta de un alumno", icon: MessageSquare },
     { id: "solicitudes", t: "Hacer una solicitud", d: "Pide algo a administración", icon: Inbox },
   ];
+  // Mismas tarjetas Soft UI que las categorías del panel de administración
   return (<div>
-    <div style={{ ...card, background: "#1B2A4A", color: "#fff", border: "none", borderTop: "3px solid #D9641E" }}>
-      <div style={{ fontSize: 12, color: "#FDBA74", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>Bienvenido</div>
-      <div style={{ fontSize: 22, fontWeight: 800, marginTop: 2 }}>{datos.maestro?.nombre}</div>
-      <div style={{ fontSize: 13, color: "#CBD5E1", marginTop: 4 }}>{datos.secciones.length} {datos.secciones.length === 1 ? "grupo" : "grupos"} · {activos.length} alumnos activos</div>
-    </div>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12, marginBottom: 16 }}>
-      {accesos.map((a) => { const Icon = a.icon; return (
-        <button key={a.id} onClick={() => setPage(a.id)} style={{ ...card, margin: 0, textAlign: "left", cursor: "pointer", display: "flex", gap: 12, alignItems: "center", fontFamily: "inherit" }}>
-          <div style={{ background: "#FFF7ED", borderRadius: 10, padding: 10 }}><Icon size={22} color={NAR} /></div>
-          <div><div style={{ fontSize: 14, fontWeight: 700, color: "#1E293B" }}>{a.t}</div><div style={{ fontSize: 12, color: "#64748B" }}>{a.d}</div></div>
-        </button>
-      ); })}
+    <div className="nav-pagina" style={{ padding: 0 }}>
+      <header className="nav-encabezado">
+        <div className="nav-eyebrow"><Home size={14} />Portal docente · {datos.secciones.length} {datos.secciones.length === 1 ? "grupo" : "grupos"} · {activos.length} alumnos activos</div>
+        <h2 className="nav-titulo">Hola, {(datos.maestro?.nombre || "").split(" ")[0]}</h2>
+        <p className="nav-intro">Todo lo de tus clases en un solo lugar. Toca una tarjeta para entrar.</p>
+      </header>
+      <div className="nav-rejilla">
+        {accesos.map((a, i) => { const Icon = a.icon; return (
+          <button key={a.id} type="button" className="nav-tarjeta" onClick={() => setPage(a.id)}>
+            <span className="nav-linea" aria-hidden="true" />
+            <span className="nav-cabeza"><span className="nav-num" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span><span className="nav-icono" aria-hidden="true"><Icon size={18} /></span></span>
+            <span className="nav-nombre">{a.t}</span>
+            <span className="nav-texto">{a.d}</span>
+            <span className="nav-entrar">Entrar<span className="nav-flecha" aria-hidden="true">→</span></span>
+          </button>
+        ); })}
+      </div>
     </div>
     <div style={card}>
       <h3 style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", margin: "0 0 10px" }}>Mis grupos</h3>
