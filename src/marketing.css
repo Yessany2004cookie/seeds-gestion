@@ -107,3 +107,64 @@ html[data-fondo="oscuro"] .mk-aviso.on .mk-aviso-i { background: #3A2D22; }
 .mk-check input { accent-color: #D9641E; }
 .mk-sel-chico { border: 1px solid var(--rm-borde); border-radius: 4px; padding: 4px 6px; font: 400 12.5px var(--letra-texto); background: var(--rm-sup); color: var(--rm-texto); }
 .mk-menu-cont { background: #D9641E; color: #fff; border-radius: 3px; font: 600 11px var(--letra-texto); padding: 1px 7px; }
+
+/* ── Novedades (administración ve el trabajo de Marketing) ── */
+.mk-nov { --rm-borde: var(--borde, #DCE1E8); --rm-sup: var(--sup, #fff); --rm-texto: var(--texto, #1F2937); --rm-suave: var(--suave, #5B6576); color: var(--mk-texto); }
+.mk-nov-intro { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
+.mk-nov-intro b { font: 700 19px var(--letra-titulo); color: var(--azul, #1B2A4A); }
+.mk-nov-intro span { font-size: 13px; color: var(--mk-suave); }
+.mk-nov-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
+.mk-nov-kpi { background: var(--mk-sup); border: 1px solid var(--mk-borde); border-radius: 6px; box-shadow: 0 1px 2px rgba(16, 24, 40, .05); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; border-left: 3px solid #5B6576; min-width: 0; }
+.mk-nov-kpi span { font: 600 11px var(--letra-texto); letter-spacing: .6px; text-transform: uppercase; color: var(--mk-suave); }
+.mk-nov-kpi b { font: 700 26px var(--letra-cifra); color: var(--mk-texto); }
+.mk-nov-kpi small { font-size: 12px; color: var(--mk-suave); }
+.mk-nov-kpi.rojo { border-left-color: #A33A3A; } .mk-nov-kpi.rojo b { color: #A33A3A; }
+.mk-nov-kpi.ambar { border-left-color: #D9641E; } .mk-nov-kpi.ambar b { color: #C2571A; }
+.mk-nov-kpi.verde { border-left-color: #2F6B4F; } .mk-nov-kpi.verde b { color: #2F6B4F; }
+.mk-nov-kpi.azul { border-left-color: #2B4C7E; }
+.mk-nov-h { font: 600 16px var(--letra-titulo); color: var(--azul, #1B2A4A); margin: 0 0 10px; }
+.mk-nov-h-fila { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 24px 0 10px; }
+.mk-nov-h-fila .mk-nov-h { margin: 0; }
+.mk-nov-h-fila .mk-filtros { margin: 0; }
+.mk-nov-pend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mk-nov-p { background: var(--mk-sup); border: 1px solid var(--mk-borde); border-radius: 6px; box-shadow: 0 1px 2px rgba(16, 24, 40, .05); padding: 14px 16px; border-left: 3px solid #2F6B4F; min-width: 0; }
+.mk-nov-p.pendiente { border-left-color: #D9641E; }
+.mk-nov-p.atrasado { border-left-color: #A33A3A; }
+.mk-nov-p-cab { display: flex; align-items: center; gap: 8px; color: var(--mk-suave); }
+.mk-nov-p-cab b { font: 600 14.5px var(--letra-titulo); color: var(--mk-texto); flex: 1; }
+.mk-nov-p p { margin: 6px 0 0; font-size: 13px; color: var(--mk-suave); }
+.mk-nov-est { font: 600 11px var(--letra-texto); padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
+.mk-nov-est.ok { background: #2F6B4F14; color: #2F6B4F; border: 1px solid #2F6B4F40; }
+.mk-nov-est.pendiente { background: #D9641E14; color: #C2571A; border: 1px solid #D9641E40; }
+.mk-nov-est.atrasado { background: #A33A3A14; color: #A33A3A; border: 1px solid #A33A3A40; }
+.mk-nov-p ul { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--mk-borde); }
+.mk-nov-p li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--mk-borde); font-size: 13px; }
+.mk-nov-p li:last-child { border-bottom: none; }
+.mk-nov-p li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-nov-p li em { font-style: normal; color: var(--mk-suave); }
+.mk-nov-p li i { font: 600 12px var(--letra-cifra); font-style: normal; color: var(--mk-suave); white-space: nowrap; }
+.mk-nov-p li i.tarde { color: #A33A3A; }
+.mk-nov-p li.mas { color: var(--mk-suave); justify-content: flex-start; }
+.mk-nov-lista { background: var(--mk-sup); border: 1px solid var(--mk-borde); border-radius: 6px; box-shadow: 0 1px 2px rgba(16, 24, 40, .05); }
+.mk-nov-h-i { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--mk-borde); font-size: 13.5px; }
+.mk-nov-h-i:last-child { border-bottom: none; }
+.mk-nov-ico { width: 30px; height: 30px; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: #F3F4F7; color: #5B6576; }
+.mk-nov-h-i.respuesta .mk-nov-ico { background: #EAF3EE; color: #2F6B4F; }
+.mk-nov-h-i.bienvenida .mk-nov-ico { background: #FFF1E7; color: #D9641E; }
+.mk-nov-txt { flex: 1; min-width: 0; }
+.mk-nov-h-i time { font-size: 12px; color: var(--mk-suave); white-space: nowrap; }
+.mk-nov-vacio { padding: 18px; color: var(--mk-suave); font-size: 13px; text-align: center; }
+.mk-nov-inicio { display: flex; gap: 14px; align-items: center; background: var(--sup, #fff); border: 1px solid var(--borde, #DCE1E8); border-left: 3px solid #2F6B4F; border-radius: 6px; padding: 14px 18px; box-shadow: 0 1px 2px rgba(16, 24, 40, .05); margin-bottom: 16px; color: var(--texto, #1F2937); --mk-suave: var(--suave, #5B6576); }
+.mk-nov-inicio.atrasado { border-left-color: #A33A3A; }
+.mk-nov-inicio .mk-aviso-i { background: #FFF1E7; color: #D9641E; }
+html[data-fondo="oscuro"] .mk-nov-ico, html[data-fondo="oscuro"] .mk-nov-inicio .mk-aviso-i { background: #33363B; color: #B8BEC6; }
+html[data-fondo="oscuro"] .mk-nov-h-i.respuesta .mk-nov-ico { color: #7FBF9C; }
+html[data-fondo="oscuro"] .mk-nov-h-i.bienvenida .mk-nov-ico { color: #F0A46A; }
+html[data-fondo="oscuro"] .mk-nov-intro b, html[data-fondo="oscuro"] .mk-nov-h { color: #E9EDEF; }
+@media (max-width: 900px) { .mk-nov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mk-nov-pend { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .mk-nov-inicio { flex-wrap: wrap; } .mk-nov-inicio .dm-btn { width: 100%; justify-content: center; } .mk-nov-h-i { align-items: flex-start; } }
+/* Teléfono: las pestañas se deslizan de lado en vez de apretarse */
+@media (max-width: 700px) {
+  .mk-tabs { flex-wrap: nowrap !important; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  .mk-tabs button { flex: 0 0 auto !important; white-space: nowrap !important; width: auto !important; }
+}
