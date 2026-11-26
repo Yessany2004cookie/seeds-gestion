@@ -14,13 +14,12 @@
 // ════════════════════════════════════════════════════════════
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "./supabaseClient";
-import { LOGO_SEEDS } from "./logo";
 import { BarraDescargas } from "./documentoFormal";
 import { useMarca } from "./marca";
 import { SelectorFondo } from "./fondo";
-import { EncuestasDesercion, useEncuestas, reporteMatricula, linkWhatsApp } from "./desercion";
+import { MembreteEncuesta, EncuestasDesercion, useEncuestas, reporteMatricula, linkWhatsApp } from "./desercion";
 import { DocenteApp } from "./docentes";
-import { LogOut, RefreshCw, GraduationCap, UserMinus, UserPlus, Smile, Plus, X, Bell } from "lucide-react";
+import { LogOut, RefreshCw, GraduationCap, UserMinus, UserPlus, Smile, Plus, Bell, Menu as MenuIcon, ChevronLeft as AtrasIcon } from "lucide-react";
 import { Avisos, Bienvenida, useMarketingDatos, nuevosSinBienvenida, DIAS_ENCUESTA_GENERAL } from "./marketingAvisos";
 import "./resumenMes.css";
 import "./desercion.css";
@@ -88,28 +87,39 @@ function useSatisfaccion() {
 }
 
 // ── Panel principal (lo usan Marketing y administración) ──
-export function MarketingPanel({ data, showToast }) {
-  const [tab, setTab] = useState("avisos");
+// Estado compartido de Marketing (avisos, bienvenidas, encuestas) y conteos
+export function useMarketingEstado(data) {
   const encuestas = useEncuestas();
   const md = useMarketingDatos();
-  const irA = (t) => { setTab(t); if (t === "avisos") { md.cargar(); encuestas.recargar(); } };
-  const bajas = data.alumnos.filter((a) => a.estado === "inactivo").length;
   const nNuevos = md.falta ? 0 : nuevosSinBienvenida(data, md).length;
   const nBajas = (encuestas.lista || []).filter((e) => !e.enviada_en && !e.respondida_en).length;
-  const nAvisos = nNuevos + nBajas + (md.listo && (!md.ultimaEncuesta || Date.now() - new Date(md.ultimaEncuesta).getTime() >= DIAS_ENCUESTA_GENERAL * 86400000) ? 1 : 0);
-  const TABS = [
-    ["avisos", Bell, "Avisos", nAvisos, true],
-    ["bienvenida", UserPlus, "Bienvenida", nNuevos, true],
-    ["satisfaccion", Smile, "Satisfacción de la escuela", 0],
-    ["bajas", UserMinus, "Alumnos dados de baja", nBajas || bajas, nBajas > 0],
-  ];
+  const tocaGeneral = md.listo && (!md.ultimaEncuesta || Date.now() - new Date(md.ultimaEncuesta).getTime() >= DIAS_ENCUESTA_GENERAL * 86400000);
+  const recargar = () => { md.cargar(); encuestas.recargar(); };
+  return { encuestas, md, recargar, cuentas: { avisos: nNuevos + nBajas + (tocaGeneral ? 1 : 0), bienvenida: nNuevos, bajas: nBajas, satisfaccion: 0 } };
+}
+
+export const PAGINAS_MARKETING = [
+  { id: "avisos", label: "Avisos", icon: Bell },
+  { id: "bienvenida", label: "Bienvenida", icon: UserPlus },
+  { id: "satisfaccion", label: "Satisfacción de la escuela", icon: Smile },
+  { id: "bajas", label: "Alumnos dados de baja", icon: UserMinus },
+];
+
+// Panel de Marketing. Administración lo ve con pestañas arriba; la cuenta de
+// Marketing lo ve con el menú lateral (tab y onTab vienen de MarketingApp).
+export function MarketingPanel({ data, showToast, estado, tab: tabExt, onTab }) {
+  const [tabInt, setTabInt] = useState("avisos");
+  const propio = useMarketingEstado(data);
+  const { encuestas, md, cuentas, recargar } = estado || propio;
+  const tab = tabExt || tabInt;
+  const irA = (t) => { (onTab || setTabInt)(t); if (t === "avisos") recargar(); };
   return (
     <div className="mk">
-      <div className="mk-tabs" role="tablist">
-        {TABS.map(([id, I, t, n, alerta]) => (
-          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => irA(id)}><I size={16} />{t}{n > 0 && <span className={"mk-cont" + (alerta ? " alerta" : "")}>{n}</span>}</button>
+      {!tabExt && <div className="mk-tabs" role="tablist">
+        {PAGINAS_MARKETING.map(({ id, icon: I, label }) => (
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => irA(id)}><I size={16} />{label}{cuentas[id] > 0 && <span className="mk-cont alerta">{cuentas[id]}</span>}</button>
         ))}
-      </div>
+      </div>}
       {tab === "avisos" && <Avisos data={data} md={md} encuestas={encuestas} irA={irA} />}
       {tab === "bienvenida" && <Bienvenida data={data} md={md} showToast={showToast} />}
       {tab === "bajas" && (
@@ -388,11 +398,23 @@ export function reporteSatisfaccion(camp, filas, data) {
 }
 
 // ── App propia del rol Marketing relacional ──
+// Mismo diseño que el panel de administración: menú lateral con el logo,
+// cabecera con título, fondo, actualizar y correo, y menú deslizable en celular.
 export function MarketingApp({ session, perfil }) {
   const marca = useMarca();
   const [datos, setDatos] = useState(null);
   const [vistaDocente, setVistaDocente] = useState(false);
   const [toast, setToast] = useState(null);
+  const [menu, setMenu] = useState(false);
+  const [page, setPageRaw] = useState("avisos");
+  const escritorio = typeof window !== "undefined" && window.innerWidth > 768;
+  // Historial: botón "atrás" del teléfono vuelve a la página anterior
+  const setPage = useCallback((p) => { setPageRaw((act) => { if (p !== act) history.pushState({ seedsMk: p }, ""); return p; }); }, []);
+  useEffect(() => {
+    if (!history.state?.seedsMk) history.replaceState({ seedsMk: "avisos" }, "");
+    const volver = (e) => setPageRaw(e.state?.seedsMk || "avisos");
+    window.addEventListener("popstate", volver); return () => window.removeEventListener("popstate", volver);
+  }, []);
   const avisar = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
   const cargar = useCallback(async () => {
     const [s, a, p] = await Promise.all([
@@ -405,24 +427,51 @@ export function MarketingApp({ session, perfil }) {
     setDatos({ secciones: s.data || [], alumnos: a.data || [], padres: p.data || [] });
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
+  const estado = useMarketingEstado(datos || { alumnos: [], secciones: [], padres: [] });
   if (vistaDocente) return <DocenteApp session={session} perfil={perfil} onVolver={() => setVistaDocente(false)} />;
+  const actual = PAGINAS_MARKETING.find((n) => n.id === page) || PAGINAS_MARKETING[0];
+  const ir = (id) => { setPage(id); setMenu(false); if (id === "avisos") estado.recargar(); };
   return (
-    <div className="mk-app">
-      <header className="vidrio-barra mk-barra">
-        <div className="mk-marca">
-          <img src={marca.logoSrc} alt="" />
-          <div><b>{marca.nombreO("Seeds English")}</b><span>Marketing relacional</span></div>
+    <div style={{ display: "flex", height: "100vh", background: "transparent" }}>
+      {menu && <div onClick={() => setMenu(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.25)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 40 }} />}
+      <aside className="vidrio-menu" style={{ position: "fixed", left: menu ? 10 : -280, top: 10, bottom: 10, width: 240, color: "#fff", zIndex: 50, transition: "left 0.25s cubic-bezier(.2,.8,.2,1)", display: "flex", flexDirection: "column", borderRadius: 6, overflow: "hidden", ...(escritorio ? { position: "relative", left: 0, top: 0, bottom: 0, margin: 0, borderRadius: 0 } : {}) }}>
+        <div style={{ padding: "20px 16px", borderBottom: "1px solid rgba(255,255,255,.08)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+          <div style={{ background: "#fff", borderRadius: 4, padding: 6 }}><img src={marca.logoSrc} alt={marca.nombreO("Seeds English")} style={{ width: 96, height: 96, objectFit: "contain", display: "block" }} /></div>
+          <div style={{ textAlign: "center" }}>
+            <div className="titulo-marca" style={{ fontWeight: 700, fontSize: 17, color: "#fff", letterSpacing: .3 }}>{marca.nombreO("Seeds English")}</div>
+            <div style={{ fontSize: 10.5, color: "#F0A46A", textTransform: "uppercase", letterSpacing: 1.4, marginTop: 3, fontWeight: 600 }}>Marketing relacional</div>
+          </div>
         </div>
-        <div className="mk-barra-der">
-          {perfil.maestro_id && <button className="dm-btn sec chico" onClick={() => setVistaDocente(true)}><GraduationCap size={14} />Portal docente</button>}
-          <SelectorFondo />
-          <button className="dm-btn sec chico" onClick={cargar} title="Actualizar" aria-label="Actualizar"><RefreshCw size={14} /></button>
-          <div className="hide-mobile mk-quien">{session.user.email}</div>
-          <button className="dm-btn sec chico" onClick={() => supabase.auth.signOut()}><LogOut size={14} />Salir</button>
-        </div>
-      </header>
-      <main className="mk-main">{datos ? <MarketingPanel data={datos} showToast={avisar} /> : <p className="dm-nota">Cargando…</p>}</main>
-      {toast && <div className={"mk-toast " + toast.type}>{toast.msg}<button onClick={() => setToast(null)} aria-label="Cerrar"><X size={14} /></button></div>}
+        <nav style={{ flex: 1, padding: "10px 10px", overflowY: "auto" }}>
+          {PAGINAS_MARKETING.map((n) => { const Icon = n.icon; const a = page === n.id; const c = estado.cuentas[n.id]; return (
+            <button key={n.id} className={"menu-item" + (a ? " activo" : "")} onClick={() => ir(n.id)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", marginBottom: 2, border: "none", borderLeft: a ? "3px solid #D9641E" : "3px solid transparent", borderRadius: 3, cursor: "pointer", background: a ? "rgba(255,255,255,.09)" : "transparent", color: a ? "#fff" : "#B8C2D3", fontSize: 13, fontWeight: a ? 600 : 400, textAlign: "left", fontFamily: "inherit" }}>
+              <Icon size={15} /><span style={{ flex: 1 }}>{n.label}</span>{c > 0 && <span className="mk-menu-cont">{c}</span>}
+            </button>
+          ); })}
+        </nav>
+        {perfil.maestro_id && <button className="menu-vista-docente" onClick={() => { setMenu(false); setVistaDocente(true); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 20px", border: "none", borderTop: "1px solid rgba(255,255,255,.08)", background: "transparent", color: "#F0A46A", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}><GraduationCap size={16} />Cambiar a portal docente</button>}
+        <button onClick={() => supabase.auth.signOut()} style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 20px", border: "none", borderTop: "1px solid rgba(255,255,255,.08)", background: "transparent", color: "#FCA5A5", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}><LogOut size={16} />Cerrar sesión</button>
+      </aside>
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <header className="vidrio-barra barra-app" style={{ padding: "10px 20px", margin: 0, borderRadius: 0, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {!escritorio && page !== "avisos" && <button onClick={() => history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20} /></button>}
+            {!escritorio && <button onClick={() => setMenu(true)} aria-label="Abrir menú" title="Menú" className="boton-menu"><MenuIcon size={22} /></button>}
+            <h1 className="titulo-barra" style={{ fontSize: 18, fontWeight: 600, color: "#1B2A4A", margin: 0 }}>{actual.label}</h1>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {perfil.maestro_id && <button className="boton-vista-docente" onClick={() => setVistaDocente(true)} title="Cambiar al portal docente" aria-label="Portal docente" style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid #E7B48F", borderRadius: 4, cursor: "pointer", padding: "5px 10px", color: "#C2571A", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}><GraduationCap size={14} /><span className="txt-vista-docente">Portal docente</span></button>}
+            <SelectorFondo />
+            <button className="boton-refrescar" onClick={() => { cargar(); estado.recargar(); avisar("Datos actualizados"); }} title="Refrescar datos" aria-label="Refrescar datos" style={{ background: "#fff", border: "1px solid #CDD3DC", borderRadius: 4, cursor: "pointer", padding: "5px 8px", display: "flex", alignItems: "center" }}><RefreshCw size={14} color="#64748B" /></button>
+            <div style={{ fontSize: 12, color: "#64748B" }} className="hide-mobile">{session.user.email}</div>
+          </div>
+        </header>
+        <div style={{ flex: 1, overflow: "auto", padding: 20 }}>{datos ? <MarketingPanel data={datos} showToast={avisar} estado={estado} tab={actual.id} onTab={ir} /> : <p className="dm-nota">Cargando…</p>}</div>
+      </main>
+      {toast && <div className="vidrio-ahumado aviso-flotante" role="status">
+        <span className="aviso-icono" style={{ background: toast.type === "success" ? "#10B981" : "#EF4444" }}>{toast.type === "success" ? "✓" : "!"}</span>
+        <span>{toast.msg}</span>
+      </div>}
     </div>
   );
 }
@@ -471,7 +520,7 @@ export function SatisfaccionPublica({ token }) {
   return (
     <div className="ep">
       <div className="ep-tarjeta">
-        <div className="ep-marca"><img src={LOGO_SEEDS} alt="" /><div><b>Seeds English</b><span>Encuesta de satisfacción</span></div></div>
+        <MembreteEncuesta titulo="Encuesta de satisfacción" />
         {cuerpo}
       </div>
     </div>
