@@ -20,7 +20,8 @@ import { useMarca } from "./marca";
 import { SelectorFondo } from "./fondo";
 import { EncuestasDesercion, useEncuestas, reporteMatricula, linkWhatsApp } from "./desercion";
 import { DocenteApp } from "./docentes";
-import { LogOut, RefreshCw, GraduationCap, UserMinus, Smile, Plus, X } from "lucide-react";
+import { LogOut, RefreshCw, GraduationCap, UserMinus, UserPlus, Smile, Plus, X, Bell } from "lucide-react";
+import { Avisos, Bienvenida, useMarketingDatos, nuevosSinBienvenida, DIAS_ENCUESTA_GENERAL } from "./marketingAvisos";
 import "./resumenMes.css";
 import "./desercion.css";
 import "./marketing.css";
@@ -88,27 +89,42 @@ function useSatisfaccion() {
 
 // ── Panel principal (lo usan Marketing y administración) ──
 export function MarketingPanel({ data, showToast }) {
-  const [tab, setTab] = useState("satisfaccion");
+  const [tab, setTab] = useState("avisos");
   const encuestas = useEncuestas();
+  const md = useMarketingDatos();
+  const irA = (t) => { setTab(t); if (t === "avisos") { md.cargar(); encuestas.recargar(); } };
   const bajas = data.alumnos.filter((a) => a.estado === "inactivo").length;
+  const nNuevos = md.falta ? 0 : nuevosSinBienvenida(data, md).length;
+  const nBajas = (encuestas.lista || []).filter((e) => !e.enviada_en && !e.respondida_en).length;
+  const nAvisos = nNuevos + nBajas + (md.listo && (!md.ultimaEncuesta || Date.now() - new Date(md.ultimaEncuesta).getTime() >= DIAS_ENCUESTA_GENERAL * 86400000) ? 1 : 0);
+  const TABS = [
+    ["avisos", Bell, "Avisos", nAvisos, true],
+    ["bienvenida", UserPlus, "Bienvenida", nNuevos, true],
+    ["satisfaccion", Smile, "Satisfacción de la escuela", 0],
+    ["bajas", UserMinus, "Alumnos dados de baja", nBajas || bajas, nBajas > 0],
+  ];
   return (
     <div className="mk">
       <div className="mk-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === "satisfaccion"} className={tab === "satisfaccion" ? "on" : ""} onClick={() => setTab("satisfaccion")}><Smile size={16} />Satisfacción de la escuela</button>
-        <button role="tab" aria-selected={tab === "bajas"} className={tab === "bajas" ? "on" : ""} onClick={() => setTab("bajas")}><UserMinus size={16} />Alumnos dados de baja <span className="mk-cont">{bajas}</span></button>
+        {TABS.map(([id, I, t, n, alerta]) => (
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => irA(id)}><I size={16} />{t}{n > 0 && <span className={"mk-cont" + (alerta ? " alerta" : "")}>{n}</span>}</button>
+        ))}
       </div>
-      {tab === "bajas" ? (
+      {tab === "avisos" && <Avisos data={data} md={md} encuestas={encuestas} irA={irA} />}
+      {tab === "bienvenida" && <Bienvenida data={data} md={md} showToast={showToast} />}
+      {tab === "bajas" && (
         <>
           <div className="rm dm">
             <div className="rm-cab">
               <div><div className="rm-eti">Deserción</div><div className="rm-tit">Encuesta a las familias que se fueron</div></div>
               <BarraDescargas compacto showToast={showToast} reporte={() => reporteMatricula(data, "", "todo", encuestas.lista || [])} />
             </div>
-            <div className="rm-cuerpo"><p className="dm-nota" style={{ marginTop: 0 }}>Cada vez que administración da de baja a un alumno se crea su encuesta. Toque <b>Enviar</b> para mandarla al padre por WhatsApp; su respuesta aparece aquí.</p></div>
+            <div className="rm-cuerpo"><p className="dm-nota" style={{ marginTop: 0 }}>Cada vez que administración da de baja a un alumno se crea su encuesta y le aparece un aviso. Toque <b>Enviar</b> para mandarla al padre por WhatsApp; su respuesta aparece aquí.</p></div>
           </div>
           <EncuestasDesercion data={data} filterSec="" encuestas={encuestas} abiertoInicial />
         </>
-      ) : <Satisfaccion data={data} showToast={showToast} />}
+      )}
+      {tab === "satisfaccion" && <Satisfaccion data={data} showToast={showToast} />}
     </div>
   );
 }
