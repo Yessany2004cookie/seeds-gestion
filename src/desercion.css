@@ -3,16 +3,17 @@
    Usa las mismas tarjetas del Resumen del mes (.rm, resumenMes.css).
    ════════════════════════════════════════════════════════════ */
 
-.dm { margin-bottom: 16px; font-family: Inter, "Segoe UI", Arial, sans-serif; box-shadow: 0 6px 18px rgba(27, 42, 74, .06); border-radius: 10px; }
-.dm .rm-tit { font-family: Manrope, Inter, sans-serif; }
-.dm .rm-k { border-radius: 8px; }
-.dm .rm-k-v { font-family: Manrope, Inter, sans-serif; }
+.dm { margin-bottom: 16px; font-family: var(--letra-texto); }
+#root .rm.dm { border-radius: 6px !important; }
+.dm .rm-tit, .dm .rm-eti { font-family: var(--letra-informe); }
+.dm .rm-k { border-radius: 4px; }
+.dm .rm-k-v, .dm-pct, .dm-tabla .num { font-family: var(--letra-cifra); }
 .dm-pct { font-size: 14px; font-weight: 600; opacity: .85; margin-left: 4px; }
 .dm-tit-s { font-size: 15px !important; }
 .dm-cab-btn { width: 100%; background: none; border: none; border-bottom: 1px solid var(--rm-borde); font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .dm-cab-btn .rm-link { pointer-events: none; }
 
-.dm-tabla-env { overflow-x: auto; border: 1px solid var(--rm-borde); border-radius: 8px; }
+.dm-tabla-env { overflow-x: auto; border: 1px solid var(--rm-borde); border-radius: 4px; }
 .dm-tabla { width: 100%; border-collapse: collapse; font-size: 13px; }
 .dm-tabla th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: var(--rm-suave); padding: 9px 12px; background: var(--rm-sup-2); border-bottom: 1px solid var(--rm-borde); white-space: nowrap; }
 .dm-tabla td { padding: 9px 12px; border-bottom: 1px solid var(--rm-borde); vertical-align: top; }
@@ -28,64 +29,79 @@
 .dm-motivos { display: grid; gap: 6px; margin-bottom: 16px; }
 .dm-motivo { display: grid; grid-template-columns: minmax(140px, 260px) 1fr 28px; gap: 10px; align-items: center; font-size: 13px; }
 .dm-motivo b { text-align: right; font-variant-numeric: tabular-nums; }
-.dm-barra { height: 8px; background: var(--rm-barra); border-radius: 4px; overflow: hidden; }
-.dm-barra i { display: block; height: 100%; background: var(--rm-naranja); border-radius: 4px; }
+.dm-barra { height: 8px; background: var(--rm-barra); border-radius: 3px; overflow: hidden; }
+.dm-barra i { display: block; height: 100%; background: var(--rm-naranja); border-radius: 3px; }
 
-.dm-btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; padding: 9px 14px; font: 600 13px Inter, sans-serif; cursor: pointer; text-decoration: none; border: 1px solid transparent; }
-.dm-btn.wa { background: #1F8F55; color: #fff; }
-.dm-btn.sec { background: var(--rm-sup, #fff); color: var(--rm-texto, #1F2937); border-color: var(--rm-borde, #DCE1E8); }
+.dm-btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 4px; padding: 9px 14px; font: 600 13px var(--letra-texto); letter-spacing: .2px; cursor: pointer; text-decoration: none; border: 1px solid transparent; box-shadow: 0 1px 2px rgba(16, 24, 40, .08); }
+.dm-btn.wa { background: #2F6B4F; border-color: #2F6B4F; color: #fff; }
+.dm-btn.sec { background: #fff; color: #344054; border-color: #CDD3DC; box-shadow: 0 1px 2px rgba(16, 24, 40, .05); }
+/* Modo oscuro: botón secundario gris como en administración (no blanco) */
+html[data-fondo="oscuro"] .dm-btn.sec { background: var(--sup-2, #33363B); color: var(--texto, #E9EDEF); border-color: var(--borde, #40444A); }
+html[data-fondo="oscuro"] .dm-btn.sec:hover { background: #3C4046; }
+html[data-fondo="oscuro"] .dm-btn.nar { background: #B4531A; border-color: #D9641E; }
 .dm-btn.chico { padding: 5px 10px; font-size: 12px; }
 
 /* Ventana para enviar la encuesta */
 .dm-velo { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .dm-ventana { --rm-sup: var(--sup, #fff); --rm-sup-2: var(--sup-2, #F6F7F9); --rm-borde: var(--borde, #DCE1E8); --rm-texto: var(--texto, #1F2937); --rm-suave: var(--suave, #5B6576);
-  background: var(--rm-sup); color: var(--rm-texto); border-radius: 12px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 20px; box-shadow: 0 18px 40px rgba(0, 0, 0, .18); font-family: Inter, sans-serif; }
+  background: var(--rm-sup); color: var(--rm-texto); border-radius: 6px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 20px; box-shadow: 0 18px 40px rgba(0, 0, 0, .18); font-family: var(--letra-texto); }
 .dm-v-cab { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.dm-v-cab h3 { font: 700 16px Manrope, Inter, sans-serif; margin: 0; }
+.dm-v-cab h3 { font: 700 16px var(--letra-titulo); margin: 0; }
 .dm-v-cab button { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--rm-suave); }
 .dm-v-txt { font-size: 13.5px; line-height: 1.5; margin: 0 0 12px; }
-.dm-msg { white-space: pre-wrap; font: 13px/1.5 Inter, sans-serif; background: var(--rm-sup-2); border: 1px solid var(--rm-borde); border-left: 3px solid #D9641E; border-radius: 8px; padding: 12px; margin: 0 0 14px; word-break: break-word; }
+.dm-msg { white-space: pre-wrap; font: 400 13px/1.5 var(--letra-texto); background: var(--rm-sup-2); border: 1px solid var(--rm-borde); border-left: 3px solid #D9641E; border-radius: 4px; padding: 12px; margin: 0 0 14px; word-break: break-word; }
 .dm-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* ── Página pública de la encuesta (la abre el padre) ── */
-.ep { min-height: 100vh; background: #F3F4F7; display: flex; justify-content: center; align-items: flex-start; padding: 32px 16px; font-family: Inter, "Segoe UI", Arial, sans-serif; color: #1F2937; }
-.ep-tarjeta { width: 100%; max-width: 520px; background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(27, 42, 74, .08); border-top: 4px solid #D9641E; }
-.ep-marca { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
-.ep-marca img { width: 48px; height: 48px; border-radius: 10px; object-fit: contain; background: #fff; border: 1px solid #EEF0F4; }
-.ep-marca b { display: block; font: 700 16px Manrope, Inter, sans-serif; color: #1B2A4A; }
-.ep-marca span { font-size: 12px; color: #D9641E; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; }
-.ep h2 { font: 700 20px/1.3 Manrope, Inter, sans-serif; color: #1B2A4A; margin: 0 0 8px; }
-.ep-txt { font-size: 14px; line-height: 1.55; color: #5B6576; margin: 0 0 16px; }
-.ep-campo { border: none; padding: 0; margin: 0 0 18px; }
-.ep-campo legend { font: 600 14px Manrope, Inter, sans-serif; color: #1F2937; margin-bottom: 8px; }
-.ep-opciones { display: grid; gap: 6px; }
+/* ── Página pública de la encuesta (la abre el padre) ──
+   Estilo cálido y claro: título grande a la izquierda, preguntas numeradas
+   "1 →", ayuda en gris y respuestas con aire. Letra Outfit en marrón oscuro
+   con el naranja de la escuela. Siempre clara (el padre no usa el modo oscuro). */
+.ep { --ep-cafe: #4A2A12; --ep-cafe-2: #6B4A33; --ep-gris: #8A8178; --ep-borde: #E4DDD5; --ep-nar: #D9641E;
+  min-height: 100vh; background: #F6F3EF; display: flex; justify-content: center; align-items: flex-start; padding: 28px 16px 48px;
+  font-family: "Outfit", var(--letra-texto); color: var(--ep-cafe); color-scheme: light; }
+.ep-tarjeta { width: 100%; max-width: 600px; background: #fff; border-radius: 6px; padding: 0 32px 32px; border: 1px solid var(--ep-borde); box-shadow: 0 1px 2px rgba(16, 24, 40, .05); }
+.ep-cab-barra { display: flex; align-items: center; gap: 10px; padding: 14px 0; margin-bottom: 28px; border-bottom: 1px solid #F0EBE5; font-size: 13px; color: var(--ep-cafe-2); }
+.ep-cab-barra img { width: 28px; height: 28px; object-fit: contain; border-radius: 4px; }
+.ep-titulo { font: 500 36px/1.15 "Outfit", var(--letra-titulo); color: var(--ep-cafe) !important; letter-spacing: -.4px; margin: 0 0 14px; }
+.ep-sub { font: 400 15px/1.55 "Outfit", var(--letra-texto); color: var(--ep-gris); margin: 0 0 34px; }
+.ep h2 { font: 500 24px/1.3 "Outfit", var(--letra-titulo); color: var(--ep-cafe); margin: 0 0 8px; }
+.ep-txt { font-size: 15px; line-height: 1.55; color: var(--ep-gris); margin: 0 0 16px; }
+.ep-campo { border: none; padding: 0; margin: 0 0 34px; min-width: 0; }
+.ep-campo legend { display: flex; gap: 10px; align-items: baseline; padding: 0; font: 400 20px/1.35 "Outfit", var(--letra-texto); color: var(--ep-cafe); }
+.ep-n { display: inline-flex; align-items: baseline; gap: 4px; font-weight: 600; color: var(--ep-cafe); white-space: nowrap; }
+.ep-n i { font-style: normal; font-weight: 400; color: var(--ep-nar); font-size: 17px; }
+.ep-q em { font-style: normal; color: var(--ep-nar); }
+.ep-ayuda { margin: 6px 0 0 34px; font-size: 14px; color: var(--ep-gris); }
+.ep-resp { margin: 16px 0 0 34px; }
+.ep-opciones { display: grid; gap: 8px; }
 .ep-fila { display: flex; gap: 8px; flex-wrap: wrap; }
-.ep-op { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #DCE1E8; border-radius: 10px; font-size: 14px; cursor: pointer; background: #fff; }
-.ep-op input { accent-color: #D9641E; width: 16px; height: 16px; }
-.ep-op.sel { border-color: #D9641E; background: #FFF5EE; font-weight: 600; }
-.ep-input { width: 100%; margin-top: 8px; padding: 10px 12px; border: 1px solid #DCE1E8; border-radius: 10px; font: 14px Inter, sans-serif; background: #fff; color: #1F2937; }
+.ep-op { display: flex; align-items: center; gap: 10px; padding: 12px 14px; font-weight: 400; border: 1px solid var(--ep-borde); border-radius: 4px; font-size: 15px; cursor: pointer; background: #fff; color: var(--ep-cafe); }
+.ep-op input { accent-color: var(--ep-nar); width: 16px; height: 16px; }
+.ep-op.sel { border-color: var(--ep-nar); background: #FFF6EF; font-weight: 500; }
+.ep-input { width: 100%; box-sizing: border-box; margin-top: 8px; padding: 14px 16px; border: 1px solid #D9D2CA; border-radius: 6px; font: 400 15px "Outfit", var(--letra-texto); background: #fff; color: var(--ep-cafe); resize: vertical; }
+.ep-resp > .ep-input:first-child { margin-top: 0; }
+.ep-input::placeholder { color: #A39B93; }
+.ep-input:focus { outline: none; border-color: var(--ep-nar); box-shadow: 0 0 0 3px rgba(217, 100, 30, .12); }
 .ep-estrellas { display: flex; gap: 4px; }
-.ep-estrellas button { background: none; border: none; font-size: 30px; line-height: 1; cursor: pointer; color: #D5D9E0; padding: 2px; }
-.ep-estrellas button.on { color: #E8912D; }
-.ep-err { color: #A33A3A; font-size: 13px; margin: 0 0 10px; }
-.ep-enviar { width: 100%; padding: 13px; border: none; border-radius: 10px; background: #D9641E; color: #fff; font: 600 15px Inter, sans-serif; cursor: pointer; box-shadow: 0 6px 14px rgba(217, 100, 30, .25); }
+.ep-estrellas button { background: none; border: none; font-size: 32px; line-height: 1; cursor: pointer; color: #E2DBD3; padding: 2px; }
+.ep-estrellas button.on { color: var(--ep-nar); }
+.ep .mk-escala button { font-family: "Outfit", var(--letra-texto); color: var(--ep-cafe); border-color: var(--ep-borde); }
+.ep .mk-escala-l { color: var(--ep-gris); }
+.ep-err { color: #A33A3A; font-size: 14px; margin: 0 0 10px; }
+.ep-enviar { width: 100%; padding: 14px; border: 1px solid var(--ep-nar); border-radius: 4px; background: var(--ep-nar); color: #fff; font: 500 16px "Outfit", var(--letra-texto); cursor: pointer; box-shadow: 0 1px 2px rgba(16, 24, 40, .08); }
 .ep-enviar:disabled { opacity: .6; cursor: default; }
 .ep-fin { text-align: center; padding: 12px 0; }
 .ep-ok { width: 56px; height: 56px; border-radius: 50%; background: #EAF3EE; color: #2F6B4F; font-size: 28px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
-html[data-fondo="oscuro"] .ep { background: #1F2124; color: #E9EDEF; }
-html[data-fondo="oscuro"] .ep-tarjeta { background: #2A2D31; }
-html[data-fondo="oscuro"] .ep h2, html[data-fondo="oscuro"] .ep-marca b, html[data-fondo="oscuro"] .ep-campo legend { color: #E9EDEF; }
-html[data-fondo="oscuro"] .ep-txt { color: #B8BEC6; }
-html[data-fondo="oscuro"] .ep-op, html[data-fondo="oscuro"] .ep-input { background: #33363B; border-color: #40444A; color: #E9EDEF; }
-html[data-fondo="oscuro"] .ep-op.sel { background: #3A2D22; }
+@media (max-width: 520px) {
+  .ep { padding: 0; background: #fff; }
+  .ep-tarjeta { border: none; box-shadow: none; padding: 0 20px 28px; }
+  .ep-titulo { font-size: 30px; }
+  .ep-campo legend { font-size: 18px; }
+  .ep-ayuda, .ep-resp { margin-left: 0; }
+}
 .dm-cab-der { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
-/* Membrete centrado de las encuestas (mismo estándar que los reportes) */
-.ep-membrete { text-align: center; margin: -4px 0 20px; }
-.ep-membrete img { width: 84px; height: 84px; object-fit: contain; display: block; margin: 0 auto 8px; background: #fff; border-radius: 12px; }
-.ep-m-nombre { font: 700 18px "IBM Plex Sans", Manrope, Inter, sans-serif; color: #1B2A4A; letter-spacing: .2px; }
-.ep-m-sub { font: 400 12px "IBM Plex Sans", Inter, sans-serif; color: #5B6576; margin-top: 2px; }
-.ep-m-titulo { font: 600 14px "IBM Plex Sans", Inter, sans-serif; color: #D9641E; text-transform: uppercase; letter-spacing: 1.2px; margin-top: 10px; }
-.ep-m-franja { margin: 10px -24px 0; padding: 6px 12px; background: #F1F3F6; border-top: 1px solid #C9D1DC; border-bottom: 1px solid #C9D1DC; font: 400 11.5px "IBM Plex Sans", Inter, sans-serif; color: #5B6576; }
-html[data-fondo="oscuro"] .ep-m-nombre { color: #E9EDEF; }
-html[data-fondo="oscuro"] .ep-m-franja { background: #33363B; border-color: #40444A; color: #B8BEC6; }
+/* La encuesta del padre siempre se ve clara, aunque el teléfono guarde el modo oscuro */
+html[data-fondo="oscuro"] .ep .ep-input, html[data-fondo="oscuro"] .ep .ep-op, html[data-fondo="oscuro"] .ep .mk-escala button { background: #fff !important; color: var(--ep-cafe) !important; border-color: var(--ep-borde) !important; }
+html[data-fondo="oscuro"] .ep .ep-op.sel { background: #FFF6EF !important; border-color: var(--ep-nar) !important; }
+html[data-fondo="oscuro"] .ep .mk-escala button.on { background: var(--ep-nar) !important; color: #fff !important; border-color: var(--ep-nar) !important; }

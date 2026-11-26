@@ -17,7 +17,7 @@ import { supabase } from "./supabaseClient";
 import { BarraDescargas } from "./documentoFormal";
 import { useMarca } from "./marca";
 import { SelectorFondo } from "./fondo";
-import { MembreteEncuesta, EncuestasDesercion, useEncuestas, reporteMatricula, linkWhatsApp } from "./desercion";
+import { MembreteEncuesta, PreguntaEncuesta, EncuestasDesercion, useEncuestas, reporteMatricula, linkWhatsApp } from "./desercion";
 import { DocenteApp } from "./docentes";
 import { LogOut, RefreshCw, GraduationCap, UserMinus, UserPlus, Smile, Plus, Bell, Menu as MenuIcon, ChevronLeft as AtrasIcon } from "lucide-react";
 import { Avisos, Bienvenida, useMarketingDatos, nuevosSinBienvenida, DIAS_ENCUESTA_GENERAL } from "./marketingAvisos";
@@ -477,6 +477,12 @@ export function MarketingApp({ session, perfil }) {
 }
 
 // ── Página pública que abre el padre ──
+const AYUDA_TIPO = {
+  estrellas: "Toque las estrellas: 1 es muy malo y 5 es excelente.",
+  nps: "0 es nada probable y 10 es muy probable.",
+  opcion: "Elija una opción.",
+  abierta: "Es opcional. Escriba con sus palabras.",
+};
 export function SatisfaccionPublica({ token }) {
   const [info, setInfo] = useState(undefined);
   const [r, setR] = useState({});
@@ -495,22 +501,20 @@ export function SatisfaccionPublica({ token }) {
     setEstado(error ? "error" : data ? "listo" : "ya");
   };
   let cuerpo;
+  const formulario = info && !info.cerrada && !(info.respondida || estado === "listo" || estado === "ya");
   if (info === undefined) cuerpo = <p className="ep-txt">Cargando…</p>;
   else if (!info) cuerpo = <p className="ep-txt">Este enlace no es válido. Si cree que es un error, escríbanos por WhatsApp.</p>;
   else if (info.respondida || estado === "listo" || estado === "ya") cuerpo = <div className="ep-fin"><div className="ep-ok">✓</div><h2>¡Muchas gracias!</h2><p className="ep-txt">Recibimos su respuesta. Su opinión nos ayuda a seguir mejorando para su familia.</p></div>;
   else if (info.cerrada) cuerpo = <p className="ep-txt">Esta encuesta ya se cerró. ¡Gracias por su interés!</p>;
   else cuerpo = (
     <form onSubmit={enviar}>
-      <h2>{info.padre ? `${info.padre}, ¿cómo le ha parecido Seeds?` : "¿Cómo le ha parecido Seeds?"}</h2>
-      <p className="ep-txt">{info.alumnos ? <>Queremos conocer su opinión como familia de <b>{info.alumnos}</b>. </> : null}Le toma unos 2 minutos.{info.anonima ? " Sus respuestas son anónimas." : " Sus respuestas solo las ve el equipo de la escuela."}</p>
-      {pregs.map((p) => (
-        <fieldset key={p.id} className="ep-campo">
-          <legend>{p.texto}{p.obligatoria ? " *" : ""}</legend>
+      {pregs.map((p, i) => (
+        <PreguntaEncuesta key={p.id} n={i + 1} texto={p.texto} obligatoria={p.obligatoria} ayuda={AYUDA_TIPO[p.tipo]}>
           {p.tipo === "estrellas" && <div className="ep-estrellas">{[1, 2, 3, 4, 5].map((n) => <button type="button" key={n} aria-label={n + " de 5"} className={n <= (r[p.id] || 0) ? "on" : ""} onClick={() => setR({ ...r, [p.id]: n })}>★</button>)}</div>}
           {p.tipo === "nps" && <><div className="mk-escala">{Array.from({ length: 11 }, (_, n) => <button type="button" key={n} className={r[p.id] === n ? "on" : ""} onClick={() => setR({ ...r, [p.id]: n })}>{n}</button>)}</div><div className="mk-escala-l"><span>Nada probable</span><span>Muy probable</span></div></>}
           {p.tipo === "opcion" && <div className="ep-fila">{p.opciones.map((o) => <label key={o} className={"ep-op" + (r[p.id] === o ? " sel" : "")}><input type="radio" name={p.id} checked={r[p.id] === o} onChange={() => setR({ ...r, [p.id]: o })} />{o}</label>)}</div>}
-          {p.tipo === "abierta" && <textarea className="ep-input" rows={3} maxLength={1500} value={r[p.id] || ""} onChange={(e) => setR({ ...r, [p.id]: e.target.value })} placeholder="Opcional" />}
-        </fieldset>
+          {p.tipo === "abierta" && <textarea className="ep-input" rows={4} maxLength={1500} value={r[p.id] || ""} onChange={(e) => setR({ ...r, [p.id]: e.target.value })} placeholder="Escriba aquí su respuesta" />}
+        </PreguntaEncuesta>
       ))}
       {estado === "falta" && <p className="ep-err">Por favor responda las preguntas marcadas con *.</p>}
       {estado === "error" && <p className="ep-err">No se pudo enviar. Revise su internet e intente de nuevo.</p>}
@@ -520,7 +524,9 @@ export function SatisfaccionPublica({ token }) {
   return (
     <div className="ep">
       <div className="ep-tarjeta">
-        <MembreteEncuesta titulo="Encuesta de satisfacción" />
+        <MembreteEncuesta titulo="Encuesta de satisfacción">
+          {formulario ? <>Gracias por participar{info.padre ? `, ${info.padre}` : ""}. {info.alumnos ? <>Queremos conocer su opinión como familia de {info.alumnos}. </> : null}Le toma unos 2 minutos.{info.anonima ? " Sus respuestas son anónimas." : " Sus respuestas solo las ve el equipo de la escuela."}</> : "Gracias por participar en nuestra encuesta."}
+        </MembreteEncuesta>
         {cuerpo}
       </div>
     </div>
