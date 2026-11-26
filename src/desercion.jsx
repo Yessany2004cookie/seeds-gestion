@@ -284,19 +284,27 @@ export function EncuestasDesercion({ data, filterSec, encuestas, abiertoInicial 
   );
 }
 
-// ── Membrete de las encuestas que abre el padre ──
-// Mismo estándar de los reportes ("A · membrete centrado"): logo, nombre de
-// la institución, título del documento y franja gris con la fecha.
-export function MembreteEncuesta({ titulo }) {
+// ── Encabezado de las encuestas que abre el padre ──
+// Barra fina con el logo pequeño y el nombre de la escuela; debajo, el título
+// grande alineado a la izquierda y el agradecimiento.
+export function MembreteEncuesta({ titulo, children }) {
   const m = useMarca();
-  const hoy = new Date().toLocaleDateString("es-HN", { day: "numeric", month: "long", year: "numeric" });
   return (
-    <header className="ep-membrete">
-      <img src={m.logoSrc || LOGO_SEEDS} alt="" />
-      <div className="ep-m-nombre">{m.nombreO("Seeds English School")}</div>
-      <div className="ep-m-titulo">{titulo}</div>
-      <div className="ep-m-franja">{hoy}</div>
+    <header className="ep-cab">
+      <div className="ep-cab-barra"><img src={m.logoSrc || LOGO_SEEDS} alt="" /><span>{m.nombreO("Seeds English School")}</span></div>
+      <h1 className="ep-titulo">{titulo}</h1>
+      {children && <p className="ep-sub">{children}</p>}
     </header>
+  );
+}
+// Pregunta numerada: "1 → texto", ayuda debajo y la respuesta con aire.
+export function PreguntaEncuesta({ n, texto, ayuda, obligatoria, children }) {
+  return (
+    <fieldset className="ep-campo">
+      <legend><span className="ep-n">{n}<i>→</i></span><span className="ep-q">{texto}{obligatoria ? <em> *</em> : null}</span></legend>
+      {ayuda && <p className="ep-ayuda">{ayuda}</p>}
+      <div className="ep-resp">{children}</div>
+    </fieldset>
   );
 }
 
@@ -318,44 +326,39 @@ export function EncuestaPublica({ token }) {
     setEstado(error ? "error" : data ? "listo" : "ya");
   };
   let cuerpo;
+  const formulario = info && !(info.respondida || estado === "listo" || estado === "ya");
   if (info === undefined) cuerpo = <p className="ep-txt">Cargando…</p>;
   else if (!info) cuerpo = <p className="ep-txt">Este enlace no es válido. Si cree que es un error, escríbanos por WhatsApp.</p>;
-  else if (info.respondida || estado === "listo" || estado === "ya") cuerpo = (
+  else if (!formulario) cuerpo = (
     <div className="ep-fin"><div className="ep-ok">✓</div><h2>¡Muchas gracias!</h2><p className="ep-txt">Recibimos su respuesta. Nos ayuda mucho a mejorar. Las puertas de Seeds siempre están abiertas para {info.alumno.split(" ")[0]}.</p></div>
   );
   else cuerpo = (
     <form onSubmit={enviar}>
-      <h2>¿Por qué {info.alumno.split(" ")[0]} dejó las clases?</h2>
-      <p className="ep-txt">Lamentamos que <b>{info.alumno}</b>{info.seccion ? <> ({info.seccion.trim()})</> : null} ya no continúe con nosotros. Su respuesta es confidencial y solo la ve la administración.</p>
-      <fieldset className="ep-campo">
-        <legend>Motivo principal *</legend>
+      <PreguntaEncuesta n={1} texto={`¿Por qué ${info.alumno.split(" ")[0]} dejó las clases?`} ayuda="Elija el motivo principal." obligatoria>
         <div className="ep-opciones">
           {MOTIVOS.map((m) => (
             <label key={m} className={"ep-op" + (f.motivo === m ? " sel" : "")}><input type="radio" name="motivo" value={m} checked={f.motivo === m} onChange={() => setF({ ...f, motivo: m })} />{m}</label>
           ))}
         </div>
         {f.motivo === "Otro" && <input className="ep-input" placeholder="Cuéntenos cuál" value={f.otro} onChange={(e) => setF({ ...f, otro: e.target.value })} maxLength={100} />}
-      </fieldset>
-      <fieldset className="ep-campo">
-        <legend>¿Qué tan contento estaba con las clases?</legend>
+      </PreguntaEncuesta>
+      <PreguntaEncuesta n={2} texto="¿Qué tan contento estaba con las clases?" ayuda="Toque las estrellas: 1 es muy poco y 5 es muy contento.">
         <div className="ep-estrellas">
           {[1, 2, 3, 4, 5].map((n) => (
             <button type="button" key={n} aria-label={n + " de 5"} className={n <= f.satisfaccion ? "on" : ""} onClick={() => setF({ ...f, satisfaccion: n })}>★</button>
           ))}
         </div>
-      </fieldset>
-      <fieldset className="ep-campo">
-        <legend>¿Lo volvería a inscribir más adelante?</legend>
+      </PreguntaEncuesta>
+      <PreguntaEncuesta n={3} texto="¿Lo volvería a inscribir más adelante?">
         <div className="ep-fila">
           {[["si", "Sí"], ["tal_vez", "Tal vez"], ["no", "No"]].map(([v, t]) => (
             <label key={v} className={"ep-op" + (f.volveria === v ? " sel" : "")}><input type="radio" name="volveria" checked={f.volveria === v} onChange={() => setF({ ...f, volveria: v })} />{t}</label>
           ))}
         </div>
-      </fieldset>
-      <fieldset className="ep-campo">
-        <legend>¿Algo más que nos quiera contar?</legend>
-        <textarea className="ep-input" rows={3} maxLength={1500} value={f.comentario} onChange={(e) => setF({ ...f, comentario: e.target.value })} placeholder="Opcional" />
-      </fieldset>
+      </PreguntaEncuesta>
+      <PreguntaEncuesta n={4} texto="¿Algo más que nos quiera contar?" ayuda="Es opcional. Escriba con sus palabras.">
+        <textarea className="ep-input" rows={4} maxLength={1500} value={f.comentario} onChange={(e) => setF({ ...f, comentario: e.target.value })} placeholder="Escriba aquí su respuesta" />
+      </PreguntaEncuesta>
       {estado === "falta" && <p className="ep-err">Por favor elija el motivo principal.</p>}
       {estado === "error" && <p className="ep-err">No se pudo enviar. Revise su internet e intente de nuevo.</p>}
       <button className="ep-enviar" disabled={estado === "enviando"}>{estado === "enviando" ? "Enviando…" : "Enviar respuesta"}</button>
@@ -364,7 +367,9 @@ export function EncuestaPublica({ token }) {
   return (
     <div className="ep">
       <div className="ep-tarjeta">
-        <MembreteEncuesta titulo="Encuesta de salida" />
+        <MembreteEncuesta titulo="Encuesta de salida">
+          {formulario ? <>Gracias por tomarse un momento. Lamentamos que {info.alumno}{info.seccion ? ` (${info.seccion.trim()})` : ""} ya no continúe con nosotros. Su respuesta es confidencial y solo la ve la administración.</> : "Gracias por participar en nuestra encuesta."}
+        </MembreteEncuesta>
         {cuerpo}
       </div>
     </div>
