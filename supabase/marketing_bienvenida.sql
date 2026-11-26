@@ -25,7 +25,14 @@ create table if not exists public.marketing_ajustes (
   datos jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now()
 );
-insert into public.marketing_ajustes (id) values (1) on conflict (id) do nothing;
+-- Datos de la bienvenida (Nayeli los puede cambiar en Bienvenida → Editar mensaje)
+insert into public.marketing_ajustes (id, datos) values (1, jsonb_build_object(
+  'desde', '2026-11-01',
+  'pago_plataforma', 'Son L 1,000 en efectivo. Si prefiere transferencia, con gusto le compartimos la cuenta de la escuela.',
+  'uniforme', 'Cuesta L 350 y se paga en efectivo.',
+  'horario_llamada', 'Dígame qué día y hora le queda mejor.',
+  'extra', 'Ya está en el grupo de WhatsApp de la clase, ahí le llegarán los avisos.'
+)) on conflict (id) do nothing;
 
 alter table public.bienvenidas enable row level security;
 alter table public.marketing_ajustes enable row level security;

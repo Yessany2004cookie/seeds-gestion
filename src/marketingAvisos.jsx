@@ -18,12 +18,12 @@ import { UserPlus, UserMinus, Smile, Pencil } from "lucide-react";
 export const DIAS_ENCUESTA_GENERAL = 182; // cada 6 meses
 
 export const AJUSTES_BASE = {
-  dias_nuevo: 15,
+  desde: "2026-11-01",
   link_matricula: "",
-  pago_plataforma: "",
-  uniforme: "",
-  horario_llamada: "",
-  extra: "",
+  pago_plataforma: "Son L 1,000 en efectivo. Si prefiere transferencia, con gusto le compartimos la cuenta de la escuela.",
+  uniforme: "Cuesta L 350 y se paga en efectivo.",
+  horario_llamada: "Dígame qué día y hora le queda mejor.",
+  extra: "Ya está en el grupo de WhatsApp de la clase, ahí le llegarán los avisos.",
   mensaje:
     "{saludo}, {padre}. 🌱\n\n¡Bienvenidos a Seeds English! Nos alegra mucho que {alumno} se una a {seccion}.\n\n" +
     "Para dejar todo listo:\n" +
@@ -37,12 +37,11 @@ const CAMPOS = [
   ["link_matricula", "Link de matrícula", "https://…"],
   ["pago_plataforma", "Pago de la plataforma", "Ej.: Son L 500, por transferencia a…"],
   ["uniforme", "Uniforme", "Ej.: Cuesta L 350, tallas 4 a 16, se recoge en recepción"],
-  ["horario_llamada", "Horario para llamadas", "Ej.: Lunes a viernes de 2 a 5 PM"],
+  ["horario_llamada", "Sobre la llamada", "Ej.: Dígame qué día y hora le queda mejor"],
   ["extra", "Algo más (opcional)", "Ej.: Horario de clase, materiales, grupo de WhatsApp"],
 ];
 
 const saludo = () => { const h = new Date().getHours(); return h < 12 ? "Buenos días" : h < 18 ? "Buenas tardes" : "Buenas noches"; };
-const restarDias = (d) => new Date(Date.now() - d * 86400000).toLocaleDateString("en-CA");
 const fechaC = (f) => (f ? new Date(String(f).length === 10 ? f + "T12:00:00" : f).toLocaleDateString("es-HN", { day: "numeric", month: "short" }) : "—");
 const fechaL = (f) => new Date(f).toLocaleDateString("es-HN", { day: "numeric", month: "long", year: "numeric" });
 
@@ -76,7 +75,7 @@ export function useMarketingDatos() {
 }
 
 export function nuevosSinBienvenida(data, md) {
-  const desde = restarDias(Number(md.ajustes.dias_nuevo) || 15);
+  const desde = md.ajustes.desde || AJUSTES_BASE.desde;
   const con = new Set(md.bienvenidas.map((b) => b.alumno_id));
   return data.alumnos.filter((a) => a.estado === "activo" && (a.fecha_ingreso || "") >= desde && !con.has(a.id));
 }
@@ -93,7 +92,7 @@ export function Avisos({ data, md, encuestas, irA }) {
   const al = (id) => data.alumnos.find((a) => a.id === id);
   const tarjetas = [
     { id: "bienvenida", icon: UserPlus, n: nuevos.length, tit: nuevos.length ? `${nuevos.length} ${nuevos.length === 1 ? "alumno nuevo" : "alumnos nuevos"} sin bienvenida` : "Todos los alumnos nuevos tienen su bienvenida",
-      txt: nuevos.length ? nuevos.slice(0, 4).map((a) => `${a.nombre} (${nombreSec(a.seccion_id) || "sin sección"})`).join(" · ") + (nuevos.length > 4 ? ` y ${nuevos.length - 4} más` : "") : `Aquí aparecen los matriculados en los últimos ${md.ajustes.dias_nuevo} días.`,
+      txt: nuevos.length ? nuevos.slice(0, 4).map((a) => `${a.nombre} (${nombreSec(a.seccion_id) || "sin sección"})`).join(" · ") + (nuevos.length > 4 ? ` y ${nuevos.length - 4} más` : "") : "Cada alumno que se matricule aparecerá aquí hasta que se le mande la bienvenida.",
       btn: "Dar la bienvenida", alerta: nuevos.length > 0 },
     { id: "bajas", icon: UserMinus, n: bajasPend.length, tit: bajasPend.length ? `${bajasPend.length} ${bajasPend.length === 1 ? "baja" : "bajas"} sin enviar la encuesta` : "No hay encuestas de deserción pendientes",
       txt: bajasPend.length ? bajasPend.slice(0, 4).map((e) => al(e.alumno_id)?.nombre || "Alumno").join(" · ") + (bajasPend.length > 4 ? ` y ${bajasPend.length - 4} más` : "") : "Cuando administración dé de baja a un alumno, aparecerá aquí para mandarle la encuesta al padre.",
@@ -122,10 +121,10 @@ export function Bienvenida({ data, md, showToast }) {
   const [editar, setEditar] = useState(false);
   if (md.falta) return <div className="rm dm"><div className="rm-cuerpo"><div className="rm-frase ambar">Falta activar la bienvenida en la base de datos (archivo supabase/marketing_bienvenida.sql).</div></div></div>;
   const aj = md.ajustes;
-  const desde = restarDias(Number(aj.dias_nuevo) || 15);
+  const desde = aj.desde || AJUSTES_BASE.desde;
   const bien = (id) => md.bienvenidas.find((b) => b.alumno_id === id);
   const lista = data.alumnos
-    .filter((a) => a.estado === "activo" && (todos || (a.fecha_ingreso || "") >= desde || (bien(a.id) && bien(a.id).enviada_en >= desde)))
+    .filter((a) => a.estado === "activo" && (todos || (a.fecha_ingreso || "") >= desde))
     .sort((a, b) => (b.fecha_ingreso || "").localeCompare(a.fecha_ingreso || ""));
   const padre = (id) => data.padres.find((p) => p.id === id);
   const sec = (id) => (data.secciones.find((s) => s.id === id)?.nombre || "").trim();
@@ -148,8 +147,8 @@ export function Bienvenida({ data, md, showToast }) {
           </div>
         </div>
         <div className="rm-cuerpo">
-          {faltanDatos && <div className="rm-frase ambar" style={{ marginBottom: 14 }}><span>Falta el link de matrícula y los datos del mensaje.</span> <button className="dm-btn nar chico" onClick={() => setEditar(true)}>Completar</button></div>}
-          <p className="dm-nota" style={{ marginTop: 0, marginBottom: 12 }}>{todos ? "Todos los alumnos activos." : `Matriculados desde el ${fechaC(desde)} (últimos ${aj.dias_nuevo} días).`} Toque <b>Enviar bienvenida</b> para mandar el mensaje al padre por WhatsApp.</p>
+          {faltanDatos && <div className="rm-frase ambar" style={{ marginBottom: 14 }}><span>Falta el link de matrícula: mientras no esté, el mensaje sale sin esa línea.</span> <button className="dm-btn nar chico" onClick={() => setEditar(true)}>Completar</button></div>}
+          <p className="dm-nota" style={{ marginTop: 0, marginBottom: 12 }}>{todos ? "Todos los alumnos activos." : `Todos los matriculados desde el ${fechaC(desde)}; los que no tienen bienvenida salen en Avisos.`} Toque <b>Enviar bienvenida</b> para mandar el mensaje al padre por WhatsApp.</p>
           <div className="dm-tabla-env">
             <table className="dm-tabla mk-tabla-b">
               <thead><tr><th>Alumno</th><th>Ingresó</th><th>Padre / encargado</th><th>Bienvenida</th><th>Llamada</th><th></th></tr></thead>
@@ -170,7 +169,7 @@ export function Bienvenida({ data, md, showToast }) {
                       : <button className="dm-btn sec chico" onClick={async () => { try { await navigator.clipboard.writeText(texto); await marcar(a); showToast("✓ Mensaje copiado (el padre no tiene teléfono guardado)"); } catch { /* sin portapapeles */ } }}>Copiar mensaje</button>}</td>
                   </tr>
                 ); })}
-                {lista.length === 0 && <tr><td colSpan={6} className="dm-sub">No hay alumnos nuevos en los últimos {aj.dias_nuevo} días.</td></tr>}
+                {lista.length === 0 && <tr><td colSpan={6} className="dm-sub">Todavía no hay alumnos nuevos desde el {fechaC(desde)}.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -186,7 +185,7 @@ function EditarMensaje({ md, showToast, onCerrar, ejemplo }) {
   const [ocupado, setOcupado] = useState(false);
   const guardar = async () => {
     setOcupado(true);
-    const { error } = await supabase.from("marketing_ajustes").upsert({ id: 1, datos: { ...f, dias_nuevo: Number(f.dias_nuevo) || 15 }, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from("marketing_ajustes").upsert({ id: 1, datos: { ...f, desde: f.desde || AJUSTES_BASE.desde }, updated_at: new Date().toISOString() });
     setOcupado(false);
     if (error) showToast("No se pudo guardar: " + error.message, "error"); else { showToast("✓ Mensaje de bienvenida guardado"); md.cargar(); onCerrar(); }
   };
@@ -197,8 +196,8 @@ function EditarMensaje({ md, showToast, onCerrar, ejemplo }) {
         {CAMPOS.map(([k, t, ph]) => (
           <div key={k}><label className="mk-lab">{t}</label><input className="ep-input" style={{ marginTop: 0 }} value={f[k] || ""} placeholder={ph} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></div>
         ))}
-        <label className="mk-lab">Contar como nuevo durante <span>(días después de matricularse)</span></label>
-        <input className="ep-input" style={{ marginTop: 0, maxWidth: 120 }} type="number" min={1} max={90} value={f.dias_nuevo} onChange={(e) => setF({ ...f, dias_nuevo: e.target.value })} />
+        <label className="mk-lab">Dar bienvenida a los matriculados desde <span>(los de antes no salen en Avisos)</span></label>
+        <input className="ep-input" style={{ marginTop: 0, maxWidth: 180 }} type="date" value={f.desde || ""} onChange={(e) => setF({ ...f, desde: e.target.value })} />
         <label className="mk-lab">Texto <span>({"{padre}"}, {"{alumno}"}, {"{seccion}"} y los datos de arriba se llenan solos)</span></label>
         <textarea className="ep-input" style={{ marginTop: 0 }} rows={9} value={f.mensaje} onChange={(e) => setF({ ...f, mensaje: e.target.value })} />
         <button className="rm-link" style={{ marginTop: 6 }} onClick={() => setF({ ...f, mensaje: AJUSTES_BASE.mensaje })}>Volver al texto original</button>
