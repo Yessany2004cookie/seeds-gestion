@@ -19,7 +19,8 @@ import { useMarca } from "./marca";
 import { SelectorFondo } from "./fondo";
 import { MembreteEncuesta, PreguntaEncuesta, EncuestasDesercion, useEncuestas, reporteMatricula, linkWhatsApp } from "./desercion";
 import { DocenteApp } from "./docentes";
-import { LogOut, RefreshCw, GraduationCap, UserMinus, UserPlus, Smile, Plus, Bell, Menu as MenuIcon, ChevronLeft as AtrasIcon } from "lucide-react";
+import { LogOut, RefreshCw, GraduationCap, UserMinus, UserPlus, Smile, Plus, Bell, Menu as MenuIcon, ChevronLeft as AtrasIcon, Newspaper } from "lucide-react";
+import { Novedades } from "./marketingNovedades";
 import { Avisos, Bienvenida, useMarketingDatos, nuevosSinBienvenida, DIAS_ENCUESTA_GENERAL } from "./marketingAvisos";
 import "./resumenMes.css";
 import "./desercion.css";
@@ -108,7 +109,7 @@ export const PAGINAS_MARKETING = [
 // Panel de Marketing. Administración lo ve con pestañas arriba; la cuenta de
 // Marketing lo ve con el menú lateral (tab y onTab vienen de MarketingApp).
 export function MarketingPanel({ data, showToast, estado, tab: tabExt, onTab }) {
-  const [tabInt, setTabInt] = useState("avisos");
+  const [tabInt, setTabInt] = useState("novedades");
   const propio = useMarketingEstado(data);
   const { encuestas, md, cuentas, recargar } = estado || propio;
   const tab = tabExt || tabInt;
@@ -116,10 +117,11 @@ export function MarketingPanel({ data, showToast, estado, tab: tabExt, onTab }) 
   return (
     <div className="mk">
       {!tabExt && <div className="mk-tabs" role="tablist">
-        {PAGINAS_MARKETING.map(({ id, icon: I, label }) => (
+        {[{ id: "novedades", label: "Novedades", icon: Newspaper }, ...PAGINAS_MARKETING].map(({ id, icon: I, label }) => (
           <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => irA(id)}><I size={16} />{label}{cuentas[id] > 0 && <span className="mk-cont alerta">{cuentas[id]}</span>}</button>
         ))}
       </div>}
+      {tab === "novedades" && !tabExt && <Novedades data={data} />}
       {tab === "avisos" && <Avisos data={data} md={md} encuestas={encuestas} irA={irA} />}
       {tab === "bienvenida" && <Bienvenida data={data} md={md} showToast={showToast} />}
       {tab === "bajas" && (

@@ -19,6 +19,7 @@ import { SelectorFondo } from "./fondo";
 import { useModulos, ModulosPanel } from "./modulos";
 import { RespaldosAutomaticos } from "./respaldosAuto";
 import { MarketingApp, MarketingPanel } from "./marketing";
+import { AvisoNovedadesInicio } from "./marketingNovedades";
 import { ResumenMatricula, EncuestasDesercion, EnviarEncuesta, useEncuestas, encuestaDeAlumno } from "./desercion";
 import { useMarca, LogoEditable, TextoEditable, guardarMarca, guardarEtiqueta, mostrarPestana, ocultarPestana, ConfirmarConClave, PersonalizarPanel, ClaveSeguridadPanel, PESTANAS_FIJAS } from "./marca";
 import { DocenteApp, PESTANAS_DOCENTE, PantallaMensaje, AdminDocentesPage, AccesoDocente, useAccesosDocentes, AvisoActivarModulo, AlertasInactividad } from "./docentes";
@@ -1272,6 +1273,7 @@ function Dashboard({data,setPage,loadData,showToast}){
     .map(f=>({id:f.id,numero:f.numero_factura||"—",alumno:nombreAl[f.alumno_id]||"—",mes:f.mes_correspondiente,fecha:fmtF(f.fecha_pago||f.fecha_emision),monto:(Number(f.monto_total)||0)+moraCobrada(f)}));
   return(<div>
     {modulos.activo("asistencia")&&<AlertasInactividad data={data} loadData={loadData} showToast={showToast}/>}
+    <AvisoNovedadesInicio data={data} setPage={setPage}/>
     <InicioSoft kpis={kpis} meses={meses} cobros={cobros} secciones={secciones} recientes={recientes} mes={act.nombre} irA={setPage}/>
     <ResumenMesInicio data={data} setPage={setPage} verAlertas={modulos.activo("alertas")}/>
     <ResumenFinanciero data={data}/>
