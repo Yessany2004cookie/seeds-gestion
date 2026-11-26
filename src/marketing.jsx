@@ -116,12 +116,8 @@ export function MarketingPanel({ data, showToast }) {
 function Satisfaccion({ data, showToast }) {
   const s = useSatisfaccion();
   const [nueva, setNueva] = useState(false);
-  const [filtro, setFiltro] = useState("todas");
-  const [sec, setSec] = useState("");
-  const [buscar, setBuscar] = useState("");
   const [abrirTextos, setAbrirTextos] = useState({});
   const camp = (s.campanas || []).find((c) => c.id === s.sel);
-  const padre = (id) => data.padres.find((p) => p.id === id);
 
   if (s.campanas === null) return <p className="dm-nota">Cargando…</p>;
   if (s.campanas === false) return <div className="rm dm"><div className="rm-cuerpo"><div className="rm-frase ambar">Falta activar las encuestas de satisfacción en la base de datos (archivo supabase/marketing_relacional.sql).</div></div></div>;
@@ -133,20 +129,6 @@ function Satisfaccion({ data, showToast }) {
   const recom = pregs.find((p) => p.tipo === "nps");
   const rG = general && resumenPregunta(general, resp);
   const rN = recom && resumenPregunta(recom, resp);
-  const visibles = s.filas.filter((f) => {
-    if (filtro === "sin" && (f.enviada_en || f.respondida_en)) return false;
-    if (filtro === "enviada" && (!f.enviada_en || f.respondida_en)) return false;
-    if (filtro === "resp" && !f.respondida_en) return false;
-    if (sec && !(f.secciones || "").split(", ").includes(sec)) return false;
-    if (buscar) { const q = buscar.toLowerCase(); if (!((padre(f.padre_id)?.nombre || "") + " " + (f.alumnos || "")).toLowerCase().includes(q)) return false; }
-    return true;
-  });
-  const seccionesNombres = [...new Set(s.filas.flatMap((f) => (f.secciones || "").split(", ").filter(Boolean)))].sort();
-
-  const enviar = async (f) => {
-    await supabase.from("satisfaccion_respuestas").update({ enviada_en: new Date().toISOString() }).eq("id", f.id);
-    s.cargarFilas();
-  };
   const cerrar = async () => {
     if (!confirm(camp.cerrada ? "¿Volver a abrir esta encuesta? Las familias podrán responder de nuevo." : "¿Cerrar esta encuesta? Las familias que no han respondido ya no podrán hacerlo.")) return;
     const { error } = await supabase.from("satisfaccion_campanas").update({ cerrada: !camp.cerrada }).eq("id", camp.id);
@@ -172,7 +154,7 @@ function Satisfaccion({ data, showToast }) {
           </div>
         </div>
         {!camp ? (
-          <div className="rm-cuerpo"><p className="dm-nota" style={{ marginTop: 0 }}>Cree la primera encuesta con <b>Nueva encuesta</b>. Se hará un enlace para cada familia con alumnos activos y lo podrá mandar por WhatsApp.</p></div>
+          <div className="rm-cuerpo"><p className="dm-nota" style={{ marginTop: 0 }}>Cree la primera encuesta con <b>Nueva encuesta</b>. Después la manda a cada familia desde la lista de alumnos de abajo, igual que las facturas.</p></div>
         ) : (
           <div className="rm-cuerpo">
             <div className="rm-fila mk-fila4">
@@ -200,39 +182,103 @@ function Satisfaccion({ data, showToast }) {
               </div>
             </>}
 
-            <div className="rm-grupo" style={{ marginTop: 18 }}>Enviar a las familias</div>
-            <div className="mk-filtros">
-              {[["todas", "Todas", s.filas.length], ["sin", "Sin enviar", s.filas.filter((f) => !f.enviada_en && !f.respondida_en).length], ["enviada", "Enviada, sin respuesta", s.filas.filter((f) => f.enviada_en && !f.respondida_en).length], ["resp", "Respondieron", resp.length]].map(([v, t, n]) => (
-                <button key={v} className={filtro === v ? "on" : ""} onClick={() => setFiltro(v)}>{t} <span>{n}</span></button>
-              ))}
-              <select value={sec} onChange={(e) => setSec(e.target.value)} aria-label="Sección"><option value="">Todas las secciones</option>{seccionesNombres.map((n) => <option key={n}>{n}</option>)}</select>
-              <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar familia o alumno" />
-            </div>
-            <div className="dm-tabla-env">
-              <table className="dm-tabla">
-                <thead><tr><th>Familia</th><th>Alumnos</th><th>Estado</th><th className="n">General</th><th></th></tr></thead>
-                <tbody>
-                  {visibles.map((f) => { const p = padre(f.padre_id); const g = general && f.respuestas?.[general.id]; return (
-                    <tr key={f.id}>
-                      <td><b>{p?.nombre || "—"}</b>{p?.telefono && <div className="dm-sub">{p.telefono}</div>}</td>
-                      <td>{f.alumnos}<div className="dm-sub">{f.secciones}</div></td>
-                      <td>{f.respondida_en ? <span className="mk-ok">Respondió {fechaC(f.respondida_en)}</span> : f.enviada_en ? <span className="dm-pend">Enviada {fechaC(f.enviada_en)}</span> : <span className="dm-sub">Sin enviar</span>}</td>
-                      <td className="n">{camp.anonima ? (f.respondida_en ? "✓" : "—") : g ? "★".repeat(g) : "—"}</td>
-                      <td>{!f.respondida_en && !camp.cerrada && (p?.telefono
-                        ? <a className="dm-btn wa chico" href={linkWhatsApp(p.telefono, mensajeSatisfaccion(p.nombre, f.token))} target="_blank" rel="noreferrer" onClick={() => enviar(f)}>{f.enviada_en ? "Reenviar" : "Enviar"}</a>
-                        : <button className="dm-btn sec chico" onClick={async () => { try { await navigator.clipboard.writeText(mensajeSatisfaccion(p?.nombre, f.token)); await enviar(f); showToast("✓ Mensaje copiado (la familia no tiene teléfono guardado)"); } catch { /* sin portapapeles */ } }}>Copiar enlace</button>)}</td>
-                    </tr>
-                  ); })}
-                  {visibles.length === 0 && <tr><td colSpan={5} className="dm-sub">No hay familias con ese filtro.</td></tr>}
-                </tbody>
-              </table>
-            </div>
             {camp.anonima && <p className="dm-nota">Encuesta anónima: se ve quién respondió, pero no qué respondió cada familia.</p>}
           </div>
         )}
       </div>
+      <ListaEnvio data={data} camp={camp} filas={s.filas} recargar={s.cargarFilas} general={general} showToast={showToast} onNueva={() => setNueva(true)} />
       {nueva && <NuevaEncuesta onCerrar={() => setNueva(false)} showToast={showToast} onCreada={(id) => { setNueva(false); s.cargar(id); }} />}
     </>
+  );
+}
+
+// ── Lista de alumnos por sección para mandar la encuesta (como Facturas) ──
+// El enlace es por familia: si dos hermanos están en la lista, comparten el
+// mismo enlace y el mismo estado.
+function ListaEnvio({ data, camp, filas, recargar, general, showToast, onNueva }) {
+  const [filtro, setFiltro] = useState("todas");
+  const [sec, setSec] = useState("");
+  const [buscar, setBuscar] = useState("");
+  const activos = useMemo(() => data.alumnos.filter((a) => a.estado === "activo"), [data.alumnos]);
+  const filaDe = (a) => filas.find((f) => f.padre_id === a.padre_id);
+  const padre = (id) => data.padres.find((p) => p.id === id);
+
+  // Familias que se matricularon después de crear la encuesta: se les prepara su enlace
+  useEffect(() => {
+    if (!camp || camp.cerrada || !filas.length) return;
+    const tienen = new Set(filas.map((f) => f.padre_id));
+    const faltan = [...new Set(activos.filter((a) => a.padre_id && !tienen.has(a.padre_id)).map((a) => a.padre_id))];
+    if (!faltan.length) return;
+    const nombreSec = (id) => (data.secciones.find((x) => x.id === id)?.nombre || "").trim();
+    const nuevas = faltan.map((pid) => { const hs = activos.filter((a) => a.padre_id === pid); return { campana_id: camp.id, padre_id: pid, alumnos: hs.map((a) => a.nombre).join(", "), secciones: [...new Set(hs.map((a) => nombreSec(a.seccion_id)).filter(Boolean))].join(", ") }; });
+    supabase.from("satisfaccion_respuestas").upsert(nuevas, { onConflict: "campana_id,padre_id", ignoreDuplicates: true }).then(({ error }) => { if (!error) recargar(); });
+  }, [camp, filas, activos, data.secciones, recargar]);
+
+  const estado = (f) => (!f ? "sin" : f.respondida_en ? "resp" : f.enviada_en ? "enviada" : "sin");
+  const pasa = (a) => {
+    if (sec && (a.seccion_id || "_") !== sec) return false;
+    if (filtro !== "todas" && estado(filaDe(a)) !== filtro) return false;
+    if (buscar) { const q = buscar.toLowerCase(); if (!(a.nombre + " " + (padre(a.padre_id)?.nombre || "")).toLowerCase().includes(q)) return false; }
+    return true;
+  };
+  const grupos = [...data.secciones.map((x) => ({ id: x.id, nombre: x.nombre.trim() })), { id: "_", nombre: "Sin sección" }]
+    .map((g) => ({ ...g, todos: activos.filter((a) => (a.seccion_id || "_") === g.id) }))
+    .filter((g) => g.todos.length);
+  const cuenta = (v) => activos.filter((a) => v === "todas" || estado(filaDe(a)) === v).length;
+
+  const marcar = async (f) => {
+    await supabase.from("satisfaccion_respuestas").update({ enviada_en: new Date().toISOString() }).eq("id", f.id);
+    recargar();
+  };
+
+  return (
+    <div className="rm dm">
+      <div className="rm-cab">
+        <div><div className="rm-eti">Enviar la encuesta</div><div className="rm-tit">Alumnos por sección</div></div>
+        <div className="dm-cab-der"><span className="dm-sub">{activos.length} alumnos activos · {new Set(activos.map((a) => a.padre_id)).size} familias</span></div>
+      </div>
+      <div className="rm-cuerpo">
+        {!camp && <div className="rm-frase ambar" style={{ marginBottom: 14 }}><span>Para poder enviar, primero cree la encuesta.</span> <button className="dm-btn nar chico" onClick={onNueva}><Plus size={13} />Nueva encuesta</button></div>}
+        {camp?.cerrada && <div className="rm-frase ambar" style={{ marginBottom: 14 }}>Esta encuesta está cerrada: ya no se puede enviar.</div>}
+        <div className="mk-filtros">
+          {(camp ? [["todas", "Todos"], ["sin", "Sin enviar"], ["enviada", "Enviada, sin respuesta"], ["resp", "Respondieron"]] : [["todas", "Todos"]]).map(([v, t]) => (
+            <button key={v} className={filtro === v ? "on" : ""} onClick={() => setFiltro(v)}>{t} <span>{cuenta(v)}</span></button>
+          ))}
+          <select value={sec} onChange={(e) => setSec(e.target.value)} aria-label="Sección"><option value="">Todas las secciones</option>{grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}</select>
+          <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar alumno o padre" />
+        </div>
+        {grupos.map((g) => {
+          const vis = g.todos.filter(pasa);
+          if (!vis.length) return null;
+          const env = g.todos.filter((a) => estado(filaDe(a)) !== "sin").length;
+          const res = g.todos.filter((a) => estado(filaDe(a)) === "resp").length;
+          return (
+            <div key={g.id} className="mk-seccion">
+              <div className="mk-sec-cab"><b>{g.nombre}</b><span>{g.todos.length} alumnos{camp ? ` · ${env} enviadas · ${res} respondieron` : ""}</span></div>
+              <div className="dm-tabla-env">
+                <table className="dm-tabla mk-tabla">
+                  <thead><tr><th>Alumno</th><th>Padre / encargado</th><th>Estado</th>{camp && <th className="n">General</th>}<th></th></tr></thead>
+                  <tbody>
+                    {vis.map((a) => { const p = padre(a.padre_id); const f = filaDe(a); const g1 = general && f?.respuestas?.[general.id]; return (
+                      <tr key={a.id}>
+                        <td><b>{a.nombre}</b></td>
+                        <td>{p?.nombre || "—"}{p?.telefono && <div className="dm-sub">{p.telefono}</div>}</td>
+                        <td>{!camp ? <span className="dm-sub">—</span> : !f ? <span className="dm-sub">Preparando enlace…</span> : f.respondida_en ? <span className="mk-ok">Respondió {fechaC(f.respondida_en)}</span> : f.enviada_en ? <span className="dm-pend">Enviada {fechaC(f.enviada_en)}</span> : <span className="dm-sub">Sin enviar</span>}</td>
+                        {camp && <td className="n">{camp.anonima ? (f?.respondida_en ? "✓" : "—") : g1 ? "★".repeat(g1) : "—"}</td>}
+                        <td className="mk-acc">{camp && f && !f.respondida_en && !camp.cerrada && (p?.telefono
+                          ? <a className="dm-btn wa chico" href={linkWhatsApp(p.telefono, mensajeSatisfaccion(p.nombre, f.token))} target="_blank" rel="noreferrer" onClick={() => marcar(f)}>{f.enviada_en ? "Reenviar" : "Enviar por WhatsApp"}</a>
+                          : <button className="dm-btn sec chico" onClick={async () => { try { await navigator.clipboard.writeText(mensajeSatisfaccion(p?.nombre, f.token)); await marcar(f); showToast("✓ Mensaje copiado (el padre no tiene teléfono guardado)"); } catch { /* sin portapapeles */ } }}>Copiar enlace</button>)}</td>
+                      </tr>
+                    ); })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+        {!grupos.some((g) => g.todos.some(pasa)) && <p className="dm-nota">No hay alumnos con ese filtro.</p>}
+      </div>
+    </div>
   );
 }
 

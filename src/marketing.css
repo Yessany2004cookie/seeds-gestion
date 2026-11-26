@@ -81,3 +81,11 @@ html[data-fondo="oscuro"] .mk-marca b { color: #E9EDEF; }
 .mk-toast.error { background: #A33A3A; }
 .mk-toast button { background: none; border: none; color: inherit; cursor: pointer; display: flex; }
 .mk-dist.op > div { grid-template-columns: 84px 1fr 24px; }
+.mk-seccion { margin-top: 14px; }
+.mk-sec-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 8px 4px; border-bottom: 2px solid #D9641E; margin-bottom: 8px; }
+.mk-sec-cab b { font: 700 15px Manrope, Inter, sans-serif; color: var(--rm-azul); }
+.mk-sec-cab span { font-size: 12px; color: var(--rm-suave); }
+.mk-acc { text-align: right; white-space: nowrap; }
+.rm-frase .dm-btn { margin-left: auto; }
+.mk-tabla { table-layout: fixed; }
+.mk-tabla th:nth-child(1) { width: 28%; } .mk-tabla th:nth-child(2) { width: 26%; } .mk-tabla th:nth-child(3) { width: 18%; } .mk-tabla th:nth-child(4) { width: 10%; }
