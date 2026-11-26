@@ -203,17 +203,17 @@ export function DocenteApp({ session, perfil, onVolver }) {
         <button onClick={salir} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", border: "none", borderTop: "1px solid rgba(255,255,255,.08)", background: "transparent", color: "#FCA5A5", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}><LogOut size={16} />Cerrar sesión</button>
       </aside>
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <header className="vidrio-barra" style={{ padding: "10px 20px", margin: 0, borderRadius: 0, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
+        <header className="vidrio-barra barra-app" style={{ padding: "10px 20px", margin: 0, borderRadius: 0, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
             {!escritorio && page !== "inicio" && <button onClick={() => history.back()} title="Atrás" aria-label="Atrás" className="boton-atras"><AtrasIcon size={20} /></button>}
-            {!escritorio && <button onClick={() => setMenu(true)} aria-label="Menú" style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Menu size={22} color="#475569" /></button>}
+            {!escritorio && <button onClick={() => setMenu(true)} aria-label="Abrir menú" title="Menú" className="boton-menu"><Menu size={22} /></button>}
             <h1 className="titulo-barra" style={{ fontSize: 18, fontWeight: 600, color: "#1B2A4A", margin: 0 }}>{NAV.find((n) => n.id === pagina)?.label}</h1>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {onVolver && <button onClick={onVolver} title="Volver a administración" style={{ ...btnO, padding: "5px 10px", fontSize: 12, color: NAR, borderColor: "#FED7AA" }}>Administración</button>}
+            {onVolver && <button className="boton-volver-admin" onClick={onVolver} title="Volver a administración" style={{ ...btnO, padding: "5px 10px", fontSize: 12, color: NAR, borderColor: "#FED7AA" }}>Administración</button>}
             <SelectorFondo />
             <BotonAyuda onClick={recorrido.abrir} />
-            <button onClick={cargar} title="Actualizar" style={{ background: "#fff", border: "1px solid #CDD3DC", borderRadius: 4, cursor: "pointer", padding: "5px 8px", display: "flex" }}><RefreshCw size={14} color="#64748B" /></button>
+            <button className="boton-refrescar" onClick={cargar} title="Actualizar" aria-label="Actualizar" style={{ background: "#fff", border: "1px solid #CDD3DC", borderRadius: 4, cursor: "pointer", padding: "5px 8px", display: "flex" }}><RefreshCw size={14} color="#64748B" /></button>
             <div className="hide-mobile" style={{ fontSize: 12, color: "#64748B", textAlign: "right" }}><div style={{ fontWeight: 700, color: "#1E293B" }}>{datos.maestro?.nombre || ""}</div><div>{session.user.email}</div></div>
           </div>
         </header>
